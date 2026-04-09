@@ -145,15 +145,35 @@ public class FinalBossPlugin extends Plugin
     {
         if (event.getGameState() == GameState.LOGGED_IN)
         {
-            clientThread.invokeLater(() -> {
-                if (client.getLocalPlayer() != null)
-                {
-                    String rsn = client.getLocalPlayer().getName();
-                    currentRsn = rsn;
-                    SwingUtilities.invokeLater(() -> lfgPanel.setCurrentRsn(rsn));
-                    verifyMembership();
-                }
-            });
+            log.info("[FinalBoss] GameState LOGGED_IN detected");
+            // Delay to let getName() populate, then verify
+            executor.schedule(() -> {
+                log.info("[FinalBoss] Scheduled task fired, reading RSN from client thread");
+                clientThread.invokeLater(() -> {
+                    try
+                    {
+                        if (client.getLocalPlayer() == null)
+                        {
+                            log.warn("[FinalBoss] getLocalPlayer() is null");
+                            return;
+                        }
+                        String rsn = client.getLocalPlayer().getName();
+                        if (rsn == null)
+                        {
+                            log.warn("[FinalBoss] getName() is null");
+                            return;
+                        }
+                        log.info("[FinalBoss] RSN resolved: {}", rsn);
+                        currentRsn = rsn;
+                        SwingUtilities.invokeLater(() -> lfgPanel.setCurrentRsn(rsn));
+                        verifyMembership();
+                    }
+                    catch (Exception e)
+                    {
+                        log.error("[FinalBoss] Error reading RSN", e);
+                    }
+                });
+            }, 3, TimeUnit.SECONDS);
         }
         else if (event.getGameState() == GameState.LOGIN_SCREEN)
         {
@@ -177,12 +197,15 @@ public class FinalBossPlugin extends Plugin
 
     private void verifyMembership()
     {
+        log.info("[FinalBoss] verifyMembership() called for RSN: {}", currentRsn);
         SwingUtilities.invokeLater(() -> lockedPanel.showVerifying());
 
         executor.submit(() -> {
             try
             {
+                log.info("[FinalBoss] Calling WOM API for: {}", currentRsn);
                 boolean isMember = womService.verify(currentRsn);
+                log.info("[FinalBoss] WOM result: isMember={}", isMember);
                 if (isMember)
                 {
                     verified = true;
@@ -251,7 +274,8 @@ public class FinalBossPlugin extends Plugin
     @Subscribe
     public void onNpcLootReceived(NpcLootReceived event)
     {
-        if (!verified || !config.enableDropLogging())
+        String rsn = currentRsn;
+        if (!verified || !config.enableDropLogging() || rsn == null)
         {
             return;
         }
@@ -271,10 +295,10 @@ public class FinalBossPlugin extends Plugin
                 long totalValue = (long) gePrice * quantity;
 
                 executor.submit(() -> {
-                    dropService.logDrop(currentRsn, npcName, itemName, itemId, totalValue, quantity);
+                    dropService.logDrop(rsn, npcName, itemName, itemId, totalValue, quantity);
 
                     String webhookUrl = config.discordWebhookUrl();
-                    discordService.sendDropNotification(webhookUrl, currentRsn, itemName, totalValue, npcName);
+                    discordService.sendDropNotification(webhookUrl, rsn, itemName, totalValue, npcName);
                 });
             }
         }
