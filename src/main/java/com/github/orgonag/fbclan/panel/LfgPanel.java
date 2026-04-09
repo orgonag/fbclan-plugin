@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
+import javax.swing.Box;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
@@ -52,11 +53,17 @@ public class LfgPanel extends JPanel
         controlsPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
         controlsPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
-        JPanel selectRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
-        selectRow.setBackground(ColorScheme.DARK_GRAY_COLOR);
-
+        // Activity dropdown - full width
         activityDropdown = new JComboBox<>(LfgActivity.values());
-        activityDropdown.setMaximumSize(new Dimension(150, 25));
+        activityDropdown.setMaximumSize(new Dimension(Integer.MAX_VALUE, 25));
+        activityDropdown.setAlignmentX(LEFT_ALIGNMENT);
+        controlsPanel.add(activityDropdown);
+        controlsPanel.add(Box.createRigidArea(new Dimension(0, 5)));
+
+        // Buttons row
+        JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        buttonRow.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        buttonRow.setAlignmentX(LEFT_ALIGNMENT);
 
         setStatusButton = new JButton("Set Status");
         setStatusButton.addActionListener(e -> onSetStatus());
@@ -64,12 +71,16 @@ public class LfgPanel extends JPanel
         removeStatusButton = new JButton("Remove");
         removeStatusButton.addActionListener(e -> onRemoveStatus());
 
-        selectRow.add(activityDropdown);
-        selectRow.add(setStatusButton);
-        selectRow.add(removeStatusButton);
+        buttonRow.add(setStatusButton);
+        buttonRow.add(removeStatusButton);
 
-        JPanel toggleRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        controlsPanel.add(buttonRow);
+        controlsPanel.add(Box.createRigidArea(new Dimension(0, 5)));
+
+        // View toggle on its own row
+        JPanel toggleRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
         toggleRow.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        toggleRow.setAlignmentX(LEFT_ALIGNMENT);
 
         toggleViewButton = new JButton("Grouped View");
         toggleViewButton.addActionListener(e -> {
@@ -79,7 +90,6 @@ public class LfgPanel extends JPanel
         });
         toggleRow.add(toggleViewButton);
 
-        controlsPanel.add(selectRow);
         controlsPanel.add(toggleRow);
 
         listPanel = new JPanel();
