@@ -39,7 +39,7 @@ import okhttp3.OkHttpClient;
     name = "Final Boss",
     description = "Clan tools for Final Boss — drop logging, LFG, and more",
     tags = {"clan", "final boss", "drops", "lfg", "looking for group"},
-    enabledByDefault = false
+    enabledByDefault = true
 )
 public class FinalBossPlugin extends Plugin
 {
