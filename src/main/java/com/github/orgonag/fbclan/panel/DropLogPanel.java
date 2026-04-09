@@ -88,7 +88,7 @@ public class DropLogPanel extends JPanel
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
 
         String itemName = drop.get("item_name").getAsString();
-        int geValue = drop.get("ge_value").getAsInt();
+        long geValue = drop.get("ge_value").getAsLong();
         String rsn = drop.get("rsn").getAsString();
         String npcName = drop.get("npc_name").getAsString();
 
