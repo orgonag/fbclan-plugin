@@ -22,6 +22,21 @@ A RuneLite plugin for the **Final Boss** OSRS clan.
 | Enable LFG | Enable Looking For Group feature | On |
 | Discord Webhook URL | Discord webhook for drop notifications | Empty |
 
+## Data & Security
+
+This plugin communicates with a Supabase database to store drop logs and LFG entries. The Supabase **anon key** is embedded in the source code — this is intentional and safe. All data access is controlled by **Row Level Security (RLS)** policies:
+
+| Table | INSERT | SELECT | UPDATE | DELETE |
+|---|---|---|---|---|
+| `drops` | Allowed | Allowed | Denied | Denied |
+| `lfg_entries` | Allowed | Allowed | Allowed | Allowed |
+
+- **Drops are append-only** — no one can modify or delete drop records via the API
+- **LFG entries are fully managed** — players can set, update, and remove their own status
+- A daily cron job purges all LFG entries at 00:01 UTC to clean up stale data
+
+The optional Discord webhook URL is stored locally in your RuneLite config and never sent to the database.
+
 ## Building
 
 ```bash
