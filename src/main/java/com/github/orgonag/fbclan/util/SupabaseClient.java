@@ -1,0 +1,126 @@
+package com.github.orgonag.fbclan.util;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import java.io.IOException;
+import lombok.extern.slf4j.Slf4j;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+
+@Slf4j
+public class SupabaseClient
+{
+    private static final String PROJECT_URL = "https://rzhtoqadvbxylwjndnlo.supabase.co";
+    private static final String ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6aHRvcWFkdmJ4eWx3am5kbmxvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTU5MDMsImV4cCI6MjA5MTI3MTkwM30.WzWJXS2cpvwnRVBQEroLTsu_iU0j_kkI1wSQhM8eJY0";
+    private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+
+    public static String getProjectUrl()
+    {
+        return PROJECT_URL;
+    }
+
+    public static String getAnonKey()
+    {
+        return ANON_KEY;
+    }
+
+    public static String buildUrl(String table)
+    {
+        return PROJECT_URL + "/rest/v1/" + table;
+    }
+
+    public static String buildUrl(String table, String query)
+    {
+        return PROJECT_URL + "/rest/v1/" + table + "?" + query;
+    }
+
+    public static Request.Builder baseRequest(String url)
+    {
+        return new Request.Builder()
+            .url(url)
+            .header("apikey", ANON_KEY)
+            .header("Authorization", "Bearer " + ANON_KEY);
+    }
+
+    public static JsonArray get(OkHttpClient httpClient, String table, String query) throws IOException
+    {
+        String url = buildUrl(table, query);
+        Request request = baseRequest(url)
+            .get()
+            .build();
+
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (!response.isSuccessful() || response.body() == null)
+            {
+                log.warn("Supabase GET failed: {} {}", response.code(), response.message());
+                return new JsonArray();
+            }
+            return new JsonParser().parse(response.body().string()).getAsJsonArray();
+        }
+    }
+
+    public static boolean insert(OkHttpClient httpClient, String table, JsonObject data) throws IOException
+    {
+        String url = buildUrl(table);
+        RequestBody body = RequestBody.create(JSON, data.toString());
+        Request request = baseRequest(url)
+            .header("Content-Type", "application/json")
+            .header("Prefer", "return=minimal")
+            .post(body)
+            .build();
+
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (!response.isSuccessful())
+            {
+                log.warn("Supabase INSERT failed: {} {}", response.code(), response.message());
+                return false;
+            }
+            return true;
+        }
+    }
+
+    public static boolean upsert(OkHttpClient httpClient, String table, JsonObject data, String onConflict) throws IOException
+    {
+        String url = buildUrl(table, "on_conflict=" + onConflict);
+        RequestBody body = RequestBody.create(JSON, data.toString());
+        Request request = baseRequest(url)
+            .header("Content-Type", "application/json")
+            .header("Prefer", "resolution=merge-duplicates,return=minimal")
+            .post(body)
+            .build();
+
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (!response.isSuccessful())
+            {
+                log.warn("Supabase UPSERT failed: {} {}", response.code(), response.message());
+                return false;
+            }
+            return true;
+        }
+    }
+
+    public static boolean delete(OkHttpClient httpClient, String table, String filter) throws IOException
+    {
+        String url = buildUrl(table, filter);
+        Request request = baseRequest(url)
+            .delete()
+            .build();
+
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (!response.isSuccessful())
+            {
+                log.warn("Supabase DELETE failed: {} {}", response.code(), response.message());
+                return false;
+            }
+            return true;
+        }
+    }
+}
