@@ -14,6 +14,10 @@ import okhttp3.Response;
 @Slf4j
 public class SupabaseClient
 {
+    // Supabase anon key — intentionally public. Row Level Security (RLS) policies
+    // on the database restrict what operations are allowed. The anon key only permits:
+    // - drops table: INSERT and SELECT (no UPDATE, no DELETE)
+    // - lfg_entries table: INSERT, SELECT, UPDATE, DELETE (needed for LFG lifecycle)
     private static final String PROJECT_URL = "https://rzhtoqadvbxylwjndnlo.supabase.co";
     private static final String ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6aHRvcWFkdmJ4eWx3am5kbmxvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTU5MDMsImV4cCI6MjA5MTI3MTkwM30.WzWJXS2cpvwnRVBQEroLTsu_iU0j_kkI1wSQhM8eJY0";
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
