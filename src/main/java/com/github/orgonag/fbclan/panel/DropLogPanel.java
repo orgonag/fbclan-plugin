@@ -87,10 +87,10 @@ public class DropLogPanel extends JPanel
         ));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
 
-        String itemName = drop.get("item_name").getAsString();
+        String itemName = escapeHtml(drop.get("item_name").getAsString());
         long geValue = drop.get("ge_value").getAsLong();
-        String rsn = drop.get("rsn").getAsString();
-        String npcName = drop.get("npc_name").getAsString();
+        String rsn = escapeHtml(drop.get("rsn").getAsString());
+        String npcName = escapeHtml(drop.get("npc_name").getAsString());
 
         JLabel mainLabel = new JLabel("<html><b>" + itemName + "</b> (" + DropTrackingService.formatGp(geValue) + " GP)</html>");
         mainLabel.setForeground(Color.WHITE);
@@ -105,6 +105,11 @@ public class DropLogPanel extends JPanel
         row.add(detailLabel, BorderLayout.SOUTH);
 
         return row;
+    }
+
+    private static String escapeHtml(String text)
+    {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private static String formatTimeAgo(String isoTimestamp)
