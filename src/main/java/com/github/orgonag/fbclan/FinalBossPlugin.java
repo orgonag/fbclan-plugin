@@ -145,33 +145,16 @@ public class FinalBossPlugin extends Plugin
     {
         if (event.getGameState() == GameState.LOGGED_IN)
         {
-            log.info("[FinalBoss] GameState LOGGED_IN detected");
-            // Delay to let getName() populate, then verify
             executor.schedule(() -> {
-                log.info("[FinalBoss] Scheduled task fired, reading RSN from client thread");
                 clientThread.invokeLater(() -> {
-                    try
+                    if (client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
                     {
-                        if (client.getLocalPlayer() == null)
-                        {
-                            log.warn("[FinalBoss] getLocalPlayer() is null");
-                            return;
-                        }
-                        String rsn = client.getLocalPlayer().getName();
-                        if (rsn == null)
-                        {
-                            log.warn("[FinalBoss] getName() is null");
-                            return;
-                        }
-                        log.info("[FinalBoss] RSN resolved: {}", rsn);
-                        currentRsn = rsn;
-                        SwingUtilities.invokeLater(() -> lfgPanel.setCurrentRsn(rsn));
-                        verifyMembership();
+                        return;
                     }
-                    catch (Exception e)
-                    {
-                        log.error("[FinalBoss] Error reading RSN", e);
-                    }
+                    String rsn = client.getLocalPlayer().getName();
+                    currentRsn = rsn;
+                    SwingUtilities.invokeLater(() -> lfgPanel.setCurrentRsn(rsn));
+                    verifyMembership();
                 });
             }, 3, TimeUnit.SECONDS);
         }
@@ -197,15 +180,12 @@ public class FinalBossPlugin extends Plugin
 
     private void verifyMembership()
     {
-        log.info("[FinalBoss] verifyMembership() called for RSN: {}", currentRsn);
         SwingUtilities.invokeLater(() -> lockedPanel.showVerifying());
 
         executor.submit(() -> {
             try
             {
-                log.info("[FinalBoss] Calling WOM API for: {}", currentRsn);
                 boolean isMember = womService.verify(currentRsn);
-                log.info("[FinalBoss] WOM result: isMember={}", isMember);
                 if (isMember)
                 {
                     verified = true;
