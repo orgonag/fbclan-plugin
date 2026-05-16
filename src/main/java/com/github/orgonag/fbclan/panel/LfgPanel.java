@@ -37,7 +37,7 @@ public class LfgPanel extends JPanel
     private final JButton removeStatusButton;
     private final JButton toggleViewButton;
     private boolean groupedView = false;
-    private String currentRsn;
+    private volatile String currentRsn;
     private List<LfgEntry> cachedEntries = new ArrayList<>();
 
     public LfgPanel(LfgService lfgService, ScheduledExecutorService executor)
