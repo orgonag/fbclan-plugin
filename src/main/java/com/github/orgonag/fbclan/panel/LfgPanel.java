@@ -10,8 +10,11 @@ import java.awt.FlowLayout;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
 import javax.swing.Box;
@@ -38,6 +41,7 @@ public class LfgPanel extends JPanel
     private final JButton toggleViewButton;
     private boolean groupedView = false;
     private volatile String currentRsn;
+    private volatile Set<String> onlineNames = Collections.emptySet();
     private List<LfgEntry> cachedEntries = new ArrayList<>();
 
     public LfgPanel(LfgService lfgService, ScheduledExecutorService executor)
@@ -108,6 +112,27 @@ public class LfgPanel extends JPanel
     public void setCurrentRsn(String rsn)
     {
         this.currentRsn = rsn;
+    }
+
+    public void setOnlineNames(Set<String> rawNames)
+    {
+        Set<String> normalized = new HashSet<>();
+        for (String n : rawNames)
+        {
+            normalized.add(normalize(n));
+        }
+        this.onlineNames = normalized;
+        SwingUtilities.invokeLater(this::rebuildList);
+    }
+
+    private static String normalize(String name)
+    {
+        return name == null ? "" : name.replace(' ', ' ').trim().toLowerCase();
+    }
+
+    private static String escapeHtml(String text)
+    {
+        return text == null ? "" : text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     public void refresh()
@@ -191,8 +216,11 @@ public class LfgPanel extends JPanel
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
 
         String timeAgo = formatTimeAgo(entry.getUpdatedAt());
-        JLabel label = new JLabel(entry.getRsn() + " \u2014 " + entry.getActivity().getDisplayName()
-            + " \u2014 " + timeAgo);
+        boolean online = onlineNames.contains(normalize(entry.getRsn()));
+        String nameColor = online ? "#3FBF3F" : "#BF3F3F";
+        String html = "<html><font color='" + nameColor + "'>" + escapeHtml(entry.getRsn()) + "</font>"
+            + " \u2014 " + entry.getActivity().getDisplayName() + " \u2014 " + timeAgo + "</html>";
+        JLabel label = new JLabel(html);
         label.setForeground(Color.WHITE);
         label.setFont(FontManager.getRunescapeSmallFont());
 
