@@ -2,6 +2,7 @@ package com.github.orgonag.fbclan.lfg;
 
 import lombok.Value;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 
 @Value
 public class LfgEntry
@@ -20,7 +21,7 @@ public class LfgEntry
         Instant updatedAt;
         try
         {
-            updatedAt = Instant.parse(updatedAtStr);
+            updatedAt = OffsetDateTime.parse(updatedAtStr).toInstant();
         }
         catch (Exception e)
         {
