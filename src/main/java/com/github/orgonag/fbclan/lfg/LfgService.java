@@ -7,6 +7,7 @@ import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,7 @@ public class LfgService
         JsonObject data = new JsonObject();
         data.addProperty("rsn", rsn);
         data.addProperty("activity", activity.getKey());
+        data.addProperty("updated_at", Instant.now().toString());
 
         try
         {
