@@ -10,6 +10,8 @@ import com.github.orgonag.fbclan.panel.LfgPanel;
 import com.github.orgonag.fbclan.panel.LockedPanel;
 import com.github.orgonag.fbclan.wom.WomVerificationService;
 import java.awt.image.BufferedImage;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -19,6 +21,8 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.ItemComposition;
+import net.runelite.api.clan.ClanChannel;
+import net.runelite.api.clan.ClanChannelMember;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -230,8 +234,12 @@ public class FinalBossPlugin extends Plugin
     {
         if (config.enableLfg())
         {
+            updateOnlineClanMembers();
             lfgPollFuture = executor.scheduleAtFixedRate(() -> {
-                try { lfgPanel.refresh(); }
+                try {
+                    updateOnlineClanMembers();
+                    lfgPanel.refresh();
+                }
                 catch (Exception e) { log.warn("LFG poll error", e); }
             }, 30, 30, TimeUnit.SECONDS);
         }
@@ -243,6 +251,25 @@ public class FinalBossPlugin extends Plugin
                 catch (Exception e) { log.warn("Drop refresh error", e); }
             }, 60, 60, TimeUnit.SECONDS);
         }
+    }
+
+    private void updateOnlineClanMembers()
+    {
+        clientThread.invokeLater(() -> {
+            Set<String> online = new HashSet<>();
+            ClanChannel cc = client.getClanChannel();
+            if (cc != null)
+            {
+                for (ClanChannelMember m : cc.getMembers())
+                {
+                    if (m.getName() != null)
+                    {
+                        online.add(m.getName());
+                    }
+                }
+            }
+            lfgPanel.setOnlineNames(online);
+        });
     }
 
     private void stopPolling()
