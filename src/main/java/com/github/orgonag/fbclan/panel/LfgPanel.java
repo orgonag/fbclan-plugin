@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,6 +43,18 @@ public class LfgPanel extends JPanel
     private boolean groupedView = false;
     private volatile String currentRsn;
     private volatile Set<String> onlineNames = Collections.emptySet();
+
+    // Local Party plugin state, pushed in from FinalBossPlugin. Both null
+    // when the user is not in a party. Read on the EDT (rendering) and on
+    // the executor (re-upsert) — hence volatile.
+    private volatile String localPartyId = null;
+    private volatile Integer localPartySize = null;
+
+    // Tracks whether the user currently has an LFG status posted. Set to
+    // the chosen activity on Set Status, cleared on Remove. Used by
+    // onLocalPartyStateChanged to decide whether to silently re-upsert.
+    private volatile LfgActivity activeLfgActivity = null;
+
     private List<LfgEntry> cachedEntries = new ArrayList<>();
 
     public LfgPanel(LfgService lfgService, ScheduledExecutorService executor)
@@ -125,6 +138,27 @@ public class LfgPanel extends JPanel
         SwingUtilities.invokeLater(this::rebuildList);
     }
 
+    // Called by FinalBossPlugin whenever the local Party plugin state may
+    // have changed (PartyChanged, UserJoin, UserPart, or the periodic
+    // poll). Updates the cached state used at Set Status time, and — if
+    // the user currently has an active LFG status — silently re-upserts
+    // their row so the DB reflects their new party affiliation without
+    // requiring them to re-click Set Status.
+    public void onLocalPartyStateChanged(String partyId, Integer partySize)
+    {
+        this.localPartyId = partyId;
+        this.localPartySize = partySize;
+
+        LfgActivity activity = activeLfgActivity;
+        String rsn = currentRsn;
+        if (activity != null && rsn != null)
+        {
+            executor.submit(() -> lfgService.setStatus(rsn, activity, partyId, partySize));
+        }
+
+        SwingUtilities.invokeLater(this::rebuildList);
+    }
+
     private static String normalize(String name)
     {
         return name == null ? "" : name.replace(' ', ' ').trim().toLowerCase();
@@ -170,14 +204,42 @@ public class LfgPanel extends JPanel
         listPanel.repaint();
     }
 
+    // List view sort order:
+    //   1. Your Party (if visible in the DB)         — top
+    //   2. Other parties, most-recent-update first   — middle
+    //   3. Solo entries, most-recent-update first    — bottom
     private void renderListView(List<LfgEntry> entries)
     {
-        for (LfgEntry entry : entries)
+        Partitioned parts = partitionByParty(entries);
+        String myPartyId = localPartyId;
+
+        if (myPartyId != null && parts.parties.containsKey(myPartyId))
         {
-            listPanel.add(createEntryRow(entry));
+            renderPartyCluster(parts.parties.remove(myPartyId), true);
+        }
+
+        // Other parties: order by the freshest member in each
+        parts.parties.entrySet().stream()
+            .sorted((a, b) -> b.getValue().get(0).getUpdatedAt()
+                .compareTo(a.getValue().get(0).getUpdatedAt()))
+            .forEach(e -> renderPartyCluster(e.getValue(), false));
+
+        if (!parts.solos.isEmpty())
+        {
+            listPanel.add(buildSectionHeader("Solo"));
+            for (LfgEntry e : parts.solos)
+            {
+                listPanel.add(createEntryRow(e));
+            }
         }
     }
 
+    // Grouped view: activity is the top-level grouping. Within each
+    // activity we sub-cluster by party, with the local user's own party
+    // (if represented in this activity) shown first. Party counts in this
+    // view are scoped to the activity — a cross-activity party will appear
+    // in multiple sections with the count reflecting only the members in
+    // each section. This keeps the math local and the visuals clean.
     private void renderGroupedView(List<LfgEntry> entries)
     {
         Map<LfgActivity, List<LfgEntry>> grouped = entries.stream()
@@ -191,17 +253,120 @@ public class LfgPanel extends JPanel
                 continue;
             }
 
-            JLabel header = new JLabel(" " + activity.getDisplayName() + " (" + group.size() + ")");
-            header.setFont(FontManager.getRunescapeBoldFont());
-            header.setForeground(ColorScheme.BRAND_ORANGE);
-            header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 25));
-            header.setBorder(BorderFactory.createEmptyBorder(8, 0, 4, 0));
-            listPanel.add(header);
+            listPanel.add(buildSectionHeader(activity.getDisplayName() + " (" + group.size() + ")"));
 
-            for (LfgEntry entry : group)
+            Partitioned parts = partitionByParty(group);
+            String myPartyId = localPartyId;
+
+            if (myPartyId != null && parts.parties.containsKey(myPartyId))
             {
-                listPanel.add(createEntryRow(entry));
+                renderPartySubCluster(parts.parties.remove(myPartyId), true);
             }
+            for (List<LfgEntry> partyMembers : parts.parties.values())
+            {
+                renderPartySubCluster(partyMembers, false);
+            }
+            for (LfgEntry e : parts.solos)
+            {
+                listPanel.add(createEntryRow(e));
+            }
+        }
+    }
+
+    // Renders a top-level party cluster used by the List view. The
+    // declared size comes from MAX(party_size) across the visible rows,
+    // which is the freshest known value. If the declared size is larger
+    // than the number of rows actually in the panel, we surface the gap
+    // as "(N not on LFG)" so viewers see the full party context.
+    private void renderPartyCluster(List<LfgEntry> partyMembers, boolean isMyParty)
+    {
+        int declaredSize = partyMembers.stream()
+            .mapToInt(e -> e.getPartySize() == null ? 0 : e.getPartySize())
+            .max().orElse(partyMembers.size());
+        declaredSize = Math.max(declaredSize, partyMembers.size());
+
+        String headerText = (isMyParty ? "Your Party" : "Party") + " · " + declaredSize;
+        listPanel.add(buildSectionHeader(headerText));
+
+        for (LfgEntry e : partyMembers)
+        {
+            listPanel.add(createEntryRow(e));
+        }
+
+        int notOnLfg = declaredSize - partyMembers.size();
+        if (notOnLfg > 0)
+        {
+            listPanel.add(buildFooterLabel("(" + notOnLfg + " not on LFG)"));
+        }
+    }
+
+    private void renderPartySubCluster(List<LfgEntry> partyMembers, boolean isMyParty)
+    {
+        String headerText = "  " + (isMyParty ? "Your Party" : "Party")
+            + " · " + partyMembers.size();
+        JLabel header = new JLabel(headerText);
+        header.setFont(FontManager.getRunescapeSmallFont());
+        header.setForeground(isMyParty ? ColorScheme.BRAND_ORANGE : ColorScheme.LIGHT_GRAY_COLOR);
+        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
+        header.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
+        listPanel.add(header);
+
+        for (LfgEntry e : partyMembers)
+        {
+            listPanel.add(createEntryRow(e));
+        }
+    }
+
+    private JLabel buildSectionHeader(String text)
+    {
+        JLabel header = new JLabel(" " + text);
+        header.setFont(FontManager.getRunescapeBoldFont());
+        header.setForeground(ColorScheme.BRAND_ORANGE);
+        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 25));
+        header.setBorder(BorderFactory.createEmptyBorder(8, 0, 4, 0));
+        return header;
+    }
+
+    private JLabel buildFooterLabel(String text)
+    {
+        JLabel footer = new JLabel(" " + text);
+        footer.setFont(FontManager.getRunescapeSmallFont());
+        footer.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        footer.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
+        footer.setBorder(BorderFactory.createEmptyBorder(0, 8, 4, 0));
+        return footer;
+    }
+
+    // Buckets entries by party_id, preserving the input ordering inside
+    // each bucket (the caller hands us a list already sorted by
+    // updated_at desc, so the first element of each list is the freshest).
+    private Partitioned partitionByParty(List<LfgEntry> entries)
+    {
+        Map<String, List<LfgEntry>> parties = new LinkedHashMap<>();
+        List<LfgEntry> solos = new ArrayList<>();
+        for (LfgEntry e : entries)
+        {
+            if (e.getPartyId() == null)
+            {
+                solos.add(e);
+            }
+            else
+            {
+                parties.computeIfAbsent(e.getPartyId(), k -> new ArrayList<>()).add(e);
+            }
+        }
+        return new Partitioned(parties, solos);
+    }
+
+    private static final class Partitioned
+    {
+        final Map<String, List<LfgEntry>> parties;
+        final List<LfgEntry> solos;
+
+        Partitioned(Map<String, List<LfgEntry>> parties, List<LfgEntry> solos)
+        {
+            this.parties = parties;
+            this.solos = solos;
         }
     }
 
@@ -239,8 +404,17 @@ public class LfgPanel extends JPanel
         {
             return;
         }
+
+        // Capture party state at click time. If the user later joins or
+        // leaves a party, onLocalPartyStateChanged will re-upsert with the
+        // new values automatically.
+        activeLfgActivity = selected;
+        String rsn = currentRsn;
+        String partyId = localPartyId;
+        Integer partySize = localPartySize;
+
         executor.submit(() -> {
-            lfgService.setStatus(currentRsn, selected);
+            lfgService.setStatus(rsn, selected, partyId, partySize);
             refresh();
         });
     }
@@ -251,8 +425,10 @@ public class LfgPanel extends JPanel
         {
             return;
         }
+        activeLfgActivity = null;
+        String rsn = currentRsn;
         executor.submit(() -> {
-            lfgService.removeStatus(currentRsn);
+            lfgService.removeStatus(rsn);
             refresh();
         });
     }
