@@ -25,10 +25,27 @@ public class LfgService
 
     public boolean setStatus(String rsn, LfgActivity activity)
     {
+        return setStatus(rsn, activity, null, null);
+    }
+
+    // partyId / partySize are optional. When the caller is in a Party plugin
+    // party, attaching them lets viewers cluster LFG rows by party. Both are
+    // omitted from the payload when null so solo entries explicitly write
+    // NULL into the columns rather than empty strings / zero.
+    public boolean setStatus(String rsn, LfgActivity activity, String partyId, Integer partySize)
+    {
         JsonObject data = new JsonObject();
         data.addProperty("rsn", rsn);
         data.addProperty("activity", activity.getKey());
         data.addProperty("updated_at", Instant.now().toString());
+        if (partyId != null)
+        {
+            data.addProperty("party_id", partyId);
+        }
+        if (partySize != null)
+        {
+            data.addProperty("party_size", partySize);
+        }
 
         try
         {
@@ -61,16 +78,11 @@ public class LfgService
         try
         {
             JsonArray rows = SupabaseClient.get(httpClient, "lfg_entries",
-                "select=rsn,activity,updated_at&order=updated_at.desc");
+                "select=rsn,activity,updated_at,party_id,party_size&order=updated_at.desc");
 
             for (JsonElement element : rows)
             {
-                JsonObject row = element.getAsJsonObject();
-                LfgEntry entry = LfgEntry.fromJson(
-                    row.get("rsn").getAsString(),
-                    row.get("activity").getAsString(),
-                    row.get("updated_at").getAsString()
-                );
+                LfgEntry entry = LfgEntry.fromRow(element.getAsJsonObject());
                 if (entry != null)
                 {
                     entries.add(entry);

@@ -10,6 +10,9 @@ import com.github.orgonag.fbclan.panel.LfgPanel;
 import com.github.orgonag.fbclan.panel.LockedPanel;
 import com.github.orgonag.fbclan.wom.WomVerificationService;
 import java.awt.image.BufferedImage;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
@@ -28,8 +31,12 @@ import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.NpcLootReceived;
+import net.runelite.client.events.PartyChanged;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.ItemStack;
+import net.runelite.client.party.PartyService;
+import net.runelite.client.party.events.UserJoin;
+import net.runelite.client.party.events.UserPart;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
@@ -67,6 +74,13 @@ public class FinalBossPlugin extends Plugin
 
     @Inject
     private ScheduledExecutorService executor;
+
+    // RuneLite core service for the Party plugin. Always available — the
+    // Party plugin ships with every RuneLite client. We only ever read
+    // partyId (a long secret) and member count; we never read or transmit
+    // the passphrase, even though PartyService exposes it.
+    @Inject
+    private PartyService partyService;
 
     private NavigationButton navButton;
     private LockedPanel lockedPanel;
@@ -235,9 +249,11 @@ public class FinalBossPlugin extends Plugin
         if (config.enableLfg())
         {
             updateOnlineClanMembers();
+            pushLocalPartyStateToPanel();
             lfgPollFuture = executor.scheduleAtFixedRate(() -> {
                 try {
                     updateOnlineClanMembers();
+                    pushLocalPartyStateToPanel();
                     lfgPanel.refresh();
                 }
                 catch (Exception e) { log.warn("LFG poll error", e); }
@@ -250,6 +266,80 @@ public class FinalBossPlugin extends Plugin
                 try { dropLogPanel.refresh(); }
                 catch (Exception e) { log.warn("Drop refresh error", e); }
             }, 60, 60, TimeUnit.SECONDS);
+        }
+    }
+
+    // Snapshots the local Party plugin state for the panel. Called from the
+    // executor / event bus; safe from any thread because PartyService
+    // accessors are simple lock-free reads on the EDT-owned member list.
+    // Returns (null, null) when the local user is not in a party.
+    void pushLocalPartyStateToPanel()
+    {
+        String partyId = null;
+        Integer partySize = null;
+        if (partyService.isInParty())
+        {
+            partyId = hashPartyId(partyService.getPartyId());
+            partySize = partyService.getMembers().size();
+        }
+        lfgPanel.onLocalPartyStateChanged(partyId, partySize);
+    }
+
+    // We hash the raw partyId before it ever leaves the client. The raw
+    // long is derived from the passphrase (PartyService.passphraseToId)
+    // and could in principle be used by an attacker to eavesdrop on the
+    // party WebSocket channel. The truncated SHA-256 preserves equality
+    // (same partyId -> same hash, so grouping still works) while making
+    // it computationally infeasible to reverse-derive the passphrase or
+    // partyId from a leaked Supabase row.
+    private static String hashPartyId(long partyId)
+    {
+        try
+        {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(Long.toString(partyId).getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(16);
+            for (int i = 0; i < 8; i++)
+            {
+                sb.append(String.format("%02x", digest[i] & 0xFF));
+            }
+            return sb.toString();
+        }
+        catch (NoSuchAlgorithmException e)
+        {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
+    }
+
+    // Three events keep party state on the panel in sync without the user
+    // having to re-click Set Status: PartyChanged when the local user joins
+    // or leaves a party, UserJoin/UserPart when other members move in or out
+    // of the current party. The panel decides whether to re-upsert (only
+    // when there is an active LFG status).
+    @Subscribe
+    public void onPartyChanged(PartyChanged event)
+    {
+        if (lfgPanel != null)
+        {
+            pushLocalPartyStateToPanel();
+        }
+    }
+
+    @Subscribe
+    public void onUserJoin(UserJoin event)
+    {
+        if (lfgPanel != null)
+        {
+            pushLocalPartyStateToPanel();
+        }
+    }
+
+    @Subscribe
+    public void onUserPart(UserPart event)
+    {
+        if (lfgPanel != null)
+        {
+            pushLocalPartyStateToPanel();
         }
     }
 
