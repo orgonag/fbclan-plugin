@@ -145,6 +145,10 @@ public class FinalBossPlugin extends Plugin
     {
         if (event.getGameState() == GameState.LOGGED_IN)
         {
+            if (verified)
+            {
+                return;
+            }
             executor.schedule(() -> {
                 clientThread.invokeLater(() -> {
                     if (client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
@@ -160,6 +164,10 @@ public class FinalBossPlugin extends Plugin
         }
         else if (event.getGameState() == GameState.LOGIN_SCREEN)
         {
+            if (!verified && currentRsn == null)
+            {
+                return;
+            }
             verified = false;
             currentRsn = null;
             womService.clearCache();

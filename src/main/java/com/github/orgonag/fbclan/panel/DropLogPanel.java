@@ -10,6 +10,7 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -116,7 +117,7 @@ public class DropLogPanel extends JPanel
     {
         try
         {
-            Instant then = Instant.parse(isoTimestamp);
+            Instant then = OffsetDateTime.parse(isoTimestamp).toInstant();
             Duration duration = Duration.between(then, Instant.now());
 
             long minutes = duration.toMinutes();
