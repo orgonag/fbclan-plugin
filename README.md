@@ -33,7 +33,7 @@ This plugin communicates with a Supabase database to store drop logs and LFG ent
 
 - **Drops are append-only** — no one can modify or delete drop records via the API
 - **LFG entries are fully managed** — players can set, update, and remove their own status
-- A daily cron job purges all LFG entries at 00:01 UTC to clean up stale data
+- A scheduled job runs every minute and deletes LFG entries whose `updated_at` is older than 60 minutes. Each entry effectively has a 60-minute TTL that resets whenever the player sets or updates their status.
 
 The optional Discord webhook URL is stored locally in your RuneLite config and never sent to the database.
 
