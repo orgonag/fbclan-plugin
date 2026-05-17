@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
@@ -141,17 +142,22 @@ public class LfgPanel extends JPanel
     // Called by FinalBossPlugin whenever the local Party plugin state may
     // have changed (PartyChanged, UserJoin, UserPart, or the periodic
     // poll). Updates the cached state used at Set Status time, and — if
-    // the user currently has an active LFG status — silently re-upserts
-    // their row so the DB reflects their new party affiliation without
-    // requiring them to re-click Set Status.
+    // the user currently has an active LFG status and the party state
+    // actually changed — silently re-upserts their row so the DB reflects
+    // their new party affiliation without requiring them to re-click Set
+    // Status. The change check matters: this method is called on every
+    // poll cycle (every 30s), and re-upserting bumps updated_at to now(),
+    // which would pin the row's "X min ago" timer to "just now" forever.
     public void onLocalPartyStateChanged(String partyId, Integer partySize)
     {
+        boolean partyChanged = !Objects.equals(this.localPartyId, partyId)
+            || !Objects.equals(this.localPartySize, partySize);
         this.localPartyId = partyId;
         this.localPartySize = partySize;
 
         LfgActivity activity = activeLfgActivity;
         String rsn = currentRsn;
-        if (activity != null && rsn != null)
+        if (partyChanged && activity != null && rsn != null)
         {
             executor.submit(() -> lfgService.setStatus(rsn, activity, partyId, partySize));
         }
