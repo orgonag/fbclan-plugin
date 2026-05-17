@@ -38,12 +38,18 @@ public class SupabaseDropService
         }
     }
 
+    // Explicit column list rather than select=* so adding a column to the
+    // drops table (e.g. a future moderation flag) doesn't silently start
+    // shipping it to every viewer's client.
+    private static final String DROPS_COLUMNS =
+        "rsn,npc_name,item_name,item_id,ge_value,quantity,created_at";
+
     public JsonArray getRecentDrops(int limit)
     {
         try
         {
             return SupabaseClient.get(httpClient, "drops",
-                "select=*&order=created_at.desc&limit=" + limit);
+                "select=" + DROPS_COLUMNS + "&order=created_at.desc&limit=" + limit);
         }
         catch (IOException e)
         {

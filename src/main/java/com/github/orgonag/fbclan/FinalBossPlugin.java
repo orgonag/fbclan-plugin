@@ -131,6 +131,16 @@ public class FinalBossPlugin extends Plugin
             .build();
 
         clientToolbar.addNavigation(navButton);
+
+        // If the plugin is being enabled mid-session (player already logged
+        // in), no GameStateChanged event will fire to kick off verification,
+        // and the locked panel would sit forever on "Verifying...". Trigger
+        // the same flow as onGameStateChanged(LOGGED_IN) when we detect we
+        // started up while already in the game.
+        if (client.getGameState() == GameState.LOGGED_IN)
+        {
+            kickOffInitialVerification(0);
+        }
     }
 
     @Override
@@ -174,18 +184,9 @@ public class FinalBossPlugin extends Plugin
             {
                 return;
             }
-            executor.schedule(() -> {
-                clientThread.invokeLater(() -> {
-                    if (client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
-                    {
-                        return;
-                    }
-                    String rsn = client.getLocalPlayer().getName();
-                    currentRsn = rsn;
-                    SwingUtilities.invokeLater(() -> lfgPanel.setCurrentRsn(rsn));
-                    verifyMembership();
-                });
-            }, 3, TimeUnit.SECONDS);
+            // 3s delay gives the login flow time to settle before we read
+            // getLocalPlayer().getName().
+            kickOffInitialVerification(3);
         }
         else if (event.getGameState() == GameState.LOGIN_SCREEN)
         {
@@ -209,6 +210,25 @@ public class FinalBossPlugin extends Plugin
                 lockedPanel.showVerifying();
             });
         }
+    }
+
+    // Schedules the post-login work that captures the player's RSN and
+    // triggers WOM verification. Called from two places: the normal LOGGED_IN
+    // event handler (with a small delay to let the client settle), and
+    // startUp() when the plugin is enabled while already in-game (with no
+    // delay — the client has already settled).
+    private void kickOffInitialVerification(long delaySeconds)
+    {
+        executor.schedule(() -> clientThread.invokeLater(() -> {
+            if (client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
+            {
+                return;
+            }
+            String rsn = client.getLocalPlayer().getName();
+            currentRsn = rsn;
+            SwingUtilities.invokeLater(() -> lfgPanel.setCurrentRsn(rsn));
+            verifyMembership();
+        }), delaySeconds, TimeUnit.SECONDS);
     }
 
     private void verifyMembership()
