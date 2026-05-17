@@ -3,6 +3,7 @@ package com.github.orgonag.fbclan.lfg;
 import com.github.orgonag.fbclan.util.SupabaseClient;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -54,6 +55,44 @@ public class LfgService
         catch (IOException e)
         {
             log.warn("Failed to set LFG status", e);
+            return false;
+        }
+    }
+
+    // Updates only party_id / party_size for an existing LFG row, leaving
+    // activity and updated_at untouched. Called from background party-sync
+    // triggers (PartyChanged / UserJoin / UserPart) so a member joining or
+    // leaving the user's party doesn't reset the row's "X min ago" timer.
+    // Null partyId / partySize clear the columns (user left their party).
+    public boolean updateParty(String rsn, String partyId, Integer partySize)
+    {
+        JsonObject data = new JsonObject();
+        if (partyId != null)
+        {
+            data.addProperty("party_id", partyId);
+        }
+        else
+        {
+            data.add("party_id", JsonNull.INSTANCE);
+        }
+        if (partySize != null)
+        {
+            data.addProperty("party_size", partySize);
+        }
+        else
+        {
+            data.add("party_size", JsonNull.INSTANCE);
+        }
+
+        try
+        {
+            String encodedRsn = URLEncoder.encode(rsn, StandardCharsets.UTF_8);
+            return SupabaseClient.update(httpClient, "lfg_entries",
+                "rsn=eq." + encodedRsn, data);
+        }
+        catch (IOException e)
+        {
+            log.warn("Failed to update LFG party info", e);
             return false;
         }
     }
