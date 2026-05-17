@@ -136,9 +136,16 @@ public class FinalBossPlugin extends Plugin
     @Override
     protected void shutDown()
     {
-        if (currentRsn != null && config.enableLfg())
+        // Snapshot currentRsn into a local before submitting to the
+        // executor. The field is nulled a few lines below; if the
+        // executor hadn't picked the task up yet, the lambda would read
+        // null from the field and removeStatus(null) would throw NPE
+        // inside URLEncoder, escaping the IOException catch and silently
+        // leaving the user's LFG row in the DB until the 60-minute TTL.
+        String rsnSnapshot = currentRsn;
+        if (rsnSnapshot != null && config.enableLfg())
         {
-            executor.submit(() -> lfgService.removeStatus(currentRsn));
+            executor.submit(() -> lfgService.removeStatus(rsnSnapshot));
         }
 
         if (lfgPollFuture != null)
@@ -249,11 +256,16 @@ public class FinalBossPlugin extends Plugin
         if (config.enableLfg())
         {
             updateOnlineClanMembers();
+            // Seed the panel with the initial Party plugin state. From here
+            // on, party changes are driven by the PartyChanged / UserJoin /
+            // UserPart event handlers below — NOT by the poll. Pushing
+            // party state on every poll tick used to re-upsert the user's
+            // LFG row every 30s, which pinned its updated_at to now() and
+            // stuck the "X min ago" timer at "just now" forever.
             pushLocalPartyStateToPanel();
             lfgPollFuture = executor.scheduleAtFixedRate(() -> {
                 try {
                     updateOnlineClanMembers();
-                    pushLocalPartyStateToPanel();
                     lfgPanel.refresh();
                 }
                 catch (Exception e) { log.warn("LFG poll error", e); }

@@ -139,11 +139,13 @@ public class LfgPanel extends JPanel
     }
 
     // Called by FinalBossPlugin whenever the local Party plugin state may
-    // have changed (PartyChanged, UserJoin, UserPart, or the periodic
-    // poll). Updates the cached state used at Set Status time, and — if
-    // the user currently has an active LFG status — silently re-upserts
-    // their row so the DB reflects their new party affiliation without
-    // requiring them to re-click Set Status.
+    // have changed (PartyChanged, UserJoin, UserPart, or the startup
+    // seed). Updates the cached state used at Set Status time, and — if
+    // the user currently has an active LFG status — silently PATCHes only
+    // the party columns of their row so the DB reflects their new party
+    // affiliation without requiring them to re-click Set Status. The
+    // PATCH deliberately omits updated_at so the row's "X min ago" timer
+    // keeps counting from the original Set Status click.
     public void onLocalPartyStateChanged(String partyId, Integer partySize)
     {
         this.localPartyId = partyId;
@@ -153,7 +155,7 @@ public class LfgPanel extends JPanel
         String rsn = currentRsn;
         if (activity != null && rsn != null)
         {
-            executor.submit(() -> lfgService.setStatus(rsn, activity, partyId, partySize));
+            executor.submit(() -> lfgService.updateParty(rsn, partyId, partySize));
         }
 
         SwingUtilities.invokeLater(this::rebuildList);

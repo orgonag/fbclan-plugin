@@ -110,6 +110,30 @@ public class SupabaseClient
         }
     }
 
+    // Partial update: PATCHes only the columns present in `data`, leaving
+    // all other columns (including updated_at) untouched. `filter` is a
+    // PostgREST filter expression such as "rsn=eq.PlayerName".
+    public static boolean update(OkHttpClient httpClient, String table, String filter, JsonObject data) throws IOException
+    {
+        String url = buildUrl(table, filter);
+        RequestBody body = RequestBody.create(JSON, data.toString());
+        Request request = baseRequest(url)
+            .header("Content-Type", "application/json")
+            .header("Prefer", "return=minimal")
+            .patch(body)
+            .build();
+
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (!response.isSuccessful())
+            {
+                log.warn("Supabase UPDATE failed: {} {}", response.code(), response.message());
+                return false;
+            }
+            return true;
+        }
+    }
+
     public static boolean delete(OkHttpClient httpClient, String table, String filter) throws IOException
     {
         String url = buildUrl(table, filter);
