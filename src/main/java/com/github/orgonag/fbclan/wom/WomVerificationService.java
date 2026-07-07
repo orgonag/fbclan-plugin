@@ -77,9 +77,4 @@ public class WomVerificationService
     {
         cachedResult = null;
     }
-
-    public Boolean getCachedResult()
-    {
-        return cachedResult;
-    }
 }

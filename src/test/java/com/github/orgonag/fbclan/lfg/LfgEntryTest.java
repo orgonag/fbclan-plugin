@@ -22,7 +22,7 @@ public class LfgEntryTest
     @Test
     public void testFromJsonFields()
     {
-        LfgEntry entry = LfgEntry.fromJson("PlayerOne", "TOB", "2026-04-08T12:00:00Z");
+        LfgEntry entry = LfgEntry.fromJson("PlayerOne", "TOB", "2026-04-08T12:00:00Z", null, null, null);
         assertEquals("PlayerOne", entry.getRsn());
         assertEquals(LfgActivity.TOB, entry.getActivity());
         assertNotNull(entry.getUpdatedAt());
@@ -34,7 +34,7 @@ public class LfgEntryTest
     public void testFromJsonWithPartyFields()
     {
         LfgEntry entry = LfgEntry.fromJson("PlayerOne", "TOB", "2026-04-08T12:00:00Z",
-            "abc123", 3);
+            "abc123", 3, null);
         assertEquals("abc123", entry.getPartyId());
         assertEquals(Integer.valueOf(3), entry.getPartySize());
     }
@@ -42,7 +42,7 @@ public class LfgEntryTest
     @Test
     public void testFromJsonInvalidActivity()
     {
-        LfgEntry entry = LfgEntry.fromJson("PlayerOne", "INVALID", "2026-04-08T12:00:00Z");
+        LfgEntry entry = LfgEntry.fromJson("PlayerOne", "INVALID", "2026-04-08T12:00:00Z", null, null, null);
         assertNull(entry);
     }
 

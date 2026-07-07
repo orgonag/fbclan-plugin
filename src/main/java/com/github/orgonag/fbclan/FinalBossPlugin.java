@@ -10,7 +10,6 @@ import com.github.orgonag.fbclan.panel.FinalBossPanel;
 import com.github.orgonag.fbclan.panel.LfgPanel;
 import com.github.orgonag.fbclan.panel.LockedPanel;
 import com.github.orgonag.fbclan.wom.WomVerificationService;
-import java.awt.image.BufferedImage;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -48,6 +47,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.DrawManager;
 import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.util.ImageUtil;
 import com.google.inject.Provides;
 import okhttp3.OkHttpClient;
@@ -73,8 +73,7 @@ import okhttp3.OkHttpClient;
 @PluginDescriptor(
     name = "Final Boss",
     description = "Clan tools for Final Boss — drop logging, LFG, and more",
-    tags = {"clan", "final boss", "drops", "lfg", "looking for group"},
-    enabledByDefault = true
+    tags = {"clan", "final boss", "drops", "lfg", "looking for group"}
 )
 public class FinalBossPlugin extends Plugin
 {
@@ -99,10 +98,8 @@ public class FinalBossPlugin extends Plugin
     @Inject
     private ScheduledExecutorService executor;
 
-    // RuneLite core service for the Party plugin. Always available — the
-    // Party plugin ships with every RuneLite client. We only ever read
-    // partyId (a long secret) and member count; we never read or transmit
-    // the passphrase, even though PartyService exposes it.
+    // Core RuneLite service backing the Party plugin. We only read the
+    // partyId and member count — never the passphrase.
     @Inject
     private PartyService partyService;
 
@@ -150,22 +147,10 @@ public class FinalBossPlugin extends Plugin
 
         lockedPanel.setRetryAction(e -> verifyMembership());
 
-        final BufferedImage icon = ImageUtil.loadImageResource(getClass(), "icon.png");
+        showNavPanel(lockedPanel);
 
-        navButton = NavigationButton.builder()
-            .tooltip("Final Boss")
-            .icon(icon)
-            .priority(10)
-            .panel(lockedPanel)
-            .build();
-
-        clientToolbar.addNavigation(navButton);
-
-        // If the plugin is being enabled mid-session (player already logged
-        // in), no GameStateChanged event will fire to kick off verification,
-        // and the locked panel would sit forever on "Verifying...". Trigger
-        // the same flow as onGameStateChanged(LOGGED_IN) when we detect we
-        // started up while already in the game.
+        // When the plugin is enabled mid-session, no LOGGED_IN event will
+        // fire, so kick off verification directly.
         if (client.getGameState() == GameState.LOGGED_IN)
         {
             kickOffInitialVerification(0);
@@ -175,12 +160,8 @@ public class FinalBossPlugin extends Plugin
     @Override
     protected void shutDown()
     {
-        // Snapshot currentRsn into a local before submitting to the
-        // executor. The field is nulled a few lines below; if the
-        // executor hadn't picked the task up yet, the lambda would read
-        // null from the field and removeStatus(null) would throw NPE
-        // inside URLEncoder, escaping the IOException catch and silently
-        // leaving the user's LFG row in the DB until the 60-minute TTL.
+        // Snapshot the RSN before it's nulled below — the executor task may
+        // run after this method finishes.
         String rsnSnapshot = currentRsn;
         if (rsnSnapshot != null && config.enableLfg())
         {
@@ -228,24 +209,14 @@ public class FinalBossPlugin extends Plugin
             womService.clearCache();
             stopPolling();
             SwingUtilities.invokeLater(() -> {
-                clientToolbar.removeNavigation(navButton);
-                navButton = NavigationButton.builder()
-                    .tooltip("Final Boss")
-                    .icon(ImageUtil.loadImageResource(getClass(), "icon.png"))
-                    .priority(10)
-                    .panel(lockedPanel)
-                    .build();
-                clientToolbar.addNavigation(navButton);
+                showNavPanel(lockedPanel);
                 lockedPanel.showVerifying();
             });
         }
     }
 
-    // Schedules the post-login work that captures the player's RSN and
-    // triggers WOM verification. Called from two places: the normal LOGGED_IN
-    // event handler (with a small delay to let the client settle), and
-    // startUp() when the plugin is enabled while already in-game (with no
-    // delay — the client has already settled).
+    // Captures the player's RSN and triggers WOM verification, after an
+    // optional delay to let the login flow settle.
     private void kickOffInitialVerification(long delaySeconds)
     {
         executor.schedule(() -> clientThread.invokeLater(() -> {
@@ -289,15 +260,25 @@ public class FinalBossPlugin extends Plugin
 
     private void showMainPanel()
     {
-        clientToolbar.removeNavigation(navButton);
+        showNavPanel(mainPanel);
+        mainPanel.refreshActiveTab();
+    }
+
+    // NavigationButton's panel is fixed at build time, so swapping between
+    // the locked and main panel means replacing the whole button.
+    private void showNavPanel(PluginPanel panel)
+    {
+        if (navButton != null)
+        {
+            clientToolbar.removeNavigation(navButton);
+        }
         navButton = NavigationButton.builder()
             .tooltip("Final Boss")
             .icon(ImageUtil.loadImageResource(getClass(), "icon.png"))
             .priority(10)
-            .panel(mainPanel)
+            .panel(panel)
             .build();
         clientToolbar.addNavigation(navButton);
-        mainPanel.refreshActiveTab();
     }
 
     private void startPolling()
@@ -305,12 +286,9 @@ public class FinalBossPlugin extends Plugin
         if (config.enableLfg())
         {
             updateOnlineClanMembers();
-            // Seed the panel with the initial Party plugin state. From here
-            // on, party changes are driven by the PartyChanged / UserJoin /
-            // UserPart event handlers below — NOT by the poll. Pushing
-            // party state on every poll tick used to re-upsert the user's
-            // LFG row every 30s, which pinned its updated_at to now() and
-            // stuck the "X min ago" timer at "just now" forever.
+            // Seed the initial party state; afterwards it is driven only by
+            // the party event handlers. Pushing it on every poll tick would
+            // re-upsert the LFG row and reset its "X min ago" timer.
             pushLocalPartyStateToPanel();
             lfgPollFuture = executor.scheduleAtFixedRate(() -> {
                 try {
@@ -330,10 +308,8 @@ public class FinalBossPlugin extends Plugin
         }
     }
 
-    // Snapshots the local Party plugin state for the panel. Called from the
-    // executor / event bus; safe from any thread because PartyService
-    // accessors are simple lock-free reads on the EDT-owned member list.
-    // Returns (null, null) when the local user is not in a party.
+    // Pushes the local Party plugin state to the panel; (null, null) when
+    // the user is not in a party.
     void pushLocalPartyStateToPanel()
     {
         String partyId = null;
@@ -346,13 +322,10 @@ public class FinalBossPlugin extends Plugin
         lfgPanel.onLocalPartyStateChanged(partyId, partySize);
     }
 
-    // We hash the raw partyId before it ever leaves the client. The raw
-    // long is derived from the passphrase (PartyService.passphraseToId)
-    // and could in principle be used by an attacker to eavesdrop on the
-    // party WebSocket channel. The truncated SHA-256 preserves equality
-    // (same partyId -> same hash, so grouping still works) while making
-    // it computationally infeasible to reverse-derive the passphrase or
-    // partyId from a leaked Supabase row.
+    // The raw partyId is derived from the party passphrase and could let an
+    // attacker eavesdrop on the party channel, so it never leaves the client.
+    // A truncated SHA-256 preserves equality (grouping still works) without
+    // being reversible.
     private static String hashPartyId(long partyId)
     {
         try
@@ -372,36 +345,25 @@ public class FinalBossPlugin extends Plugin
         }
     }
 
-    // Three events keep party state on the panel in sync without the user
-    // having to re-click Set Status: PartyChanged when the local user joins
-    // or leaves a party, UserJoin/UserPart when other members move in or out
-    // of the current party. The panel decides whether to re-upsert (only
-    // when there is an active LFG status).
+    // These three events keep the panel's party state in sync without the
+    // user having to re-click Set Status. The panel decides whether to
+    // re-upsert (only when there is an active LFG status).
     @Subscribe
     public void onPartyChanged(PartyChanged event)
     {
-        if (lfgPanel != null)
-        {
-            pushLocalPartyStateToPanel();
-        }
+        pushLocalPartyStateToPanel();
     }
 
     @Subscribe
     public void onUserJoin(UserJoin event)
     {
-        if (lfgPanel != null)
-        {
-            pushLocalPartyStateToPanel();
-        }
+        pushLocalPartyStateToPanel();
     }
 
     @Subscribe
     public void onUserPart(UserPart event)
     {
-        if (lfgPanel != null)
-        {
-            pushLocalPartyStateToPanel();
-        }
+        pushLocalPartyStateToPanel();
     }
 
     private void updateOnlineClanMembers()
@@ -470,11 +432,9 @@ public class FinalBossPlugin extends Plugin
 
         if (config.enableDropScreenshots())
         {
-            // One screenshot covers every qualifying item from this kill —
-            // the frame is identical. Party names are captured here on the
-            // client thread; the image is grabbed on the next rendered frame
-            // and everything heavier (annotate, PNG encode, upload) happens
-            // on the executor.
+            // One screenshot covers every qualifying item from this kill.
+            // The frame is grabbed on the next render; annotating, encoding,
+            // and uploading happen on the executor.
             final List<String> partyNames = getPartyMemberNames();
             final int bestItemId = drops.stream()
                 .max(Comparator.comparingLong(d -> d.totalValue))

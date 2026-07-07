@@ -81,16 +81,6 @@ public class FinalBossPanel extends PluginPanel
             ? ColorScheme.BRAND_ORANGE : ColorScheme.DARK_GRAY_COLOR);
     }
 
-    public DropLogPanel getDropLogPanel()
-    {
-        return dropLogPanel;
-    }
-
-    public LfgPanel getLfgPanel()
-    {
-        return lfgPanel;
-    }
-
     public void refreshActiveTab()
     {
         if (DROP_LOG_TAB.equals(activeTab))

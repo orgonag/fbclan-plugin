@@ -20,18 +20,13 @@ public class LfgService
     // Hard cap on the free-text note, enforced here, in the panel's input
     // field, and by a CHECK constraint in the database (the anon key is
     // public, so the client-side cap alone is not sufficient).
-    static final int MAX_NOTE_LENGTH = 60;
+    public static final int MAX_NOTE_LENGTH = 60;
 
     private final OkHttpClient httpClient;
 
     public LfgService(OkHttpClient httpClient)
     {
         this.httpClient = httpClient;
-    }
-
-    public boolean setStatus(String rsn, LfgActivity activity)
-    {
-        return setStatus(rsn, activity, null, null, null);
     }
 
     // partyId / partySize are optional. When the caller is in a Party plugin
