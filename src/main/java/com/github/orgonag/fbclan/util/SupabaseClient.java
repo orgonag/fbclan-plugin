@@ -20,6 +20,8 @@ public class SupabaseClient
     // - lfg_entries table: INSERT, SELECT, UPDATE, DELETE (needed for LFG lifecycle)
     // - notable_items table: SELECT only (clan-curated list, written solely by
     //   the sheet-sync Apps Script's service-role key)
+    // - welcome_message table: SELECT only (clan-curated text, written solely
+    //   by the sheet-sync Apps Script's service-role key)
     // - drop-screenshots storage bucket: INSERT only (screenshots are immutable
     //   once uploaded; the bucket is public-read so the panel can link to them)
     private static final String PROJECT_URL = "https://rzhtoqadvbxylwjndnlo.supabase.co";

@@ -10,6 +10,7 @@ import com.github.orgonag.fbclan.panel.DropLogPanel;
 import com.github.orgonag.fbclan.panel.FinalBossPanel;
 import com.github.orgonag.fbclan.panel.LfgPanel;
 import com.github.orgonag.fbclan.panel.LockedPanel;
+import com.github.orgonag.fbclan.util.WelcomeMessageService;
 import com.github.orgonag.fbclan.wom.WomVerificationService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -125,9 +126,15 @@ public class FinalBossPlugin extends Plugin
     private DropScreenshotService screenshotService;
     private LfgService lfgService;
     private NotableItemsService notableItemsService;
+    private WelcomeMessageService welcomeMessageService;
 
     private DropLogPanel dropLogPanel;
     private LfgPanel lfgPanel;
+
+    // Once-per-session latch for the welcome message. RuneLite REUSES the
+    // plugin instance across toggle off/on, so this is reset in startUp
+    // rather than relying on field initialization.
+    private volatile boolean welcomeShown = false;
 
     private volatile boolean verified = false;
     private volatile String currentRsn = null;
@@ -152,6 +159,16 @@ public class FinalBossPlugin extends Plugin
         // One fetch per session — the curated list changes rarely. Runs on the
         // executor so startup never blocks on network.
         executor.submit(notableItemsService::refresh);
+
+        welcomeShown = false;
+        welcomeMessageService = new WelcomeMessageService(okHttpClient);
+        // Fetch once per session, then attempt display — covers the case where
+        // verification already finished before the fetch (maybeShowWelcome is
+        // also called on verification success, whichever comes last wins).
+        executor.submit(() -> {
+            welcomeMessageService.refresh();
+            maybeShowWelcome();
+        });
 
         dropLogPanel = new DropLogPanel(dropService, executor);
         lfgPanel = new LfgPanel(lfgService, executor, config);
@@ -258,6 +275,7 @@ public class FinalBossPlugin extends Plugin
                     verified = true;
                     SwingUtilities.invokeLater(this::showMainPanel);
                     startPolling();
+                    maybeShowWelcome();
                 }
                 else
                 {
@@ -269,6 +287,33 @@ public class FinalBossPlugin extends Plugin
                 log.warn("WOM verification failed", e);
                 SwingUtilities.invokeLater(() -> lockedPanel.showError());
             }
+        });
+    }
+
+    // Called when the startup fetch completes AND when verification succeeds;
+    // whichever happens last shows the message. Both callers run on executor
+    // threads — synchronized so they can't double-print.
+    private synchronized void maybeShowWelcome()
+    {
+        String message = welcomeMessageService.getMessage();
+        if (!verified || welcomeShown || message.isEmpty())
+        {
+            return;
+        }
+        welcomeShown = true;
+        clientThread.invokeLater(() ->
+        {
+            if (client.getGameState() != GameState.LOGGED_IN)
+            {
+                // Logged out between verification and the print landing on the
+                // client thread — un-latch so the next verification re-attempts.
+                welcomeShown = false;
+                return;
+            }
+            // postEvent=false keeps our own printed text out of the chat-event
+            // pipeline (onChatMessage's pet matching would otherwise see it).
+            client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
+                "[Final Boss] " + message, null, false);
         });
     }
 

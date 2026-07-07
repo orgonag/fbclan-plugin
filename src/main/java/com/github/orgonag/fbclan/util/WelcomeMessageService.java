@@ -46,6 +46,7 @@ public class WelcomeMessageService
         {
             JsonArray rows = SupabaseClient.get(httpClient, "welcome_message", "select=message&id=eq.1");
             message = parseMessage(rows);
+            log.debug("Welcome message loaded ({} chars)", message.length());
         }
         catch (IOException | RuntimeException e)
         {

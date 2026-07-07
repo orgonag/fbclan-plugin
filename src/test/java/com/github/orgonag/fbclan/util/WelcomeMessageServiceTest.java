@@ -80,4 +80,18 @@ public class WelcomeMessageServiceTest
         assertEquals("", WelcomeMessageService.parseMessage(rows("[{\"message\":null}]")));
         assertEquals("", WelcomeMessageService.parseMessage(rows("[{\"other\":\"x\"}]")));
     }
+
+    @Test
+    public void testSanitizeNeverEmitsAngleBrackets()
+    {
+        // The actual security property: no output may contain chat-markup
+        // delimiters, even for nested/adversarial input.
+        String[] nasty = {"<co<x>l=ff0000>hi</col>", "<img=<img=12>12>", "<<>><", "<lt><gt>"};
+        for (String input : nasty)
+        {
+            String out = WelcomeMessageService.sanitize(input);
+            assertFalse(out, out.contains("<"));
+            assertFalse(out, out.contains(">"));
+        }
+    }
 }
