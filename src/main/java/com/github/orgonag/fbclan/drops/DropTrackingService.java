@@ -2,6 +2,7 @@ package com.github.orgonag.fbclan.drops;
 
 import java.text.NumberFormat;
 import java.util.Locale;
+import java.util.Set;
 
 public class DropTrackingService
 {
@@ -54,5 +55,21 @@ public class DropTrackingService
     public static String formatGp(long value)
     {
         return NumberFormat.getIntegerInstance(Locale.US).format(value);
+    }
+
+    // Names come from a clan-curated Supabase table (synced from a Google
+    // Sheet). Matching is case/whitespace-insensitive so "Araxyte Fang" in
+    // the sheet still matches the in-game "Araxyte fang".
+    public static String normalizeItemName(String name)
+    {
+        return name == null ? "" : name.trim().toLowerCase(Locale.ROOT);
+    }
+
+    // Notable drops bypass the GP threshold entirely — they are typically
+    // untradeable (GE price 0) and would never qualify by value.
+    public static boolean isNotableDrop(String itemName, Set<String> notableNames)
+    {
+        return itemName != null && notableNames != null
+            && notableNames.contains(normalizeItemName(itemName));
     }
 }
