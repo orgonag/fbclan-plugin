@@ -3,6 +3,7 @@ package com.github.orgonag.fbclan;
 import com.github.orgonag.fbclan.drops.DiscordWebhookService;
 import com.github.orgonag.fbclan.drops.DropScreenshotService;
 import com.github.orgonag.fbclan.drops.DropTrackingService;
+import com.github.orgonag.fbclan.drops.NotableItemsService;
 import com.github.orgonag.fbclan.drops.SupabaseDropService;
 import com.github.orgonag.fbclan.lfg.LfgService;
 import com.github.orgonag.fbclan.panel.DropLogPanel;
@@ -67,13 +68,15 @@ import okhttp3.OkHttpClient;
  *     member of the clan's WOM group. The panel stays locked for non-members.</li>
  * <li>Supabase (clan-owned database): stores drop log rows, LFG statuses, and
  *     (opt-in) drop screenshots. Only ever sends the local player's own RSN,
- *     drop details, LFG activity/note, and screenshots.</li>
+ *     drop details, LFG activity/note, and screenshots. Also reads the
+ *     clan-curated notable-items list at startup (read-only, no player data
+ *     sent).</li>
  * <li>Discord webhook (optional, user-supplied URL): drop notifications.</li>
  * </ul>
  *
- * Nothing is sent anywhere unless the player is a verified clan member. Drop
- * logging and screenshots are additionally gated behind opt-in config toggles
- * (both default off; see {@link FinalBossConfig}).
+ * No player data is sent anywhere unless the player is a verified clan
+ * member. Drop logging and screenshots are additionally gated behind opt-in
+ * config toggles (both default off; see {@link FinalBossConfig}).
  */
 @Slf4j
 @PluginDescriptor(
@@ -121,6 +124,7 @@ public class FinalBossPlugin extends Plugin
     private DiscordWebhookService discordService;
     private DropScreenshotService screenshotService;
     private LfgService lfgService;
+    private NotableItemsService notableItemsService;
 
     private DropLogPanel dropLogPanel;
     private LfgPanel lfgPanel;
@@ -144,6 +148,10 @@ public class FinalBossPlugin extends Plugin
         discordService = new DiscordWebhookService(okHttpClient);
         screenshotService = new DropScreenshotService(okHttpClient);
         lfgService = new LfgService(okHttpClient);
+        notableItemsService = new NotableItemsService(okHttpClient);
+        // One fetch per session — the curated list changes rarely. Runs on the
+        // executor so startup never blocks on network.
+        executor.submit(notableItemsService::refresh);
 
         dropLogPanel = new DropLogPanel(dropService, executor);
         lfgPanel = new LfgPanel(lfgService, executor, config);
@@ -474,17 +482,22 @@ public class FinalBossPlugin extends Plugin
         }
 
         long threshold = DropTrackingService.effectiveThreshold(config.dropThresholdGp());
+        Set<String> notableNames = notableItemsService.getNotableNames();
         List<PendingDrop> drops = new ArrayList<>();
         for (ItemStack itemStack : items)
         {
             int itemId = itemStack.getId();
             int quantity = itemStack.getQuantity();
             int gePrice = itemManager.getItemPrice(itemId);
+            // Name is needed up front now: notable matching is by name, and
+            // notable items (GE price 0) would never survive a value-first gate.
+            ItemComposition itemComp = itemManager.getItemComposition(itemId);
+            String itemName = itemComp.getName();
 
-            if (DropTrackingService.isValuableDrop(gePrice, quantity, threshold))
+            if (DropTrackingService.isValuableDrop(gePrice, quantity, threshold)
+                || DropTrackingService.isNotableDrop(itemName, notableNames))
             {
-                ItemComposition itemComp = itemManager.getItemComposition(itemId);
-                drops.add(new PendingDrop(itemComp.getName(), itemId, (long) gePrice * quantity, quantity));
+                drops.add(new PendingDrop(itemName, itemId, (long) gePrice * quantity, quantity));
             }
         }
 
