@@ -140,7 +140,7 @@ public class FinalBossPlugin extends Plugin
         lfgService = new LfgService(okHttpClient);
 
         dropLogPanel = new DropLogPanel(dropService, executor);
-        lfgPanel = new LfgPanel(lfgService, executor);
+        lfgPanel = new LfgPanel(lfgService, executor, config);
 
         lockedPanel = new LockedPanel();
         mainPanel = new FinalBossPanel(dropLogPanel, lfgPanel);

@@ -23,6 +23,7 @@ A RuneLite plugin for the **Final Boss** OSRS clan.
 | Drop Threshold (GP) | Minimum GP value for a drop to be logged/screenshotted | 1,000,000 |
 | Screenshot Drops | Upload a full client screenshot for drops above the threshold | Off |
 | Enable LFG | Enable Looking For Group feature | On |
+| LFG Timeout | Minutes before your LFG status expires and is removed (10–720) | 60 |
 | Discord Webhook URL | Discord webhook for drop notifications | Empty |
 
 ## Data & Security
@@ -39,7 +40,7 @@ This plugin communicates with a Supabase database to store drop logs and LFG ent
 - **Drops are append-only** — no one can modify or delete drop records via the API
 - **Screenshots are immutable** — uploaded once, never modifiable via the anon key; the bucket is public-read so drop log entries can link to their screenshot
 - **LFG entries are fully managed** — players can set, update, and remove their own status; the optional free-text note is capped at 60 characters both client-side and by a database CHECK constraint
-- A scheduled job runs every minute and deletes LFG entries whose `updated_at` is older than 60 minutes. Each entry effectively has a 60-minute TTL that resets whenever the player sets or updates their status.
+- A scheduled job runs every minute and deletes LFG entries whose configured timeout has elapsed since `updated_at`. Each entry's TTL is the lister's "LFG Timeout" setting (10–720 minutes, default 60, bounded by a database CHECK constraint) and resets whenever the player sets their status again.
 
 The optional Discord webhook URL is stored locally in your RuneLite config and never sent to the database.
 

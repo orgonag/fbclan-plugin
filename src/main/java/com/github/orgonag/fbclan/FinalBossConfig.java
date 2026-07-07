@@ -1,10 +1,12 @@
 package com.github.orgonag.fbclan;
 
+import com.github.orgonag.fbclan.lfg.LfgService;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
 import net.runelite.client.config.Range;
+import net.runelite.client.config.Units;
 
 @ConfigGroup("finalboss")
 public interface FinalBossConfig extends Config
@@ -79,6 +81,20 @@ public interface FinalBossConfig extends Config
     default boolean enableLfg()
     {
         return true;
+    }
+
+    @Range(min = LfgService.MIN_TTL_MINUTES, max = LfgService.MAX_TTL_MINUTES)
+    @ConfigItem(
+        keyName = "lfgTimeoutMinutes",
+        name = "LFG Timeout",
+        description = "How long your LFG status stays up before it expires and is removed automatically",
+        section = lfgSection,
+        position = 1
+    )
+    @Units(Units.MINUTES)
+    default int lfgTimeoutMinutes()
+    {
+        return 60;
     }
 
     @ConfigItem(
