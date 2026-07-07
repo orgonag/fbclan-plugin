@@ -22,6 +22,13 @@ public class LfgService
     // public, so the client-side cap alone is not sufficient).
     public static final int MAX_NOTE_LENGTH = 60;
 
+    // Bounds for the user-configurable entry timeout, mirrored by a CHECK
+    // constraint on lfg_entries.ttl_minutes. The server-side cleanup job
+    // deletes rows once updated_at + ttl_minutes is in the past (rows from
+    // older clients have a NULL ttl and fall back to 60 minutes).
+    public static final int MIN_TTL_MINUTES = 10;
+    public static final int MAX_TTL_MINUTES = 720;
+
     private final OkHttpClient httpClient;
 
     public LfgService(OkHttpClient httpClient)
@@ -35,12 +42,14 @@ public class LfgService
     // NULL into the columns rather than empty strings / zero.
     // The note is always written — an empty note writes NULL so a stale note
     // from a previous status doesn't linger on the new one.
-    public boolean setStatus(String rsn, LfgActivity activity, String partyId, Integer partySize, String note)
+    public boolean setStatus(String rsn, LfgActivity activity, String partyId, Integer partySize,
+                             String note, int ttlMinutes)
     {
         JsonObject data = new JsonObject();
         data.addProperty("rsn", rsn);
         data.addProperty("activity", activity.getKey());
         data.addProperty("updated_at", Instant.now().toString());
+        data.addProperty("ttl_minutes", clampTtl(ttlMinutes));
         if (partyId != null)
         {
             data.addProperty("party_id", partyId);
@@ -147,6 +156,13 @@ public class LfgService
             log.warn("Failed to fetch LFG entries", e);
         }
         return entries;
+    }
+
+    // The config UI already bounds the value, but clamp here too so a
+    // bad stored config value never produces a CHECK-constraint 400.
+    static int clampTtl(int minutes)
+    {
+        return Math.max(MIN_TTL_MINUTES, Math.min(MAX_TTL_MINUTES, minutes));
     }
 
     // Trims, collapses control characters, and caps the note. Returns null

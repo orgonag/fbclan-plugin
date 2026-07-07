@@ -1,5 +1,6 @@
 package com.github.orgonag.fbclan.panel;
 
+import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.lfg.LfgActivity;
 import com.github.orgonag.fbclan.lfg.LfgEntry;
 import com.github.orgonag.fbclan.lfg.LfgService;
@@ -44,6 +45,7 @@ public class LfgPanel extends JPanel
 
     private final LfgService lfgService;
     private final ScheduledExecutorService executor;
+    private final FinalBossConfig config;
     private final JPanel listPanel;
     private final JComboBox<LfgActivity> activityDropdown;
     private final JTextField noteField;
@@ -68,10 +70,11 @@ public class LfgPanel extends JPanel
 
     private List<LfgEntry> cachedEntries = new ArrayList<>();
 
-    public LfgPanel(LfgService lfgService, ScheduledExecutorService executor)
+    public LfgPanel(LfgService lfgService, ScheduledExecutorService executor, FinalBossConfig config)
     {
         this.lfgService = lfgService;
         this.executor = executor;
+        this.config = config;
 
         setLayout(new BorderLayout());
         setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -448,7 +451,9 @@ public class LfgPanel extends JPanel
         {
             // Plain-text label with HTML rendering disabled: the note is
             // user-supplied, so it must never be interpreted as markup.
-            JLabel noteLabel = new JLabel("\u201c" + entry.getNote() + "\u201d");
+            // ASCII quotes only \u2014 the RuneScape font has no glyphs for
+            // curly quotes and renders them as boxes.
+            JLabel noteLabel = new JLabel("\"" + entry.getNote() + "\"");
             noteLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
             noteLabel.setFont(FontManager.getRunescapeSmallFont());
             noteLabel.putClientProperty("html.disable", Boolean.TRUE);
@@ -483,9 +488,10 @@ public class LfgPanel extends JPanel
         String partyId = localPartyId;
         Integer partySize = localPartySize;
         String note = noteField.getText();
+        int ttlMinutes = config.lfgTimeoutMinutes();
 
         executor.submit(() -> {
-            boolean ok = lfgService.setStatus(rsn, selected, partyId, partySize, note);
+            boolean ok = lfgService.setStatus(rsn, selected, partyId, partySize, note, ttlMinutes);
             showError(ok ? null : "Couldn't set status — try again.");
             refresh();
         });
