@@ -1,5 +1,8 @@
 package com.github.orgonag.fbclan.drops;
 
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -106,5 +109,40 @@ public class DropTrackingServiceTest
         assertEquals("1,500,000", DropTrackingService.formatGp(1_500_000));
         assertEquals("3,200,000", DropTrackingService.formatGp(3_200_000));
         assertEquals("999,999", DropTrackingService.formatGp(999_999));
+    }
+
+    @Test
+    public void testNormalizeItemName()
+    {
+        assertEquals("araxyte fang", DropTrackingService.normalizeItemName("Araxyte fang"));
+        assertEquals("araxyte fang", DropTrackingService.normalizeItemName("  ARAXYTE FANG  "));
+        assertEquals("", DropTrackingService.normalizeItemName(null));
+        assertEquals("", DropTrackingService.normalizeItemName("   "));
+    }
+
+    @Test
+    public void testNotableDropMatchesListedName()
+    {
+        Set<String> notable = new HashSet<>();
+        notable.add("araxyte fang");
+        assertTrue(DropTrackingService.isNotableDrop("Araxyte fang", notable));
+        assertTrue(DropTrackingService.isNotableDrop("  araxyte FANG ", notable));
+    }
+
+    @Test
+    public void testNotableDropRejectsUnlistedName()
+    {
+        Set<String> notable = new HashSet<>();
+        notable.add("araxyte fang");
+        assertFalse(DropTrackingService.isNotableDrop("Bones", notable));
+        assertFalse(DropTrackingService.isNotableDrop("araxyte", notable));
+    }
+
+    @Test
+    public void testNotableDropHandlesEmptyAndNull()
+    {
+        assertFalse(DropTrackingService.isNotableDrop("Araxyte fang", Collections.emptySet()));
+        assertFalse(DropTrackingService.isNotableDrop("Araxyte fang", null));
+        assertFalse(DropTrackingService.isNotableDrop(null, Collections.singleton("araxyte fang")));
     }
 }
