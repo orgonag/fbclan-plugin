@@ -3,3 +3,7 @@ build/
 .idea/
 *.iml
 out/
+.DS_Store
+
+# Local-only notes and SQL migration history
+docs/

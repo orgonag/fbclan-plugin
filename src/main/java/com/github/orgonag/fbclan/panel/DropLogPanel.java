@@ -1,5 +1,6 @@
 package com.github.orgonag.fbclan.panel;
 
+import com.github.orgonag.fbclan.drops.DropScreenshotService;
 import com.github.orgonag.fbclan.drops.DropTrackingService;
 import com.github.orgonag.fbclan.drops.SupabaseDropService;
 import com.google.gson.JsonArray;
@@ -7,7 +8,10 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -21,6 +25,7 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
+import net.runelite.client.util.LinkBrowser;
 
 public class DropLogPanel extends JPanel
 {
@@ -104,6 +109,32 @@ public class DropLogPanel extends JPanel
 
         row.add(mainLabel, BorderLayout.NORTH);
         row.add(detailLabel, BorderLayout.SOUTH);
+
+        // Drops logged with a screenshot get a [pic] tag and open the image
+        // in the browser on click. The drops table is anon-writable, so the
+        // URL is only honored if it points into the plugin's own public
+        // screenshot bucket — a spoofed row can't send viewers elsewhere.
+        JsonElement screenshotElement = drop.get("screenshot_url");
+        if (screenshotElement != null && !screenshotElement.isJsonNull()
+            && screenshotElement.getAsString().startsWith(DropScreenshotService.publicBucketPrefix()))
+        {
+            final String screenshotUrl = screenshotElement.getAsString();
+            JLabel cameraLabel = new JLabel("[pic]");
+            cameraLabel.setForeground(ColorScheme.BRAND_ORANGE);
+            cameraLabel.setFont(FontManager.getRunescapeSmallFont());
+            cameraLabel.setToolTipText("Click to view screenshot");
+            row.add(cameraLabel, BorderLayout.EAST);
+            row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            row.setToolTipText("Click to view screenshot");
+            row.addMouseListener(new MouseAdapter()
+            {
+                @Override
+                public void mousePressed(MouseEvent e)
+                {
+                    LinkBrowser.browse(screenshotUrl);
+                }
+            });
+        }
 
         return row;
     }

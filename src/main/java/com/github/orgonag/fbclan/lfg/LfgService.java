@@ -17,6 +17,11 @@ import okhttp3.OkHttpClient;
 @Slf4j
 public class LfgService
 {
+    // Hard cap on the free-text note, enforced here, in the panel's input
+    // field, and by a CHECK constraint in the database (the anon key is
+    // public, so the client-side cap alone is not sufficient).
+    static final int MAX_NOTE_LENGTH = 60;
+
     private final OkHttpClient httpClient;
 
     public LfgService(OkHttpClient httpClient)
@@ -26,14 +31,16 @@ public class LfgService
 
     public boolean setStatus(String rsn, LfgActivity activity)
     {
-        return setStatus(rsn, activity, null, null);
+        return setStatus(rsn, activity, null, null, null);
     }
 
     // partyId / partySize are optional. When the caller is in a Party plugin
     // party, attaching them lets viewers cluster LFG rows by party. Both are
     // omitted from the payload when null so solo entries explicitly write
     // NULL into the columns rather than empty strings / zero.
-    public boolean setStatus(String rsn, LfgActivity activity, String partyId, Integer partySize)
+    // The note is always written — an empty note writes NULL so a stale note
+    // from a previous status doesn't linger on the new one.
+    public boolean setStatus(String rsn, LfgActivity activity, String partyId, Integer partySize, String note)
     {
         JsonObject data = new JsonObject();
         data.addProperty("rsn", rsn);
@@ -46,6 +53,15 @@ public class LfgService
         if (partySize != null)
         {
             data.addProperty("party_size", partySize);
+        }
+        String sanitizedNote = sanitizeNote(note);
+        if (sanitizedNote == null)
+        {
+            data.add("note", JsonNull.INSTANCE);
+        }
+        else
+        {
+            data.addProperty("note", sanitizedNote);
         }
 
         try
@@ -117,7 +133,7 @@ public class LfgService
         try
         {
             JsonArray rows = SupabaseClient.get(httpClient, "lfg_entries",
-                "select=rsn,activity,updated_at,party_id,party_size&order=updated_at.desc");
+                "select=rsn,activity,updated_at,party_id,party_size,note&order=updated_at.desc");
 
             for (JsonElement element : rows)
             {
@@ -128,10 +144,33 @@ public class LfgService
                 }
             }
         }
-        catch (IOException e)
+        // RuntimeException too: a malformed response (e.g. an error object
+        // where an array was expected) would otherwise escape into the
+        // executor and silently stop the panel from refreshing.
+        catch (IOException | RuntimeException e)
         {
             log.warn("Failed to fetch LFG entries", e);
         }
         return entries;
+    }
+
+    // Trims, collapses control characters, and caps the note. Returns null
+    // for empty/blank input so callers can distinguish "no note".
+    static String sanitizeNote(String note)
+    {
+        if (note == null)
+        {
+            return null;
+        }
+        String cleaned = note.replaceAll("\\p{Cntrl}", " ").trim();
+        if (cleaned.isEmpty())
+        {
+            return null;
+        }
+        if (cleaned.length() > MAX_NOTE_LENGTH)
+        {
+            cleaned = cleaned.substring(0, MAX_NOTE_LENGTH).trim();
+        }
+        return cleaned;
     }
 }

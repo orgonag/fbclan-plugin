@@ -11,7 +11,7 @@ public class LfgEntryTest
     public void testConstruction()
     {
         Instant now = Instant.now();
-        LfgEntry entry = new LfgEntry("TestPlayer", LfgActivity.COX, now, null, null);
+        LfgEntry entry = new LfgEntry("TestPlayer", LfgActivity.COX, now, null, null, null);
         assertEquals("TestPlayer", entry.getRsn());
         assertEquals(LfgActivity.COX, entry.getActivity());
         assertEquals(now, entry.getUpdatedAt());
@@ -55,19 +55,21 @@ public class LfgEntryTest
         row.addProperty("updated_at", "2026-04-08T12:00:00Z");
         row.addProperty("party_id", "deadbeef");
         row.addProperty("party_size", 4);
+        row.addProperty("note", "HMT NFRZ");
 
         LfgEntry entry = LfgEntry.fromRow(row);
         assertEquals("Alice", entry.getRsn());
         assertEquals(LfgActivity.COX, entry.getActivity());
         assertEquals("deadbeef", entry.getPartyId());
         assertEquals(Integer.valueOf(4), entry.getPartySize());
+        assertEquals("HMT NFRZ", entry.getNote());
     }
 
     @Test
     public void testFromRowTolerantOfMissingPartyColumns()
     {
-        // Older rows written before the party_id/party_size columns existed
-        // must still deserialize cleanly with null party fields.
+        // Older rows written before the party_id/party_size/note columns
+        // existed must still deserialize cleanly with null fields.
         JsonObject row = new JsonObject();
         row.addProperty("rsn", "Alice");
         row.addProperty("activity", "COX");
@@ -77,6 +79,21 @@ public class LfgEntryTest
         assertNotNull(entry);
         assertNull(entry.getPartyId());
         assertNull(entry.getPartySize());
+        assertNull(entry.getNote());
+    }
+
+    @Test
+    public void testFromRowBlankNoteBecomesNull()
+    {
+        JsonObject row = new JsonObject();
+        row.addProperty("rsn", "Alice");
+        row.addProperty("activity", "COX");
+        row.addProperty("updated_at", "2026-04-08T12:00:00Z");
+        row.addProperty("note", "   ");
+
+        LfgEntry entry = LfgEntry.fromRow(row);
+        assertNotNull(entry);
+        assertNull(entry.getNote());
     }
 
     @Test
