@@ -67,6 +67,8 @@ public class DropTrackingService
 
     // Notable drops bypass the GP threshold entirely — they are typically
     // untradeable (GE price 0) and would never qualify by value.
+    // notableNames entries must already be normalized (see normalizeItemName
+    // / NotableItemsService.parseNames).
     public static boolean isNotableDrop(String itemName, Set<String> notableNames)
     {
         return itemName != null && notableNames != null
