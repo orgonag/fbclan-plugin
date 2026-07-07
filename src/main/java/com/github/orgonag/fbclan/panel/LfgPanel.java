@@ -38,9 +38,9 @@ import net.runelite.client.ui.FontManager;
 
 public class LfgPanel extends JPanel
 {
-    // Mirrors LfgService.MAX_NOTE_LENGTH; enforced at input time so the
-    // user sees the cap rather than having their note silently truncated.
-    private static final int MAX_NOTE_LENGTH = 60;
+    // Enforced at input time so the user sees the cap rather than having
+    // their note silently truncated.
+    private static final int MAX_NOTE_LENGTH = LfgService.MAX_NOTE_LENGTH;
 
     private final LfgService lfgService;
     private final ScheduledExecutorService executor;
@@ -216,7 +216,7 @@ public class LfgPanel extends JPanel
 
     private static String normalize(String name)
     {
-        return name == null ? "" : name.replace(' ', ' ').trim().toLowerCase();
+        return name == null ? "" : name.replace('\u00A0', ' ').trim().toLowerCase();
     }
 
     private static String escapeHtml(String text)

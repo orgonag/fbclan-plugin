@@ -23,17 +23,6 @@ public class LfgEntry
     // LfgService.MAX_NOTE_LENGTH before it reaches the database.
     String note;
 
-    public static LfgEntry fromJson(String rsn, String activityKey, String updatedAtStr)
-    {
-        return fromJson(rsn, activityKey, updatedAtStr, null, null, null);
-    }
-
-    public static LfgEntry fromJson(String rsn, String activityKey, String updatedAtStr,
-                                    String partyId, Integer partySize)
-    {
-        return fromJson(rsn, activityKey, updatedAtStr, partyId, partySize, null);
-    }
-
     public static LfgEntry fromJson(String rsn, String activityKey, String updatedAtStr,
                                     String partyId, Integer partySize, String note)
     {
