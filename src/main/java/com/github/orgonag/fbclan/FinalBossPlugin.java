@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -25,11 +26,14 @@ import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.ItemComposition;
+import net.runelite.api.NPC;
 import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.clan.ClanChannelMember;
+import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -44,11 +48,13 @@ import net.runelite.client.party.events.UserJoin;
 import net.runelite.client.party.events.UserPart;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.loottracker.LootReceived;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.DrawManager;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.util.ImageUtil;
+import net.runelite.http.api.loottracker.LootRecordType;
 import com.google.inject.Provides;
 import okhttp3.OkHttpClient;
 
@@ -402,17 +408,74 @@ public class FinalBossPlugin extends Plugin
     @Subscribe
     public void onNpcLootReceived(NpcLootReceived event)
     {
+        handleLoot(event.getNpc().getName(), event.getItems());
+    }
+
+    // Loot with no NPC kill behind it — raid chests (CoX/ToB/ToA), Barrows,
+    // and similar. NPC kills already arrive via onNpcLootReceived, so only
+    // EVENT-type records are handled here to avoid double-logging. These
+    // events are posted by the core Loot Tracker plugin, so raid chest
+    // logging requires it to be enabled (it is by default).
+    @Subscribe
+    public void onLootReceived(LootReceived event)
+    {
+        if (event.getType() != LootRecordType.EVENT)
+        {
+            return;
+        }
+        handleLoot(event.getName(), event.getItems());
+    }
+
+    // Pets never appear in loot events — the game only announces them in
+    // chat. They are untradeable (GE value 0), so they bypass the GP
+    // threshold and are always logged while drop logging is enabled.
+    @Subscribe
+    public void onChatMessage(ChatMessage event)
+    {
+        String rsn = currentRsn;
+        if (event.getType() != ChatMessageType.GAMEMESSAGE || !verified
+            || !config.enableDropLogging() || rsn == null)
+        {
+            return;
+        }
+        String message = event.getMessage();
+        if (!DropTrackingService.isPetMessage(message))
+        {
+            return;
+        }
+
+        // The pet's name is only knowable when it spawned as the player's
+        // follower. A pet that went to the backpack — or a duplicate — can't
+        // be resolved via getFollower(), which may be a previously-owned pet.
+        String itemName = "Pet";
+        if (DropTrackingService.isFollowerPetMessage(message))
+        {
+            NPC follower = client.getFollower();
+            if (follower != null && follower.getName() != null)
+            {
+                itemName = "Pet (" + follower.getName() + ")";
+            }
+        }
+        else if (DropTrackingService.isDuplicatePetMessage(message))
+        {
+            itemName = "Pet (duplicate)";
+        }
+
+        dispatchDrops(rsn, "Pet drop",
+            Collections.singletonList(new PendingDrop(itemName, 0, 0, 1)));
+    }
+
+    private void handleLoot(String sourceName, Collection<ItemStack> items)
+    {
         String rsn = currentRsn;
         if (!verified || !config.enableDropLogging() || rsn == null)
         {
             return;
         }
 
-        String npcName = event.getNpc().getName();
-        long threshold = config.dropThresholdGp();
-
+        long threshold = DropTrackingService.effectiveThreshold(config.dropThresholdGp());
         List<PendingDrop> drops = new ArrayList<>();
-        for (ItemStack itemStack : event.getItems())
+        for (ItemStack itemStack : items)
         {
             int itemId = itemStack.getId();
             int quantity = itemStack.getQuantity();
@@ -425,14 +488,17 @@ public class FinalBossPlugin extends Plugin
             }
         }
 
-        if (drops.isEmpty())
+        if (!drops.isEmpty())
         {
-            return;
+            dispatchDrops(rsn, sourceName, drops);
         }
+    }
 
+    private void dispatchDrops(String rsn, String sourceName, List<PendingDrop> drops)
+    {
         if (config.enableDropScreenshots())
         {
-            // One screenshot covers every qualifying item from this kill.
+            // One screenshot covers every qualifying item from this drop.
             // The frame is grabbed on the next render; annotating, encoding,
             // and uploading happen on the executor.
             final List<String> partyNames = getPartyMemberNames();
@@ -442,12 +508,12 @@ public class FinalBossPlugin extends Plugin
             drawManager.requestNextFrameListener(frame ->
                 executor.submit(() -> {
                     String screenshotUrl = screenshotService.upload(frame, rsn, partyNames, bestItemId);
-                    submitDrops(rsn, npcName, drops, screenshotUrl);
+                    submitDrops(rsn, sourceName, drops, screenshotUrl);
                 }));
         }
         else
         {
-            executor.submit(() -> submitDrops(rsn, npcName, drops, null));
+            executor.submit(() -> submitDrops(rsn, sourceName, drops, null));
         }
     }
 

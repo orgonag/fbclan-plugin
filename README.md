@@ -5,7 +5,7 @@ A RuneLite plugin for the **Final Boss** OSRS clan.
 ## Features
 
 - **Clan Verification** — Verifies membership via the Wise Old Man API (Group 1055)
-- **Drop Logging** — Logs valuable drops (configurable GP threshold, opt-in) to a shared clan database
+- **Drop Logging** — Logs valuable drops (configurable GP threshold, opt-in) to a shared clan database, including raid chest loot (CoX/ToB/ToA — requires the core Loot Tracker plugin, enabled by default) and pet drops (always logged regardless of threshold)
 - **Drop Screenshots** — Optional full-client screenshot per logged drop, annotated with party member names and viewable from the drop log
 - **Discord Notifications** — Optional webhook for drop alerts
 - **Looking For Group** — Find clan members to group up with, including party clustering and an optional note per request (e.g. "HMT NFRZ")
@@ -20,7 +20,7 @@ A RuneLite plugin for the **Final Boss** OSRS clan.
 | Setting | Description | Default |
 |---|---|---|
 | Enable Drop Logging | Log valuable drops to clan database (opt-in) | Off |
-| Drop Threshold (GP) | Minimum GP value for a drop to be logged/screenshotted | 1,000,000 |
+| Drop Threshold (GP) | Minimum GP value for a drop to be logged/screenshotted (1,000,000 minimum) | 1,000,000 |
 | Screenshot Drops | Upload a full client screenshot for drops above the threshold | Off |
 | Enable LFG | Enable Looking For Group feature | On |
 | LFG Timeout | Minutes before your LFG status expires and is removed (10–720) | 60 |
