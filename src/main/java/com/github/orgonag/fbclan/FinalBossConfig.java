@@ -1,5 +1,6 @@
 package com.github.orgonag.fbclan;
 
+import com.github.orgonag.fbclan.drops.DropTrackingService;
 import com.github.orgonag.fbclan.lfg.LfgService;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
@@ -46,11 +47,11 @@ public interface FinalBossConfig extends Config
         return false;
     }
 
-    @Range(min = 0)
+    @Range(min = DropTrackingService.MIN_THRESHOLD_GP)
     @ConfigItem(
         keyName = "dropThresholdGp",
         name = "Drop Threshold (GP)",
-        description = "Minimum GP value for a drop to be logged (and screenshotted, if enabled)",
+        description = "Minimum GP value for a drop to be logged (and screenshotted, if enabled) — 1m minimum",
         section = dropLoggingSection,
         position = 1
     )

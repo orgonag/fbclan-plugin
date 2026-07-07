@@ -38,7 +38,9 @@ public class DiscordWebhookService
 
         JsonObject embed = new JsonObject();
         embed.addProperty("title", rsn + " received a drop!");
-        embed.addProperty("description", itemName + " (" + DropTrackingService.formatGp(geValue) + " GP) from " + npcName);
+        // Untradeables (pets) have no GE value — omit the "(0 GP)".
+        String value = geValue > 0 ? " (" + DropTrackingService.formatGp(geValue) + " GP)" : "";
+        embed.addProperty("description", itemName + value + " from " + npcName);
         embed.addProperty("color", GOLD_COLOR);
 
         JsonArray embeds = new JsonArray();

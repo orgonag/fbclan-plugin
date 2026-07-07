@@ -8,6 +8,50 @@ public class DropTrackingServiceTest
     private static final long THRESHOLD = 1_000_000;
 
     @Test
+    public void testEffectiveThresholdClampsToMinimum()
+    {
+        assertEquals(DropTrackingService.MIN_THRESHOLD_GP, DropTrackingService.effectiveThreshold(0));
+        assertEquals(DropTrackingService.MIN_THRESHOLD_GP, DropTrackingService.effectiveThreshold(-1));
+        assertEquals(DropTrackingService.MIN_THRESHOLD_GP,
+            DropTrackingService.effectiveThreshold(DropTrackingService.MIN_THRESHOLD_GP));
+        assertEquals(5_000_000L, DropTrackingService.effectiveThreshold(5_000_000L));
+    }
+
+    @Test
+    public void testPetMessagesDetected()
+    {
+        assertTrue(DropTrackingService.isPetMessage(
+            "You have a funny feeling like you're being followed."));
+        assertTrue(DropTrackingService.isPetMessage(
+            "You feel something weird sneaking into your backpack."));
+        assertTrue(DropTrackingService.isPetMessage(
+            "You have a funny feeling like you would have been followed..."));
+        assertFalse(DropTrackingService.isPetMessage("You have been followed by a strange dog."));
+        assertFalse(DropTrackingService.isPetMessage(""));
+        assertFalse(DropTrackingService.isPetMessage(null));
+    }
+
+    @Test
+    public void testFollowerPetMessageOnlyMatchesFollowerVariant()
+    {
+        assertTrue(DropTrackingService.isFollowerPetMessage(
+            "You have a funny feeling like you're being followed."));
+        assertFalse(DropTrackingService.isFollowerPetMessage(
+            "You feel something weird sneaking into your backpack."));
+        assertFalse(DropTrackingService.isFollowerPetMessage(
+            "You have a funny feeling like you would have been followed..."));
+    }
+
+    @Test
+    public void testDuplicatePetMessageOnlyMatchesDuplicateVariant()
+    {
+        assertTrue(DropTrackingService.isDuplicatePetMessage(
+            "You have a funny feeling like you would have been followed..."));
+        assertFalse(DropTrackingService.isDuplicatePetMessage(
+            "You have a funny feeling like you're being followed."));
+    }
+
+    @Test
     public void testAboveThreshold()
     {
         assertTrue(DropTrackingService.isValuableDrop(1_500_000, 1, THRESHOLD));

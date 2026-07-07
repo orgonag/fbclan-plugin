@@ -98,7 +98,9 @@ public class DropLogPanel extends JPanel
         String rsn = escapeHtml(drop.get("rsn").getAsString());
         String npcName = escapeHtml(drop.get("npc_name").getAsString());
 
-        JLabel mainLabel = new JLabel("<html><b>" + itemName + "</b> (" + DropTrackingService.formatGp(geValue) + " GP)</html>");
+        // Untradeables (pets) have no GE value — suppress the "(0 GP)".
+        String valueSuffix = geValue > 0 ? " (" + DropTrackingService.formatGp(geValue) + " GP)" : "";
+        JLabel mainLabel = new JLabel("<html><b>" + itemName + "</b>" + valueSuffix + "</html>");
         mainLabel.setForeground(Color.WHITE);
         mainLabel.setFont(FontManager.getRunescapeSmallFont());
 
