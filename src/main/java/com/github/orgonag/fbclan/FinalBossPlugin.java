@@ -1,6 +1,7 @@
 package com.github.orgonag.fbclan;
 
 import com.github.orgonag.fbclan.drops.DiscordWebhookService;
+import com.github.orgonag.fbclan.drops.DropScreenshotService;
 import com.github.orgonag.fbclan.drops.DropTrackingService;
 import com.github.orgonag.fbclan.drops.SupabaseDropService;
 import com.github.orgonag.fbclan.lfg.LfgService;
@@ -13,7 +14,11 @@ import java.awt.image.BufferedImage;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -34,17 +39,36 @@ import net.runelite.client.events.NpcLootReceived;
 import net.runelite.client.events.PartyChanged;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.ItemStack;
+import net.runelite.client.party.PartyMember;
 import net.runelite.client.party.PartyService;
 import net.runelite.client.party.events.UserJoin;
 import net.runelite.client.party.events.UserPart;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
+import net.runelite.client.ui.DrawManager;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.ImageUtil;
 import com.google.inject.Provides;
 import okhttp3.OkHttpClient;
 
+/**
+ * Clan plugin for the Final Boss OSRS clan (wiseoldman.net group 1055).
+ *
+ * External services this plugin communicates with:
+ * <ul>
+ * <li>Wise Old Man API (read-only): checks whether the logged-in player is a
+ *     member of the clan's WOM group. The panel stays locked for non-members.</li>
+ * <li>Supabase (clan-owned database): stores drop log rows, LFG statuses, and
+ *     (opt-in) drop screenshots. Only ever sends the local player's own RSN,
+ *     drop details, LFG activity/note, and screenshots.</li>
+ * <li>Discord webhook (optional, user-supplied URL): drop notifications.</li>
+ * </ul>
+ *
+ * Nothing is sent anywhere unless the player is a verified clan member. Drop
+ * logging and screenshots are additionally gated behind opt-in config toggles
+ * (both default off; see {@link FinalBossConfig}).
+ */
 @Slf4j
 @PluginDescriptor(
     name = "Final Boss",
@@ -82,6 +106,9 @@ public class FinalBossPlugin extends Plugin
     @Inject
     private PartyService partyService;
 
+    @Inject
+    private DrawManager drawManager;
+
     private NavigationButton navButton;
     private LockedPanel lockedPanel;
     private FinalBossPanel mainPanel;
@@ -89,6 +116,7 @@ public class FinalBossPlugin extends Plugin
     private WomVerificationService womService;
     private SupabaseDropService dropService;
     private DiscordWebhookService discordService;
+    private DropScreenshotService screenshotService;
     private LfgService lfgService;
 
     private DropLogPanel dropLogPanel;
@@ -111,6 +139,7 @@ public class FinalBossPlugin extends Plugin
         womService = new WomVerificationService(okHttpClient);
         dropService = new SupabaseDropService(okHttpClient);
         discordService = new DiscordWebhookService(okHttpClient);
+        screenshotService = new DropScreenshotService(okHttpClient);
         lfgService = new LfgService(okHttpClient);
 
         dropLogPanel = new DropLogPanel(dropService, executor);
@@ -418,26 +447,94 @@ public class FinalBossPlugin extends Plugin
         }
 
         String npcName = event.getNpc().getName();
+        long threshold = config.dropThresholdGp();
 
+        List<PendingDrop> drops = new ArrayList<>();
         for (ItemStack itemStack : event.getItems())
         {
             int itemId = itemStack.getId();
             int quantity = itemStack.getQuantity();
             int gePrice = itemManager.getItemPrice(itemId);
 
-            if (DropTrackingService.isValuableDrop(gePrice, quantity))
+            if (DropTrackingService.isValuableDrop(gePrice, quantity, threshold))
             {
                 ItemComposition itemComp = itemManager.getItemComposition(itemId);
-                String itemName = itemComp.getName();
-                long totalValue = (long) gePrice * quantity;
-
-                executor.submit(() -> {
-                    dropService.logDrop(rsn, npcName, itemName, itemId, totalValue, quantity);
-
-                    String webhookUrl = config.discordWebhookUrl();
-                    discordService.sendDropNotification(webhookUrl, rsn, itemName, totalValue, npcName);
-                });
+                drops.add(new PendingDrop(itemComp.getName(), itemId, (long) gePrice * quantity, quantity));
             }
+        }
+
+        if (drops.isEmpty())
+        {
+            return;
+        }
+
+        if (config.enableDropScreenshots())
+        {
+            // One screenshot covers every qualifying item from this kill —
+            // the frame is identical. Party names are captured here on the
+            // client thread; the image is grabbed on the next rendered frame
+            // and everything heavier (annotate, PNG encode, upload) happens
+            // on the executor.
+            final List<String> partyNames = getPartyMemberNames();
+            final int bestItemId = drops.stream()
+                .max(Comparator.comparingLong(d -> d.totalValue))
+                .get().itemId;
+            drawManager.requestNextFrameListener(frame ->
+                executor.submit(() -> {
+                    String screenshotUrl = screenshotService.upload(frame, rsn, partyNames, bestItemId);
+                    submitDrops(rsn, npcName, drops, screenshotUrl);
+                }));
+        }
+        else
+        {
+            executor.submit(() -> submitDrops(rsn, npcName, drops, null));
+        }
+    }
+
+    private void submitDrops(String rsn, String npcName, List<PendingDrop> drops, String screenshotUrl)
+    {
+        String webhookUrl = config.discordWebhookUrl();
+        for (PendingDrop drop : drops)
+        {
+            dropService.logDrop(rsn, npcName, drop.itemName, drop.itemId, drop.totalValue, drop.quantity, screenshotUrl);
+            discordService.sendDropNotification(webhookUrl, rsn, drop.itemName, drop.totalValue, npcName);
+        }
+    }
+
+    // Display names of the local user's Party plugin party, annotated onto
+    // drop screenshots. Names are already visible to everyone in the party;
+    // no party identifiers are included in the image.
+    private List<String> getPartyMemberNames()
+    {
+        if (!partyService.isInParty())
+        {
+            return Collections.emptyList();
+        }
+        List<String> names = new ArrayList<>();
+        for (PartyMember member : partyService.getMembers())
+        {
+            String name = member.getDisplayName();
+            if (name != null && !name.isEmpty())
+            {
+                names.add(name);
+            }
+        }
+        return names;
+    }
+
+    private static class PendingDrop
+    {
+        final String itemName;
+        final int itemId;
+        final long totalValue;
+        final int quantity;
+
+        PendingDrop(String itemName, int itemId, long totalValue, int quantity)
+        {
+            this.itemName = itemName;
+            this.itemId = itemId;
+            this.totalValue = totalValue;
+            this.quantity = quantity;
         }
     }
 }

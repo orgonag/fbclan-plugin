@@ -5,11 +5,11 @@ import java.util.Locale;
 
 public class DropTrackingService
 {
-    static final int DROP_THRESHOLD_GP = 1_000_000;
-
-    public static boolean isValuableDrop(int gePrice, int quantity)
+    // The threshold comes from user config (dropThresholdGp) rather than a
+    // hardcoded constant, so clan members can tune what counts as "valuable".
+    public static boolean isValuableDrop(int gePrice, int quantity, long thresholdGp)
     {
-        return (long) gePrice * quantity >= DROP_THRESHOLD_GP;
+        return (long) gePrice * quantity >= thresholdGp;
     }
 
     public static String formatGp(long value)

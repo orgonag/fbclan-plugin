@@ -18,6 +18,8 @@ public class SupabaseClient
     // on the database restrict what operations are allowed. The anon key only permits:
     // - drops table: INSERT and SELECT (no UPDATE, no DELETE)
     // - lfg_entries table: INSERT, SELECT, UPDATE, DELETE (needed for LFG lifecycle)
+    // - drop-screenshots storage bucket: INSERT only (screenshots are immutable
+    //   once uploaded; the bucket is public-read so the panel can link to them)
     private static final String PROJECT_URL = "https://rzhtoqadvbxylwjndnlo.supabase.co";
     private static final String ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6aHRvcWFkdmJ4eWx3am5kbmxvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTU5MDMsImV4cCI6MjA5MTI3MTkwM30.WzWJXS2cpvwnRVBQEroLTsu_iU0j_kkI1wSQhM8eJY0";
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
@@ -40,6 +42,16 @@ public class SupabaseClient
     public static String buildUrl(String table, String query)
     {
         return PROJECT_URL + "/rest/v1/" + table + "?" + query;
+    }
+
+    public static String buildStorageUrl(String bucket, String path)
+    {
+        return PROJECT_URL + "/storage/v1/object/" + bucket + "/" + path;
+    }
+
+    public static String publicStorageUrl(String bucket, String path)
+    {
+        return PROJECT_URL + "/storage/v1/object/public/" + bucket + "/" + path;
     }
 
     public static Request.Builder baseRequest(String url)
@@ -104,6 +116,25 @@ public class SupabaseClient
             if (!response.isSuccessful())
             {
                 log.warn("Supabase UPSERT failed: {} {}", response.code(), response.message());
+                return false;
+            }
+            return true;
+        }
+    }
+
+    public static boolean uploadFile(OkHttpClient httpClient, String bucket, String path, byte[] bytes, String contentType) throws IOException
+    {
+        String url = buildStorageUrl(bucket, path);
+        RequestBody body = RequestBody.create(MediaType.parse(contentType), bytes);
+        Request request = baseRequest(url)
+            .post(body)
+            .build();
+
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (!response.isSuccessful())
+            {
+                log.warn("Supabase storage upload failed: {} {}", response.code(), response.message());
                 return false;
             }
             return true;

@@ -26,20 +26,31 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.text.AbstractDocument;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DocumentFilter;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 
 public class LfgPanel extends JPanel
 {
+    // Mirrors LfgService.MAX_NOTE_LENGTH; enforced at input time so the
+    // user sees the cap rather than having their note silently truncated.
+    private static final int MAX_NOTE_LENGTH = 60;
+
     private final LfgService lfgService;
     private final ScheduledExecutorService executor;
     private final JPanel listPanel;
     private final JComboBox<LfgActivity> activityDropdown;
+    private final JTextField noteField;
     private final JButton setStatusButton;
     private final JButton removeStatusButton;
     private final JButton toggleViewButton;
+    private final JLabel errorLabel;
     private boolean groupedView = false;
     private volatile String currentRsn;
     private volatile Set<String> onlineNames = Collections.emptySet();
@@ -77,6 +88,38 @@ public class LfgPanel extends JPanel
         controlsPanel.add(activityDropdown);
         controlsPanel.add(Box.createRigidArea(new Dimension(0, 5)));
 
+        // Optional note - full width, capped at MAX_NOTE_LENGTH as you type
+        noteField = new JTextField();
+        noteField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 25));
+        noteField.setAlignmentX(LEFT_ALIGNMENT);
+        noteField.setToolTipText("Optional note shown with your status, e.g. \"HMT NFRZ\" (max "
+            + MAX_NOTE_LENGTH + " chars)");
+        ((AbstractDocument) noteField.getDocument()).setDocumentFilter(new DocumentFilter()
+        {
+            @Override
+            public void insertString(FilterBypass fb, int offset, String string, AttributeSet attr)
+                throws BadLocationException
+            {
+                if (string != null && fb.getDocument().getLength() + string.length() <= MAX_NOTE_LENGTH)
+                {
+                    super.insertString(fb, offset, string, attr);
+                }
+            }
+
+            @Override
+            public void replace(FilterBypass fb, int offset, int length, String text, AttributeSet attrs)
+                throws BadLocationException
+            {
+                int newLength = fb.getDocument().getLength() - length + (text == null ? 0 : text.length());
+                if (newLength <= MAX_NOTE_LENGTH)
+                {
+                    super.replace(fb, offset, length, text, attrs);
+                }
+            }
+        });
+        controlsPanel.add(noteField);
+        controlsPanel.add(Box.createRigidArea(new Dimension(0, 5)));
+
         // Buttons row
         JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
         buttonRow.setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -108,6 +151,16 @@ public class LfgPanel extends JPanel
         toggleRow.add(toggleViewButton);
 
         controlsPanel.add(toggleRow);
+
+        // Surfaced when a Supabase write fails so the user isn't left
+        // thinking their status went through (visible only on error).
+        errorLabel = new JLabel();
+        errorLabel.setForeground(ColorScheme.PROGRESS_ERROR_COLOR);
+        errorLabel.setFont(FontManager.getRunescapeSmallFont());
+        errorLabel.setAlignmentX(LEFT_ALIGNMENT);
+        errorLabel.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
+        errorLabel.setVisible(false);
+        controlsPanel.add(errorLabel);
 
         listPanel = new JPanel();
         listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
@@ -380,8 +433,6 @@ public class LfgPanel extends JPanel
             BorderFactory.createMatteBorder(0, 0, 1, 0, ColorScheme.DARK_GRAY_COLOR),
             BorderFactory.createEmptyBorder(4, 8, 4, 8)
         ));
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
-
         String timeAgo = formatTimeAgo(entry.getUpdatedAt());
         boolean online = onlineNames.contains(normalize(entry.getRsn()));
         String nameColor = online ? "#3FBF3F" : "#BF3F3F";
@@ -392,6 +443,23 @@ public class LfgPanel extends JPanel
         label.setFont(FontManager.getRunescapeSmallFont());
 
         row.add(label, BorderLayout.CENTER);
+
+        if (entry.getNote() != null)
+        {
+            // Plain-text label with HTML rendering disabled: the note is
+            // user-supplied, so it must never be interpreted as markup.
+            JLabel noteLabel = new JLabel("\u201c" + entry.getNote() + "\u201d");
+            noteLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+            noteLabel.setFont(FontManager.getRunescapeSmallFont());
+            noteLabel.putClientProperty("html.disable", Boolean.TRUE);
+            row.add(noteLabel, BorderLayout.SOUTH);
+            row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 45));
+        }
+        else
+        {
+            row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+        }
+
         return row;
     }
 
@@ -414,9 +482,11 @@ public class LfgPanel extends JPanel
         String rsn = currentRsn;
         String partyId = localPartyId;
         Integer partySize = localPartySize;
+        String note = noteField.getText();
 
         executor.submit(() -> {
-            lfgService.setStatus(rsn, selected, partyId, partySize);
+            boolean ok = lfgService.setStatus(rsn, selected, partyId, partySize, note);
+            showError(ok ? null : "Couldn't set status — try again.");
             refresh();
         });
     }
@@ -430,8 +500,17 @@ public class LfgPanel extends JPanel
         activeLfgActivity = null;
         String rsn = currentRsn;
         executor.submit(() -> {
-            lfgService.removeStatus(rsn);
+            boolean ok = lfgService.removeStatus(rsn);
+            showError(ok ? null : "Couldn't remove status — try again.");
             refresh();
+        });
+    }
+
+    private void showError(String message)
+    {
+        SwingUtilities.invokeLater(() -> {
+            errorLabel.setText(message == null ? "" : message);
+            errorLabel.setVisible(message != null);
         });
     }
 

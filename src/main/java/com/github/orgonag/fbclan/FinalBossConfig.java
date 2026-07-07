@@ -4,6 +4,7 @@ import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
+import net.runelite.client.config.Range;
 
 @ConfigGroup("finalboss")
 public interface FinalBossConfig extends Config
@@ -29,16 +30,43 @@ public interface FinalBossConfig extends Config
     )
     String discordSection = "discord";
 
+    // Off by default: no drop data leaves the client unless the user
+    // explicitly opts in.
     @ConfigItem(
         keyName = "enableDropLogging",
         name = "Enable Drop Logging",
-        description = "Log valuable drops to the clan database",
+        description = "Log valuable drops to the clan database (opt-in)",
         section = dropLoggingSection,
         position = 0
     )
     default boolean enableDropLogging()
     {
-        return true;
+        return false;
+    }
+
+    @Range(min = 0)
+    @ConfigItem(
+        keyName = "dropThresholdGp",
+        name = "Drop Threshold (GP)",
+        description = "Minimum GP value for a drop to be logged (and screenshotted, if enabled)",
+        section = dropLoggingSection,
+        position = 1
+    )
+    default int dropThresholdGp()
+    {
+        return 1_000_000;
+    }
+
+    @ConfigItem(
+        keyName = "enableDropScreenshots",
+        name = "Screenshot Drops",
+        description = "Capture a full client screenshot for drops above the threshold and store it in the clan database",
+        section = dropLoggingSection,
+        position = 2
+    )
+    default boolean enableDropScreenshots()
+    {
+        return false;
     }
 
     @ConfigItem(

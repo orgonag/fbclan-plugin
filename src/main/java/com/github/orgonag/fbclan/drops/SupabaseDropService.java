@@ -17,7 +17,10 @@ public class SupabaseDropService
         this.httpClient = httpClient;
     }
 
-    public boolean logDrop(String rsn, String npcName, String itemName, int itemId, long geValue, int quantity)
+    // screenshotUrl is null unless the user opted into drop screenshots and
+    // the upload succeeded; omitted from the payload when null so the column
+    // stays NULL for screenshot-less drops.
+    public boolean logDrop(String rsn, String npcName, String itemName, int itemId, long geValue, int quantity, String screenshotUrl)
     {
         JsonObject data = new JsonObject();
         data.addProperty("rsn", rsn);
@@ -26,6 +29,10 @@ public class SupabaseDropService
         data.addProperty("item_id", itemId);
         data.addProperty("ge_value", geValue);
         data.addProperty("quantity", quantity);
+        if (screenshotUrl != null)
+        {
+            data.addProperty("screenshot_url", screenshotUrl);
+        }
 
         try
         {
@@ -42,7 +49,7 @@ public class SupabaseDropService
     // drops table (e.g. a future moderation flag) doesn't silently start
     // shipping it to every viewer's client.
     private static final String DROPS_COLUMNS =
-        "rsn,npc_name,item_name,item_id,ge_value,quantity,created_at";
+        "rsn,npc_name,item_name,item_id,ge_value,quantity,created_at,screenshot_url";
 
     public JsonArray getRecentDrops(int limit)
     {

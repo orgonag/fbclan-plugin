@@ -18,13 +18,24 @@ public class LfgEntry
     String partyId;
     Integer partySize;
 
+    // Optional free-text note the lister attached to their status, e.g.
+    // "HMT NFRZ". Null when absent; always trimmed and capped at
+    // LfgService.MAX_NOTE_LENGTH before it reaches the database.
+    String note;
+
     public static LfgEntry fromJson(String rsn, String activityKey, String updatedAtStr)
     {
-        return fromJson(rsn, activityKey, updatedAtStr, null, null);
+        return fromJson(rsn, activityKey, updatedAtStr, null, null, null);
     }
 
     public static LfgEntry fromJson(String rsn, String activityKey, String updatedAtStr,
                                     String partyId, Integer partySize)
+    {
+        return fromJson(rsn, activityKey, updatedAtStr, partyId, partySize, null);
+    }
+
+    public static LfgEntry fromJson(String rsn, String activityKey, String updatedAtStr,
+                                    String partyId, Integer partySize, String note)
     {
         LfgActivity activity = LfgActivity.fromKey(activityKey);
         if (activity == null)
@@ -40,12 +51,20 @@ public class LfgEntry
         {
             return null;
         }
-        return new LfgEntry(rsn, activity, updatedAt, partyId, partySize);
+        if (note != null)
+        {
+            note = note.trim();
+            if (note.isEmpty())
+            {
+                note = null;
+            }
+        }
+        return new LfgEntry(rsn, activity, updatedAt, partyId, partySize, note);
     }
 
     // Convenience parser for a Supabase row. Tolerates missing party_id /
-    // party_size columns so older rows (or rows from clients that did not
-    // attach party info) still deserialize cleanly.
+    // party_size / note columns so older rows (or rows from clients that did
+    // not attach them) still deserialize cleanly.
     public static LfgEntry fromRow(JsonObject row)
     {
         if (!row.has("rsn") || !row.has("activity") || !row.has("updated_at"))
@@ -56,12 +75,15 @@ public class LfgEntry
             ? row.get("party_id").getAsString() : null;
         Integer partySize = (row.has("party_size") && !row.get("party_size").isJsonNull())
             ? row.get("party_size").getAsInt() : null;
+        String note = (row.has("note") && !row.get("note").isJsonNull())
+            ? row.get("note").getAsString() : null;
         return fromJson(
             row.get("rsn").getAsString(),
             row.get("activity").getAsString(),
             row.get("updated_at").getAsString(),
             partyId,
-            partySize
+            partySize,
+            note
         );
     }
 }
