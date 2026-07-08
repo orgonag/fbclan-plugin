@@ -70,8 +70,8 @@ import okhttp3.OkHttpClient;
  * <li>Supabase (clan-owned database): stores drop log rows, LFG statuses, and
  *     (opt-in) drop screenshots. Only ever sends the local player's own RSN,
  *     drop details, LFG activity/note, and screenshots. Also reads the
- *     clan-curated notable-items list at startup (read-only, no player data
- *     sent).</li>
+ *     clan-curated notable-items list and welcome message at startup
+ *     (read-only, no player data sent).</li>
  * <li>Discord webhook (optional, user-supplied URL): drop notifications.</li>
  * </ul>
  *
@@ -303,17 +303,24 @@ public class FinalBossPlugin extends Plugin
         welcomeShown = true;
         clientThread.invokeLater(() ->
         {
-            if (client.getGameState() != GameState.LOGGED_IN)
+            GameState gs = client.getGameState();
+            if (gs == GameState.LOADING || gs == GameState.HOPPING || gs == GameState.CONNECTION_LOST)
             {
-                // Logged out between verification and the print landing on the
-                // client thread — un-latch so the next verification re-attempts.
+                // Transient state — try again next client tick.
+                return false;
+            }
+            if (!verified || gs != GameState.LOGGED_IN)
+            {
+                // True logout (or plugin shut down mid-flight) — un-latch so the
+                // next verification success re-attempts.
                 welcomeShown = false;
-                return;
+                return true;
             }
             // postEvent=false keeps our own printed text out of the chat-event
             // pipeline (onChatMessage's pet matching would otherwise see it).
             client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
                 "[Final Boss] " + message, null, false);
+            return true;
         });
     }
 
