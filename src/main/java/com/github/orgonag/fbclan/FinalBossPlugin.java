@@ -131,6 +131,9 @@ public class FinalBossPlugin extends Plugin
     private DropLogPanel dropLogPanel;
     private LfgPanel lfgPanel;
 
+    // Hex colour for the welcome message chat line (RuneLite <col=> tag).
+    private static final String WELCOME_COLOR = "a020f0";
+
     // Once-per-session latch for the welcome message. RuneLite REUSES the
     // plugin instance across toggle off/on, so this is reset in startUp
     // rather than relying on field initialization.
@@ -318,8 +321,10 @@ public class FinalBossPlugin extends Plugin
             }
             // postEvent=false keeps our own printed text out of the chat-event
             // pipeline (onChatMessage's pet matching would otherwise see it).
+            // The col tag wraps the already-sanitized message (all angle
+            // brackets stripped upstream), so the sheet text cannot alter it.
             client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
-                "[Final Boss] " + message, null, false);
+                "<col=" + WELCOME_COLOR + ">[Final Boss] " + message + "</col>", null, false);
             return true;
         });
     }
