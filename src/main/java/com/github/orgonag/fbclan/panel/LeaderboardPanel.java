@@ -343,8 +343,10 @@ public class LeaderboardPanel extends JPanel
                 }
                 else
                 {
+                    // Top 5 (user decision): WOM ignores small limit params
+                    // and returns a full page, so truncate here too.
                     int rank = 1;
-                    for (WomEntry e : rows)
+                    for (WomEntry e : rows.subList(0, Math.min(5, rows.size())))
                     {
                         content.add(statRow(rank++, e.getRsn(), null,
                             String.format("%,d", (long) e.getValue())));

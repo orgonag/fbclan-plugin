@@ -10,10 +10,13 @@ public class StatFormatTest
     {
         assertEquals("0", StatFormat.shortNumber(0));
         assertEquals("945", StatFormat.shortNumber(945));
-        assertEquals("14.2K", StatFormat.shortNumber(14_200));
-        assertEquals("14.2M", StatFormat.shortNumber(14_200_000));
+        assertEquals("14K", StatFormat.shortNumber(14_200));
+        assertEquals("9.8M", StatFormat.shortNumber(9_800_000));
+        assertEquals("14M", StatFormat.shortNumber(14_200_000));
         assertEquals("1.2B", StatFormat.shortNumber(1_230_000_000L));
         assertEquals("312M", StatFormat.shortNumber(312_000_000L));
+        // Floor above ten units: no "1000K" rounding edge.
+        assertEquals("999K", StatFormat.shortNumber(999_999));
     }
 
     @Test

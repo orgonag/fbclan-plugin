@@ -109,10 +109,13 @@ public class WomStatsClient
         return fetch(url, true);
     }
 
-    // Top-3 KC for one boss (Kill Counts section, lazy per expand).
+    // Top-5 KC for one boss (Kill Counts section, lazy per expand).
+    // WOM ignores small limit values on this endpoint and returns a full
+    // page (observed live: limit=3 came back with 20 rows), so the panel
+    // truncates to 5 as well — the param is kept for when WOM honors it.
     public List<WomEntry> fetchBossHiscores(String bossSlug)
     {
-        String url = BASE + "/hiscores?metric=" + bossSlug + "&limit=3";
+        String url = BASE + "/hiscores?metric=" + bossSlug + "&limit=5";
         return fetch(url, false);
     }
 

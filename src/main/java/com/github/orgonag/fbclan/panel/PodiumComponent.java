@@ -54,7 +54,9 @@ class PodiumComponent extends JComponent
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         int w = getWidth();
-        int slotW = (w - 16) / 3;
+        // Tight margins (2px sides, 3px gaps): every pixel matters for
+        // RSNs at 225px panel width.
+        int slotW = (w - 10) / 3;
         Font nameFont = FontManager.getRunescapeSmallFont();
         Font valueFont = nameFont.deriveFont(Font.BOLD);
 
@@ -66,7 +68,7 @@ class PodiumComponent extends JComponent
                 continue;
             }
             int barH = BAR_HEIGHTS[rank];
-            int x = 4 + slot * (slotW + 4);
+            int x = 2 + slot * (slotW + 3);
             int barY = HEIGHT - barH;
 
             g2.setPaint(new GradientPaint(x, barY, BAR_COLORS[rank][0], x, HEIGHT, BAR_COLORS[rank][1]));
@@ -76,7 +78,9 @@ class PodiumComponent extends JComponent
             g2.setFont(nameFont);
             FontMetrics fm = g2.getFontMetrics();
             g2.setColor(ColorScheme.LIGHT_GRAY_COLOR);
-            String name = clip(names[rank], fm, slotW);
+            // Names may spill a couple px into the gaps (bars are staggered
+            // heights, so neighboring names rarely collide visually).
+            String name = clip(names[rank], fm, slotW + 6);
             g2.drawString(name, x + (slotW - fm.stringWidth(name)) / 2, barY - 3);
 
             g2.setFont(valueFont);
