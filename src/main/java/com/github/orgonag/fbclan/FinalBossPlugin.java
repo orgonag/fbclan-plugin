@@ -10,8 +10,14 @@ import com.github.orgonag.fbclan.lfg.LfgService;
 import com.github.orgonag.fbclan.panel.AnnouncementsPanel;
 import com.github.orgonag.fbclan.panel.DropLogPanel;
 import com.github.orgonag.fbclan.panel.FinalBossPanel;
+import com.github.orgonag.fbclan.panel.LeaderboardPanel;
 import com.github.orgonag.fbclan.panel.LfgPanel;
 import com.github.orgonag.fbclan.panel.LockedPanel;
+import com.github.orgonag.fbclan.pb.LeaderboardService;
+import com.github.orgonag.fbclan.pb.PbSeedService;
+import com.github.orgonag.fbclan.pb.PbSubmission;
+import com.github.orgonag.fbclan.pb.PbSubmitService;
+import com.github.orgonag.fbclan.pb.PbTrackingService;
 import com.github.orgonag.fbclan.util.WelcomeMessageService;
 import com.github.orgonag.fbclan.wom.WomVerificationService;
 import java.nio.charset.StandardCharsets;
@@ -39,6 +45,7 @@ import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.clan.ClanChannelMember;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -118,6 +125,9 @@ public class FinalBossPlugin extends Plugin
     @Inject
     private DrawManager drawManager;
 
+    @Inject
+    private ConfigManager configManager;
+
     private NavigationButton navButton;
     private LockedPanel lockedPanel;
     private FinalBossPanel mainPanel;
@@ -130,10 +140,15 @@ public class FinalBossPlugin extends Plugin
     private NotableItemsService notableItemsService;
     private WelcomeMessageService welcomeMessageService;
     private AnnouncementsService announcementsService;
+    private PbTrackingService pbTrackingService;
+    private PbSubmitService pbSubmitService;
+    private PbSeedService pbSeedService;
+    private LeaderboardService leaderboardService;
 
     private DropLogPanel dropLogPanel;
     private LfgPanel lfgPanel;
     private AnnouncementsPanel announcementsPanel;
+    private LeaderboardPanel leaderboardPanel;
 
     // Hex colour for the welcome message chat line (RuneLite <col=> tag).
     private static final String WELCOME_COLOR = "a020f0";
@@ -142,6 +157,10 @@ public class FinalBossPlugin extends Plugin
     // plugin instance across toggle off/on, so this is reset in startUp
     // rather than relying on field initialization.
     private volatile boolean welcomeShown = false;
+
+    // Once-per-session latch for the PB seed upload (same reuse caveat
+    // as welcomeShown: reset in startUp, not field init).
+    private volatile boolean pbSeeded = false;
 
     private volatile boolean verified = false;
     private volatile String currentRsn = null;
@@ -168,6 +187,7 @@ public class FinalBossPlugin extends Plugin
         executor.submit(notableItemsService::refresh);
 
         welcomeShown = false;
+        pbSeeded = false;
         welcomeMessageService = new WelcomeMessageService(okHttpClient);
         // Fetch once per session, then attempt display — covers the case where
         // verification already finished before the fetch (maybeShowWelcome is
@@ -178,6 +198,10 @@ public class FinalBossPlugin extends Plugin
         });
 
         announcementsService = new AnnouncementsService(okHttpClient);
+        pbTrackingService = new PbTrackingService(this::tobTeamSize, this::toaTeamSize);
+        pbSubmitService = new PbSubmitService(okHttpClient);
+        pbSeedService = new PbSeedService(configManager);
+        leaderboardService = new LeaderboardService(okHttpClient);
 
         dropLogPanel = new DropLogPanel(dropService, executor);
         lfgPanel = new LfgPanel(lfgService, executor, config);
@@ -185,9 +209,10 @@ public class FinalBossPlugin extends Plugin
         // Warm the announcements cache and populate the tab; refresh() runs
         // the fetch on the executor, so startup never blocks on network.
         announcementsPanel.refresh();
+        leaderboardPanel = new LeaderboardPanel(leaderboardService, executor);
 
         lockedPanel = new LockedPanel();
-        mainPanel = new FinalBossPanel(announcementsPanel, dropLogPanel, lfgPanel);
+        mainPanel = new FinalBossPanel(announcementsPanel, dropLogPanel, lfgPanel, leaderboardPanel);
 
         lockedPanel.setRetryAction(e -> verifyMembership());
 
@@ -289,6 +314,7 @@ public class FinalBossPlugin extends Plugin
                     SwingUtilities.invokeLater(this::showMainPanel);
                     startPolling();
                     maybeShowWelcome();
+                    maybeSeedPbs();
                 }
                 else
                 {
@@ -336,6 +362,24 @@ public class FinalBossPlugin extends Plugin
             client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
                 "<col=" + WELCOME_COLOR + ">[Final Boss] " + message + "</col>", null, false);
             return true;
+        });
+    }
+
+    private void maybeSeedPbs()
+    {
+        if (!verified || pbSeeded || !config.enablePbUpload())
+        {
+            return;
+        }
+        String rsn = currentRsn;
+        if (rsn == null || !PbTrackingService.isStandardWorld(client.getWorldType()))
+        {
+            return;
+        }
+        pbSeeded = true;
+        executor.submit(() -> {
+            List<PbSubmission> seeds = pbSeedService.collectLocalPbs();
+            pbSubmitService.submit(rsn, seeds);
         });
     }
 
@@ -507,6 +551,35 @@ public class FinalBossPlugin extends Plugin
     @Subscribe
     public void onChatMessage(ChatMessage event)
     {
+        handlePbChatMessage(event);
+        handlePetChatMessage(event);
+    }
+
+    private void handlePbChatMessage(ChatMessage event)
+    {
+        ChatMessageType type = event.getType();
+        // Core ChatCommands accepts these three for PB lines; TRADE is
+        // irrelevant here.
+        if (type != ChatMessageType.GAMEMESSAGE && type != ChatMessageType.SPAM
+            && type != ChatMessageType.FRIENDSCHATNOTIFICATION)
+        {
+            return;
+        }
+        String rsn = currentRsn;
+        if (!verified || !config.enablePbUpload() || rsn == null
+            || !PbTrackingService.isStandardWorld(client.getWorldType()))
+        {
+            return;
+        }
+        List<PbSubmission> subs = pbTrackingService.onGameMessage(event.getMessage(), client.getTickCount());
+        if (!subs.isEmpty())
+        {
+            executor.submit(() -> pbSubmitService.submit(rsn, subs));
+        }
+    }
+
+    private void handlePetChatMessage(ChatMessage event)
+    {
         String rsn = currentRsn;
         if (event.getType() != ChatMessageType.GAMEMESSAGE || !verified
             || !config.enableDropLogging() || rsn == null)
@@ -626,6 +699,27 @@ public class FinalBossPlugin extends Plugin
             }
         }
         return names;
+    }
+
+    private int tobTeamSize()
+    {
+        return Math.min(client.getVarbitValue(VarbitID.TOB_CLIENT_P0), 1) +
+            Math.min(client.getVarbitValue(VarbitID.TOB_CLIENT_P1), 1) +
+            Math.min(client.getVarbitValue(VarbitID.TOB_CLIENT_P2), 1) +
+            Math.min(client.getVarbitValue(VarbitID.TOB_CLIENT_P3), 1) +
+            Math.min(client.getVarbitValue(VarbitID.TOB_CLIENT_P4), 1);
+    }
+
+    private int toaTeamSize()
+    {
+        return Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P0), 1) +
+            Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P1), 1) +
+            Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P2), 1) +
+            Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P3), 1) +
+            Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P4), 1) +
+            Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P5), 1) +
+            Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P6), 1) +
+            Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P7), 1);
     }
 
     private static class PendingDrop

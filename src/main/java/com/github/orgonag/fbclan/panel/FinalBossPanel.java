@@ -15,31 +15,35 @@ public class FinalBossPanel extends PluginPanel
     private static final String ANNOUNCEMENTS_TAB = "ANNOUNCEMENTS";
     private static final String DROP_LOG_TAB = "DROP_LOG";
     private static final String LFG_TAB = "LFG";
+    private static final String LEADERBOARDS_TAB = "LEADERBOARDS";
 
     private final CardLayout cardLayout;
     private final JPanel contentPanel;
     private final JButton announcementsButton;
     private final JButton dropLogButton;
     private final JButton lfgButton;
+    private final JButton leaderboardsButton;
     private final AnnouncementsPanel announcementsPanel;
     private final DropLogPanel dropLogPanel;
     private final LfgPanel lfgPanel;
+    private final LeaderboardPanel leaderboardPanel;
 
     private String activeTab = DROP_LOG_TAB;
 
-    public FinalBossPanel(AnnouncementsPanel announcementsPanel, DropLogPanel dropLogPanel, LfgPanel lfgPanel)
+    public FinalBossPanel(AnnouncementsPanel announcementsPanel, DropLogPanel dropLogPanel, LfgPanel lfgPanel, LeaderboardPanel leaderboardPanel)
     {
         super(false);
 
         this.announcementsPanel = announcementsPanel;
         this.dropLogPanel = dropLogPanel;
         this.lfgPanel = lfgPanel;
+        this.leaderboardPanel = leaderboardPanel;
 
         setLayout(new BorderLayout());
         setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-        // Two-row tab bar: Announcements full-width on top; Drop Log + LFG
-        // below (a future Leaderboards button joins the bottom row).
+        // Two-row tab bar: Announcements full-width on top; Drop Log, LFG,
+        // and Leaderboards below.
         JPanel tabBar = new JPanel();
         tabBar.setLayout(new BoxLayout(tabBar, BoxLayout.Y_AXIS));
         tabBar.setBackground(ColorScheme.DARKER_GRAY_COLOR);
@@ -47,10 +51,12 @@ public class FinalBossPanel extends PluginPanel
         announcementsButton = new JButton("Announcements");
         dropLogButton = new JButton("Drop Log");
         lfgButton = new JButton("LFG");
+        leaderboardsButton = new JButton("Leaderboards");
 
         announcementsButton.addActionListener(e -> switchTab(ANNOUNCEMENTS_TAB));
         dropLogButton.addActionListener(e -> switchTab(DROP_LOG_TAB));
         lfgButton.addActionListener(e -> switchTab(LFG_TAB));
+        leaderboardsButton.addActionListener(e -> switchTab(LEADERBOARDS_TAB));
 
         JPanel topRow = new JPanel(new BorderLayout());
         topRow.setBackground(ColorScheme.DARKER_GRAY_COLOR);
@@ -61,6 +67,7 @@ public class FinalBossPanel extends PluginPanel
         bottomRow.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         bottomRow.add(dropLogButton);
         bottomRow.add(lfgButton);
+        bottomRow.add(leaderboardsButton);
 
         tabBar.add(topRow);
         tabBar.add(bottomRow);
@@ -72,6 +79,7 @@ public class FinalBossPanel extends PluginPanel
         contentPanel.add(announcementsPanel, ANNOUNCEMENTS_TAB);
         contentPanel.add(dropLogPanel, DROP_LOG_TAB);
         contentPanel.add(lfgPanel, LFG_TAB);
+        contentPanel.add(leaderboardPanel, LEADERBOARDS_TAB);
 
         add(tabBar, BorderLayout.NORTH);
         add(contentPanel, BorderLayout.CENTER);
@@ -96,6 +104,8 @@ public class FinalBossPanel extends PluginPanel
             ? ColorScheme.BRAND_ORANGE : ColorScheme.DARK_GRAY_COLOR);
         lfgButton.setBackground(LFG_TAB.equals(activeTab)
             ? ColorScheme.BRAND_ORANGE : ColorScheme.DARK_GRAY_COLOR);
+        leaderboardsButton.setBackground(LEADERBOARDS_TAB.equals(activeTab)
+            ? ColorScheme.BRAND_ORANGE : ColorScheme.DARK_GRAY_COLOR);
     }
 
     public void refreshActiveTab()
@@ -107,6 +117,10 @@ public class FinalBossPanel extends PluginPanel
         else if (DROP_LOG_TAB.equals(activeTab))
         {
             dropLogPanel.refresh();
+        }
+        else if (LEADERBOARDS_TAB.equals(activeTab))
+        {
+            leaderboardPanel.refresh();
         }
         else
         {
