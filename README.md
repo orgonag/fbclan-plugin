@@ -80,6 +80,8 @@ for personal bests, a server-side function:
 | `announcements` | Denied | Allowed | Denied | Denied |
 | `personal_bests` | Denied* | Denied* | Denied | Denied |
 | `member_stats` | Denied* | Denied* | Denied | Denied |
+| `wom_cache` | Denied | Allowed | Denied | Denied |
+| `gp_week_total` / `gp_week_top` (views) | n/a | Allowed | n/a | n/a |
 
 \* Personal bests have **no direct table access at all**. Writes go
 through a `submit_pbs()` database function that only ever *improves* a
@@ -116,6 +118,9 @@ read-only views (`cl_leaderboard`, `ca_leaderboard`, top 20 each).
   the lister's "LFG Timeout" setting (10–720 minutes, default 60, bounded
   by a database CHECK constraint) and resets whenever the player sets
   their status again.
+- `wom_cache` is a read-only hourly Wise Old Man snapshot written solely
+  by the wom-cache-sync Apps Script; `gp_week_total`/`gp_week_top` are
+  read-only views aggregating the last 7 days of logged `drops`
 
 The optional Discord webhook URL is stored locally in your RuneLite
 config and never sent to the database.
