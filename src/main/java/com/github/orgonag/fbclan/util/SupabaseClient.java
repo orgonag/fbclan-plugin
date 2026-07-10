@@ -27,6 +27,9 @@ public class SupabaseClient
     // - personal_bests table: NO direct anon access at all. Writes go through
     //   the submit_pbs() function (improve-only); reads through the
     //   pb_leaderboard / recent_clan_bests views (SELECT granted on views only)
+    // - member_stats table: NO direct anon access. Writes via submit_stats()
+    //   (improve-only per column); reads via cl_leaderboard/ca_leaderboard.
+    // - gp_week_total / gp_week_top views: SELECT only (aggregates of drops)
     // - drop-screenshots storage bucket: INSERT only (screenshots are immutable
     //   once uploaded; the bucket is public-read so the panel can link to them)
     private static final String PROJECT_URL = "https://rzhtoqadvbxylwjndnlo.supabase.co";

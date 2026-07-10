@@ -335,7 +335,7 @@ public class LeaderboardPanel extends JPanel
                 if (rows == null)
                 {
                     content.add(noteLabel(kcCache.containsKey(slug)
-                        ? "loading…" : "unavailable"));
+                        ? "loading.." : "unavailable"));
                 }
                 else if (rows.isEmpty())
                 {
@@ -355,7 +355,7 @@ public class LeaderboardPanel extends JPanel
     }
 
     // Lazy per-boss WOM fetch; kcCache key present with null value while
-    // in flight ("loading…"), replaced on the EDT when done. A failed
+    // in flight ("loading.."), replaced on the EDT when done. A failed
     // fetch stores an empty marker removal so the next expand retries.
     private void maybeFetchKc(String slug)
     {

@@ -95,10 +95,10 @@ class PodiumComponent extends JComponent
             return s;
         }
         String out = s;
-        while (out.length() > 1 && fm.stringWidth(out + "…") > maxW - 4)
+        while (out.length() > 1 && fm.stringWidth(out + "..") > maxW - 4)
         {
             out = out.substring(0, out.length() - 1);
         }
-        return out + "…";
+        return out + "..";
     }
 }
