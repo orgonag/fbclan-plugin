@@ -146,8 +146,8 @@ public class AnnouncementsPanel extends JPanel
         area.setFont(FontManager.getRunescapeFont());
         area.setBorder(null);
         area.setAlignmentX(LEFT_ALIGNMENT);
-        // BoxLayout would otherwise stretch/center on the text area's
-        // preferred width; cap width so wrapping tracks the panel.
+        // Lift BoxLayout's default max (= preferred size) so the area gets
+        // the full panel width and wrapping tracks it.
         area.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
         return area;
     }
