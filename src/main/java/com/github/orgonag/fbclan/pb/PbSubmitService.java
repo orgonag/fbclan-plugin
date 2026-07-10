@@ -4,6 +4,7 @@ import com.github.orgonag.fbclan.util.SupabaseClient;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
@@ -17,6 +18,10 @@ import okhttp3.OkHttpClient;
 @Slf4j
 public class PbSubmitService
 {
+    // submit_pbs rejects arrays over 300 entries; chunk well below that so
+    // one oversized seed can't fail wholesale.
+    static final int MAX_BATCH = 250;
+
     private final OkHttpClient httpClient;
 
     public PbSubmitService(OkHttpClient httpClient)
@@ -31,18 +36,31 @@ public class PbSubmitService
         {
             return;
         }
-        try
+        for (List<PbSubmission> chunk : partition(submissions))
         {
-            boolean ok = SupabaseClient.rpc(httpClient, "submit_pbs", buildPayload(rsn, submissions));
-            if (ok)
+            try
             {
-                log.debug("Submitted {} PB(s) for {}", submissions.size(), rsn);
+                boolean ok = SupabaseClient.rpc(httpClient, "submit_pbs", buildPayload(rsn, chunk));
+                if (ok)
+                {
+                    log.debug("Submitted {} PB(s) for {}", chunk.size(), rsn);
+                }
+            }
+            catch (IOException | RuntimeException e)
+            {
+                log.warn("Failed to submit PB batch", e);
             }
         }
-        catch (IOException | RuntimeException e)
+    }
+
+    static List<List<PbSubmission>> partition(List<PbSubmission> submissions)
+    {
+        List<List<PbSubmission>> chunks = new ArrayList<>();
+        for (int start = 0; start < submissions.size(); start += MAX_BATCH)
         {
-            log.warn("Failed to submit PBs", e);
+            chunks.add(submissions.subList(start, Math.min(start + MAX_BATCH, submissions.size())));
         }
+        return chunks;
     }
 
     static JsonObject buildPayload(String rsn, List<PbSubmission> submissions)

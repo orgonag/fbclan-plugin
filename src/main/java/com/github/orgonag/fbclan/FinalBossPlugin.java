@@ -76,17 +76,20 @@ import okhttp3.OkHttpClient;
  * <ul>
  * <li>Wise Old Man API (read-only): checks whether the logged-in player is a
  *     member of the clan's WOM group. The panel stays locked for non-members.</li>
- * <li>Supabase (clan-owned database): stores drop log rows, LFG statuses, and
- *     (opt-in) drop screenshots. Only ever sends the local player's own RSN,
- *     drop details, LFG activity/note, and screenshots. Also reads the
- *     clan-curated notable-items list and welcome message at startup
- *     (read-only, no player data sent).</li>
+ * <li>Supabase (clan-owned database): stores drop log rows, LFG statuses,
+ *     (opt-in) drop screenshots, and (opt-in) boss personal-best times. Only
+ *     ever sends the local player's own RSN, drop details, LFG activity/note,
+ *     screenshots, and PB times. PB submissions go through the submit_pbs
+ *     function, which only ever improves a member's stored time; leaderboard
+ *     reads come from read-only views. Also reads the clan-curated
+ *     notable-items list and welcome message at startup (read-only, no
+ *     player data sent).</li>
  * <li>Discord webhook (optional, user-supplied URL): drop notifications.</li>
  * </ul>
  *
  * No player data is sent anywhere unless the player is a verified clan
- * member. Drop logging and screenshots are additionally gated behind opt-in
- * config toggles (both default off; see {@link FinalBossConfig}).
+ * member. Drop logging, screenshots, and PB tracking are additionally gated
+ * behind opt-in config toggles (all default off; see {@link FinalBossConfig}).
  */
 @Slf4j
 @PluginDescriptor(
