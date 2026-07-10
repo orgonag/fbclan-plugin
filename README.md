@@ -34,10 +34,11 @@ side panel. The panel unlocks after clan membership is verified.
   worlds are never uploaded. Viewing the leaderboard requires no opt-in.
 - **Welcome Message** — A clan-curated one-liner shown once per session
   in verified members' chatboxes.
-- **Clan Dashboard** — Weekly XP gained and EHB podiums sourced live from
-  the clan's Wise Old Man group, a collection-log top 20 and a combat
+- **Clan Dashboard** — Weekly XP gained and EHB podiums plus per-boss
+  kill counts from the clan's Wise Old Man group (served from an
+  hourly-refreshed cache in the clan database — the plugin never calls
+  Wise Old Man directly), a collection-log top 20 and a combat
   achievements top 20 (with tier badges) built from member uploads,
-  per-boss kill counts fetched lazily from Wise Old Man group hiscores,
   and a "GP This Week" board summarizing the last 7 days of logged drops
   — all as collapsible sections alongside the PB leaderboards.
 

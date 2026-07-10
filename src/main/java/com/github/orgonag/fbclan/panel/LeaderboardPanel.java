@@ -177,7 +177,9 @@ public class LeaderboardPanel extends JPanel
     {
         if (entries == null)
         {
-            content.add(noteLabel("Couldn't reach Wise Old Man."));
+            // Null = the wom_cache row hasn't been read yet (sync not run,
+            // or Supabase unreachable) — same wording as the KC section.
+            content.add(noteLabel("waiting for WOM sync"));
             return;
         }
         if (entries.isEmpty())
