@@ -24,6 +24,9 @@ public class SupabaseClient
     //   by the sheet-sync Apps Script's service-role key)
     // - announcements table: SELECT only (clan-curated posts, written solely
     //   by the sheet-sync Apps Script's service-role key)
+    // - personal_bests table: NO direct anon access at all. Writes go through
+    //   the submit_pbs() function (improve-only); reads through the
+    //   pb_leaderboard / recent_clan_bests views (SELECT granted on views only)
     // - drop-screenshots storage bucket: INSERT only (screenshots are immutable
     //   once uploaded; the bucket is public-read so the panel can link to them)
     private static final String PROJECT_URL = "https://rzhtoqadvbxylwjndnlo.supabase.co";
