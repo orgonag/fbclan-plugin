@@ -4,7 +4,6 @@ import com.github.orgonag.fbclan.util.SupabaseClient;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
@@ -37,27 +36,17 @@ public class NotableItemsService
     }
 
     // Fetched once at plugin startup: the list changes rarely (curated by
-    // hand, synced daily), so a session-long cache is enough. Two failure
-    // paths: a network-level IOException keeps the previous set, while an
-    // HTTP error surfaces from SupabaseClient.get as an empty array and
-    // resets the cache to empty. With a single startup fetch both amount to
-    // the same thing — threshold-only behavior, identical to before this
-    // feature existed.
+    // hand, synced daily), so a session-long cache is enough.
     public void refresh()
     {
-        try
+        JsonArray rows = SupabaseClient.tryGet(httpClient, "notable_items",
+            "select=name", "notable items");
+        if (rows == null)
         {
-            JsonArray rows = SupabaseClient.get(httpClient, "notable_items", "select=name");
-            notableNames = parseNames(rows);
-            log.info("Loaded {} notable item names", notableNames.size());
+            return;
         }
-        // RuntimeException too: a malformed 2xx body (JsonSyntaxException,
-        // IllegalStateException from getAsJsonObject) would otherwise escape
-        // into the executor's Future and fail with zero log output.
-        catch (IOException | RuntimeException e)
-        {
-            log.warn("Failed to fetch notable items; keeping previous list", e);
-        }
+        notableNames = parseNames(rows);
+        log.info("Loaded {} notable item names", notableNames.size());
     }
 
     static Set<String> parseNames(JsonArray rows)

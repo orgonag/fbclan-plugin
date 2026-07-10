@@ -5,7 +5,6 @@ import com.github.orgonag.fbclan.wom.WomEntry;
 import com.github.orgonag.fbclan.wom.WomStatsClient;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -73,33 +72,34 @@ public class DashboardService
         return womSyncedAt;
     }
 
-    // Runs on the executor.
+    // Runs on the executor. Each source fails soft and independently.
     public void refresh()
     {
-        try
+        JsonArray cl = SupabaseClient.tryGet(httpClient, "cl_leaderboard",
+            "select=rsn,cl_obtained,cl_total", "collection log board");
+        if (cl != null)
         {
-            clBoard = parseCl(SupabaseClient.get(httpClient, "cl_leaderboard",
-                "select=rsn,cl_obtained,cl_total"));
-            caBoard = parseCa(SupabaseClient.get(httpClient, "ca_leaderboard",
-                "select=rsn,ca_points,tier"));
-            gpWeek = parseGpWeek(
-                SupabaseClient.get(httpClient, "gp_week_total", "select=total_gp,drop_count"),
-                SupabaseClient.get(httpClient, "gp_week_top", "select=rsn,gp"));
+            clBoard = parseCl(cl);
         }
-        catch (IOException | RuntimeException e)
+        JsonArray ca = SupabaseClient.tryGet(httpClient, "ca_leaderboard",
+            "select=rsn,ca_points,tier", "combat achievements board");
+        if (ca != null)
         {
-            log.warn("Failed to fetch dashboard boards", e);
+            caBoard = parseCa(ca);
         }
-
-        try
+        JsonArray gpTotal = SupabaseClient.tryGet(httpClient, "gp_week_total",
+            "select=total_gp,drop_count", "GP week total");
+        JsonArray gpTop = SupabaseClient.tryGet(httpClient, "gp_week_top",
+            "select=rsn,gp", "GP week top");
+        if (gpTotal != null && gpTop != null)
         {
-            JsonArray rows = SupabaseClient.get(httpClient, "wom_cache",
-                "select=metric,payload,updated_at");
-            applyWomCache(rows);
+            gpWeek = parseGpWeek(gpTotal, gpTop);
         }
-        catch (IOException | RuntimeException e)
+        JsonArray wom = SupabaseClient.tryGet(httpClient, "wom_cache",
+            "select=metric,payload,updated_at", "WOM cache");
+        if (wom != null)
         {
-            log.warn("Failed to fetch WOM cache", e);
+            applyWomCache(wom);
         }
     }
 

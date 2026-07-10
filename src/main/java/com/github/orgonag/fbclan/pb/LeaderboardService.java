@@ -3,7 +3,6 @@ package com.github.orgonag.fbclan.pb;
 import com.github.orgonag.fbclan.util.SupabaseClient;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -13,7 +12,8 @@ import okhttp3.OkHttpClient;
 /**
  * Read side of the PB leaderboard: fetches the pb_leaderboard (top 3 per
  * boss, server-ranked) and recent_clan_bests (live-sourced current #1s,
- * newest first) views. Same fail-soft caching as the other services.
+ * newest first) views. Same fail-soft caching as the other services;
+ * the two fetches fail soft independently.
  */
 @Slf4j
 public class LeaderboardService
@@ -40,20 +40,17 @@ public class LeaderboardService
 
     public void refresh()
     {
-        try
+        JsonArray board = SupabaseClient.tryGet(httpClient, "pb_leaderboard",
+            "select=rsn,boss_key,seconds,achieved_at,rank&order=boss_key.asc,rank.asc", "PB leaderboard");
+        if (board != null)
         {
-            JsonArray board = SupabaseClient.get(httpClient, "pb_leaderboard",
-                "select=rsn,boss_key,seconds,achieved_at,rank&order=boss_key.asc,rank.asc");
             leaderboard = parseEntries(board);
-            JsonArray recent = SupabaseClient.get(httpClient, "recent_clan_bests",
-                "select=rsn,boss_key,seconds,achieved_at&order=achieved_at.desc");
-            recentBests = parseEntries(recent);
-            log.debug("Loaded {} leaderboard row(s), {} recent best(s)",
-                leaderboard.size(), recentBests.size());
         }
-        catch (IOException | RuntimeException e)
+        JsonArray recent = SupabaseClient.tryGet(httpClient, "recent_clan_bests",
+            "select=rsn,boss_key,seconds,achieved_at&order=achieved_at.desc", "recent clan bests");
+        if (recent != null)
         {
-            log.warn("Failed to fetch PB leaderboard", e);
+            recentBests = parseEntries(recent);
         }
     }
 
