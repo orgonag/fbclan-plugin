@@ -464,8 +464,10 @@ public class LeaderboardPanel extends JPanel
         row.setAlignmentX(LEFT_ALIGNMENT);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
 
+        // Plain hyphen: em dash is outside Latin-1 and may box in the
+        // RuneScape font (same family of glyph failures as the old arrows).
         JLabel top = new JLabel(PbFormat.displayName(entry.getBossKey())
-            + " — " + PbFormat.formatSeconds(entry.getSeconds()));
+            + " - " + PbFormat.formatSeconds(entry.getSeconds()));
         top.setFont(FontManager.getRunescapeSmallFont());
         top.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 
