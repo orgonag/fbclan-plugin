@@ -1,11 +1,13 @@
 package com.github.orgonag.fbclan;
 
+import com.github.orgonag.fbclan.announcements.AnnouncementsService;
 import com.github.orgonag.fbclan.drops.DiscordWebhookService;
 import com.github.orgonag.fbclan.drops.DropScreenshotService;
 import com.github.orgonag.fbclan.drops.DropTrackingService;
 import com.github.orgonag.fbclan.drops.NotableItemsService;
 import com.github.orgonag.fbclan.drops.SupabaseDropService;
 import com.github.orgonag.fbclan.lfg.LfgService;
+import com.github.orgonag.fbclan.panel.AnnouncementsPanel;
 import com.github.orgonag.fbclan.panel.DropLogPanel;
 import com.github.orgonag.fbclan.panel.FinalBossPanel;
 import com.github.orgonag.fbclan.panel.LfgPanel;
@@ -127,9 +129,11 @@ public class FinalBossPlugin extends Plugin
     private LfgService lfgService;
     private NotableItemsService notableItemsService;
     private WelcomeMessageService welcomeMessageService;
+    private AnnouncementsService announcementsService;
 
     private DropLogPanel dropLogPanel;
     private LfgPanel lfgPanel;
+    private AnnouncementsPanel announcementsPanel;
 
     // Hex colour for the welcome message chat line (RuneLite <col=> tag).
     private static final String WELCOME_COLOR = "a020f0";
@@ -173,11 +177,17 @@ public class FinalBossPlugin extends Plugin
             maybeShowWelcome();
         });
 
+        announcementsService = new AnnouncementsService(okHttpClient);
+
         dropLogPanel = new DropLogPanel(dropService, executor);
         lfgPanel = new LfgPanel(lfgService, executor, config);
+        announcementsPanel = new AnnouncementsPanel(announcementsService, executor);
+        // Warm the announcements cache and populate the tab; refresh() runs
+        // the fetch on the executor, so startup never blocks on network.
+        announcementsPanel.refresh();
 
         lockedPanel = new LockedPanel();
-        mainPanel = new FinalBossPanel(dropLogPanel, lfgPanel);
+        mainPanel = new FinalBossPanel(announcementsPanel, dropLogPanel, lfgPanel);
 
         lockedPanel.setRetryAction(e -> verifyMembership());
 
