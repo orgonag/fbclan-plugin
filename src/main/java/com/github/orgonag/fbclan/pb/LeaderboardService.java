@@ -46,7 +46,7 @@ public class LeaderboardService
                 "select=rsn,boss_key,seconds,achieved_at,rank&order=boss_key.asc,rank.asc");
             leaderboard = parseEntries(board);
             JsonArray recent = SupabaseClient.get(httpClient, "recent_clan_bests",
-                "select=rsn,boss_key,seconds,achieved_at");
+                "select=rsn,boss_key,seconds,achieved_at&order=achieved_at.desc");
             recentBests = parseEntries(recent);
             log.debug("Loaded {} leaderboard row(s), {} recent best(s)",
                 leaderboard.size(), recentBests.size());
