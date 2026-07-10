@@ -36,6 +36,15 @@ public class PbMessageParserTest
     }
 
     @Test
+    public void testParseKillCountIgnoresPersonalCountRows()
+    {
+        // pre and post both empty (e.g. Colosseum Glory): core ignores
+        // these for PBs; a buffered PB must not pair with them.
+        assertFalse(PbMessageParser.parseKillCount(
+            "Your Glory is: <col=ff0000>25,000</col>.").isPresent());
+    }
+
+    @Test
     public void testParseDurationNewPb()
     {
         PbMessageParser.Duration d = PbMessageParser.parseDuration(

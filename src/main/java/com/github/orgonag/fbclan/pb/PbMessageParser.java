@@ -76,6 +76,13 @@ public final class PbMessageParser
         {
             return Optional.empty();
         }
+        String pre = m.group("pre");
+        String post = m.group("post");
+        if ((pre == null || pre.isEmpty()) && (post == null || post.isEmpty()))
+        {
+            // Personal-count rows ("Your Glory is: ..."): not boss KCs.
+            return Optional.empty();
+        }
         String boss = m.group("boss");
         return Optional.of(canonicalBossKey(boss));
     }
