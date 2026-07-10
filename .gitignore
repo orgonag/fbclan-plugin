@@ -7,3 +7,4 @@ out/
 
 # Local-only notes and SQL migration history
 docs/
+.superpowers/
