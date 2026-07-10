@@ -12,7 +12,8 @@ side panel. The panel unlocks after clan membership is verified.
 - **Announcements** — Clan-curated long-form announcements written by the
   clan staff (via a Google Sheet synced to the clan database), shown
   newest-first in their own tab.
-- **Drop Log** — Logs valuable drops (configurable GP threshold, opt-in)
+- **Drop Log** — Logs valuable drops (configurable GP threshold, on by
+  default for verified members — disable to opt out)
   to a shared clan database, including raid chest loot (CoX/ToB/ToA —
   requires the core Loot Tracker plugin, enabled by default), pet drops
   (always logged regardless of threshold), and a clan-curated "notable
@@ -25,8 +26,8 @@ side panel. The panel unlocks after clan membership is verified.
 - **PB Leaderboards** — Clan-wide top-3 personal best times for every
   boss, raid (per team size), Gauntlet/Colosseum/Inferno, Wintertodt/
   Tempoross, Hallowed Sepulchre, and agility courses RuneLite tracks,
-  plus a "New clan bests" feed of recently broken records. Uploading your
-  times is opt-in: new PBs are captured live from chat (mirroring the
+  plus a "New clan bests" feed of recently broken records. Uploading is
+  on by default (disable to opt out): new PBs are captured live from chat (mirroring the
   core Chat Commands plugin's detection), and your existing PBs stored by
   RuneLite are seeded once per session so the board is complete from day
   one. Times from Leagues, Deadman, speedrun, and other non-standard

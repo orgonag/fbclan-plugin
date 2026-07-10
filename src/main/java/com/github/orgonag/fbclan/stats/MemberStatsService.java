@@ -55,7 +55,13 @@ public class MemberStatsService
         {
             if (SupabaseClient.rpc(httpClient, "submit_stats", payload))
             {
-                recordSubmitted(clObtained, caPoints);
+                // Record only what the payload actually carried: if the CL
+                // pair was omitted (total not loaded yet), marking it
+                // submitted would suppress the retry when it becomes
+                // readable. recordSubmitted ignores -1 via Math.max.
+                recordSubmitted(
+                    payload.has("p_cl_obtained") ? clObtained : -1,
+                    payload.has("p_ca_points") ? caPoints : -1);
                 log.debug("Submitted member stats for {}", rsn);
             }
         }
