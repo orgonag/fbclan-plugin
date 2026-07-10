@@ -51,7 +51,9 @@ public class FinalBossPanel extends PluginPanel
         announcementsButton = new JButton("Announcements");
         dropLogButton = new JButton("Drop Log");
         lfgButton = new JButton("LFG");
-        leaderboardsButton = new JButton("Leaderboards");
+        // "PBs", not "Leaderboards": the bottom FlowLayout row is ~225px wide,
+        // and a third wide button wraps onto a clipped (invisible) second line.
+        leaderboardsButton = new JButton("PBs");
 
         announcementsButton.addActionListener(e -> switchTab(ANNOUNCEMENTS_TAB));
         dropLogButton.addActionListener(e -> switchTab(DROP_LOG_TAB));

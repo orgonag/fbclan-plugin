@@ -13,6 +13,7 @@ import com.github.orgonag.fbclan.panel.FinalBossPanel;
 import com.github.orgonag.fbclan.panel.LeaderboardPanel;
 import com.github.orgonag.fbclan.panel.LfgPanel;
 import com.github.orgonag.fbclan.panel.LockedPanel;
+import com.github.orgonag.fbclan.panel.RootPanel;
 import com.github.orgonag.fbclan.pb.LeaderboardService;
 import com.github.orgonag.fbclan.pb.PbSeedService;
 import com.github.orgonag.fbclan.pb.PbSubmission;
@@ -63,7 +64,6 @@ import net.runelite.client.plugins.loottracker.LootReceived;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.DrawManager;
 import net.runelite.client.ui.NavigationButton;
-import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.http.api.loottracker.LootRecordType;
 import com.google.inject.Provides;
@@ -134,6 +134,7 @@ public class FinalBossPlugin extends Plugin
     private NavigationButton navButton;
     private LockedPanel lockedPanel;
     private FinalBossPanel mainPanel;
+    private RootPanel rootPanel;
 
     private WomVerificationService womService;
     private SupabaseDropService dropService;
@@ -216,10 +217,19 @@ public class FinalBossPlugin extends Plugin
 
         lockedPanel = new LockedPanel();
         mainPanel = new FinalBossPanel(announcementsPanel, dropLogPanel, lfgPanel, leaderboardPanel);
+        rootPanel = new RootPanel(lockedPanel, mainPanel);
 
         lockedPanel.setRetryAction(e -> verifyMembership());
 
-        showNavPanel(lockedPanel);
+        // One button for the plugin's lifetime; verification flips the
+        // RootPanel card, so an open sidebar stays open.
+        navButton = NavigationButton.builder()
+            .tooltip("Final Boss")
+            .icon(ImageUtil.loadImageResource(getClass(), "icon.png"))
+            .priority(10)
+            .panel(rootPanel)
+            .build();
+        clientToolbar.addNavigation(navButton);
 
         // When the plugin is enabled mid-session, no LOGGED_IN event will
         // fire, so kick off verification directly.
@@ -281,7 +291,7 @@ public class FinalBossPlugin extends Plugin
             womService.clearCache();
             stopPolling();
             SwingUtilities.invokeLater(() -> {
-                showNavPanel(lockedPanel);
+                rootPanel.showLocked();
                 lockedPanel.showVerifying();
             });
         }
@@ -388,25 +398,8 @@ public class FinalBossPlugin extends Plugin
 
     private void showMainPanel()
     {
-        showNavPanel(mainPanel);
+        rootPanel.showMain();
         mainPanel.refreshActiveTab();
-    }
-
-    // NavigationButton's panel is fixed at build time, so swapping between
-    // the locked and main panel means replacing the whole button.
-    private void showNavPanel(PluginPanel panel)
-    {
-        if (navButton != null)
-        {
-            clientToolbar.removeNavigation(navButton);
-        }
-        navButton = NavigationButton.builder()
-            .tooltip("Final Boss")
-            .icon(ImageUtil.loadImageResource(getClass(), "icon.png"))
-            .priority(10)
-            .panel(panel)
-            .build();
-        clientToolbar.addNavigation(navButton);
     }
 
     private void startPolling()
