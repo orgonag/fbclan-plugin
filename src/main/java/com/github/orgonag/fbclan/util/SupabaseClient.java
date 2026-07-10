@@ -89,6 +89,25 @@ public class SupabaseClient
         }
     }
 
+    // Shared fail-soft wrapper for the read-side services: returns the
+    // parsed rows (empty array on HTTP error, mirroring get()), or null
+    // when the request or parse blew up — callers keep their previous
+    // cache on null. `what` names the payload in the warn log.
+    // RuntimeException is caught so a malformed 2xx body can't vanish
+    // into the executor's uninspected Future.
+    public static JsonArray tryGet(OkHttpClient httpClient, String table, String query, String what)
+    {
+        try
+        {
+            return get(httpClient, table, query);
+        }
+        catch (IOException | RuntimeException e)
+        {
+            log.warn("Failed to fetch {}", what, e);
+            return null;
+        }
+    }
+
     public static boolean insert(OkHttpClient httpClient, String table, JsonObject data) throws IOException
     {
         String url = buildUrl(table);
