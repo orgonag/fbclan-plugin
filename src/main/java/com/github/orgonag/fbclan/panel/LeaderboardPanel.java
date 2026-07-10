@@ -21,7 +21,6 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,9 +41,10 @@ import net.runelite.client.ui.FontManager;
 /**
  * The clan dashboard: eight collapsible sections (weekly WOM podiums,
  * collection log and combat achievement top-20s, the phase-1 clan-bests
- * feed and A-Z PB list, lazy WOM kill counts, GP-this-week). All shiny
- * elements are painted components — no font glyphs. Expansion state is
- * per-session. All remote strings render as plain JLabel text.
+ * feed and A-Z PB list, WOM kill counts served from the wom_cache table,
+ * GP-this-week). All shiny elements are painted components — no font
+ * glyphs. Expansion state is per-session. All remote strings render as
+ * plain JLabel text.
  */
 public class LeaderboardPanel extends JPanel
 {
@@ -59,26 +59,21 @@ public class LeaderboardPanel extends JPanel
 
     private final LeaderboardService leaderboardService;
     private final DashboardService dashboardService;
-    private final WomStatsClient womStatsClient;
     private final ScheduledExecutorService executor;
     private final JPanel listPanel;
 
     private final boolean[] expanded = DEFAULT_EXPANDED.clone();
     private final Set<String> expandedPbBosses = new HashSet<>();
     private final Set<String> expandedKcBosses = new HashSet<>();
-    // Session cache: KC rows per boss slug; null value = fetch in flight.
-    private final Map<String, List<WomEntry>> kcCache = new HashMap<>();
 
     private List<PbEntry> cachedBoard = Collections.emptyList();
     private List<PbEntry> cachedRecent = Collections.emptyList();
 
     public LeaderboardPanel(LeaderboardService leaderboardService,
-        DashboardService dashboardService, WomStatsClient womStatsClient,
-        ScheduledExecutorService executor)
+        DashboardService dashboardService, ScheduledExecutorService executor)
     {
         this.leaderboardService = leaderboardService;
         this.dashboardService = dashboardService;
-        this.womStatsClient = womStatsClient;
         this.executor = executor;
 
         setLayout(new BorderLayout());
@@ -145,11 +140,11 @@ public class LeaderboardPanel extends JPanel
         {
             case 0:
                 buildPodiumSection(content, dashboardService.getXpWeek(),
-                    v -> StatFormat.shortNumber((long) v), "via Wise Old Man · last 7 days");
+                    v -> StatFormat.shortNumber((long) v), "via Wise Old Man" + syncedSuffix());
                 break;
             case 1:
                 buildPodiumSection(content, dashboardService.getEhbWeek(),
-                    StatFormat::oneDecimal, "efficient hours bossed · via Wise Old Man");
+                    StatFormat::oneDecimal, "efficient hours bossed" + syncedSuffix());
                 break;
             case 2:
                 buildClSection(content);
@@ -317,7 +312,13 @@ public class LeaderboardPanel extends JPanel
 
     private void buildKcSection(JPanel content)
     {
-        content.add(captionLabel("top 3 per boss · via Wise Old Man group hiscores"));
+        Map<String, List<WomEntry>> boards = dashboardService.getKcBoards();
+        content.add(captionLabel("top 5 per boss · via Wise Old Man" + syncedSuffix()));
+        if (boards.isEmpty())
+        {
+            content.add(noteLabel("waiting for WOM sync"));
+            return;
+        }
         for (String slug : WomStatsClient.BOSS_SLUGS)
         {
             boolean open = expandedKcBosses.contains(slug);
@@ -325,17 +326,15 @@ public class LeaderboardPanel extends JPanel
                 if (!expandedKcBosses.remove(slug))
                 {
                     expandedKcBosses.add(slug);
-                    maybeFetchKc(slug);
                 }
                 rebuild();
             }));
             if (open)
             {
-                List<WomEntry> rows = kcCache.get(slug);
+                List<WomEntry> rows = boards.get(slug);
                 if (rows == null)
                 {
-                    content.add(noteLabel(kcCache.containsKey(slug)
-                        ? "loading.." : "unavailable"));
+                    content.add(noteLabel("not synced yet"));
                 }
                 else if (rows.isEmpty())
                 {
@@ -343,8 +342,6 @@ public class LeaderboardPanel extends JPanel
                 }
                 else
                 {
-                    // Top 5 (user decision): WOM ignores small limit params
-                    // and returns a full page, so truncate here too.
                     int rank = 1;
                     for (WomEntry e : rows.subList(0, Math.min(5, rows.size())))
                     {
@@ -356,30 +353,16 @@ public class LeaderboardPanel extends JPanel
         }
     }
 
-    // Lazy per-boss WOM fetch; kcCache key present with null value while
-    // in flight ("loading.."), replaced on the EDT when done. A failed
-    // fetch stores an empty marker removal so the next expand retries.
-    private void maybeFetchKc(String slug)
+    // "· synced 2h ago" appended to WOM captions; empty until first sync.
+    private String syncedSuffix()
     {
-        if (kcCache.containsKey(slug))
+        String at = dashboardService.getWomSyncedAt();
+        if (at.isEmpty())
         {
-            return;
+            return "";
         }
-        kcCache.put(slug, null);
-        executor.submit(() -> {
-            List<WomEntry> rows = womStatsClient.fetchBossHiscores(slug);
-            SwingUtilities.invokeLater(() -> {
-                if (rows == null)
-                {
-                    kcCache.remove(slug); // retry on next expand
-                }
-                else
-                {
-                    kcCache.put(slug, rows);
-                }
-                rebuild();
-            });
-        });
+        String ago = formatTimeAgo(at);
+        return ago.isEmpty() ? "" : " · synced " + ago;
     }
 
     // ---- shared row builders ----

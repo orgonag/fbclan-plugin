@@ -69,4 +69,33 @@ public class DashboardServiceTest
         assertTrue(DashboardService.parseCl(rows("[{\"rsn\":null,\"cl_obtained\":5,\"cl_total\":10}]")).isEmpty());
         assertTrue(DashboardService.parseCa(rows("[{\"rsn\":\"X\",\"ca_points\":null}]")).isEmpty());
     }
+
+    @Test
+    public void testApplyWomCache()
+    {
+        DashboardService s = new DashboardService(null);
+        s.applyWomCache(rows(
+            "[{\"metric\":\"gains_overall_week\",\"updated_at\":\"2026-07-10T20:00:00+00:00\","
+            + "\"payload\":[{\"player\":{\"displayName\":\"Zezima\"},\"data\":{\"gained\":14200000}}]},"
+            + "{\"metric\":\"kc_zulrah\",\"updated_at\":\"2026-07-10T19:00:00+00:00\","
+            + "\"payload\":[{\"player\":{\"displayName\":\"Woox\"},\"data\":{\"kills\":5591}}]},"
+            + "{\"metric\":\"mystery_future_metric\",\"updated_at\":\"2026-07-10T21:00:00+00:00\",\"payload\":[]}]"));
+        assertEquals(1, s.getXpWeek().size());
+        assertEquals("Zezima", s.getXpWeek().get(0).getRsn());
+        assertNull(s.getEhbWeek()); // no ehb row yet → null = not synced
+        assertEquals(5591.0, s.getKcBoards().get("zulrah").get(0).getValue(), 0.001);
+        assertEquals("2026-07-10T21:00:00+00:00", s.getWomSyncedAt());
+    }
+
+    @Test
+    public void testApplyWomCacheEmptyKeepsPrevious()
+    {
+        DashboardService s = new DashboardService(null);
+        s.applyWomCache(rows(
+            "[{\"metric\":\"gains_ehb_week\",\"updated_at\":\"t\",\"payload\":[]}]"));
+        assertNotNull(s.getEhbWeek());
+        assertTrue(s.getEhbWeek().isEmpty()); // synced-but-empty ≠ never synced
+        s.applyWomCache(rows("[]"));
+        assertNotNull(s.getEhbWeek()); // empty refresh keeps previous
+    }
 }

@@ -8,7 +8,9 @@ import com.google.gson.JsonObject;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 
@@ -22,18 +24,18 @@ import okhttp3.OkHttpClient;
 public class DashboardService
 {
     private final OkHttpClient httpClient;
-    private final WomStatsClient womStatsClient;
 
     private volatile List<ClEntry> clBoard = Collections.emptyList();
     private volatile List<CaEntry> caBoard = Collections.emptyList();
     private volatile GpWeek gpWeek = new GpWeek(0, 0, Collections.emptyList());
     private volatile List<WomEntry> xpWeek;  // null = WOM never reached
     private volatile List<WomEntry> ehbWeek; // null = WOM never reached
+    private volatile Map<String, List<WomEntry>> kcBoards = Collections.emptyMap();
+    private volatile String womSyncedAt = ""; // newest wom_cache updated_at
 
-    public DashboardService(OkHttpClient httpClient, WomStatsClient womStatsClient)
+    public DashboardService(OkHttpClient httpClient)
     {
         this.httpClient = httpClient;
-        this.womStatsClient = womStatsClient;
     }
 
     public List<ClEntry> getClBoard()
@@ -61,8 +63,17 @@ public class DashboardService
         return ehbWeek;
     }
 
-    // Runs on the executor. WomStatsClient handles its own 10-min cache,
-    // so calling this on every tab open is safe.
+    public Map<String, List<WomEntry>> getKcBoards()
+    {
+        return kcBoards;
+    }
+
+    public String getWomSyncedAt()
+    {
+        return womSyncedAt;
+    }
+
+    // Runs on the executor.
     public void refresh()
     {
         try
@@ -80,15 +91,70 @@ public class DashboardService
             log.warn("Failed to fetch dashboard boards", e);
         }
 
-        List<WomEntry> xp = womStatsClient.fetchGains("overall");
+        try
+        {
+            JsonArray rows = SupabaseClient.get(httpClient, "wom_cache",
+                "select=metric,payload,updated_at");
+            applyWomCache(rows);
+        }
+        catch (IOException | RuntimeException e)
+        {
+            log.warn("Failed to fetch WOM cache", e);
+        }
+    }
+
+    // payload is the RAW WOM response array, so the WomStatsClient
+    // parsers apply unchanged. Unknown metrics are ignored (forward
+    // compatible). An absent/empty table leaves everything null/empty →
+    // the panel shows "waiting for WOM sync".
+    void applyWomCache(JsonArray rows)
+    {
+        Map<String, List<WomEntry>> kc = new HashMap<>();
+        List<WomEntry> xp = null;
+        List<WomEntry> ehb = null;
+        String newest = "";
+        for (int i = 0; i < rows.size(); i++)
+        {
+            JsonObject row = rows.get(i).getAsJsonObject();
+            String metric = str(row, "metric");
+            if (metric.isEmpty() || !row.has("payload") || !row.get("payload").isJsonArray())
+            {
+                continue;
+            }
+            JsonArray payload = row.getAsJsonArray("payload");
+            String updated = str(row, "updated_at");
+            if (updated.compareTo(newest) > 0)
+            {
+                newest = updated;
+            }
+            if ("gains_overall_week".equals(metric))
+            {
+                xp = WomStatsClient.parseGains(payload);
+            }
+            else if ("gains_ehb_week".equals(metric))
+            {
+                ehb = WomStatsClient.parseGains(payload);
+            }
+            else if (metric.startsWith("kc_"))
+            {
+                kc.put(metric.substring(3), WomStatsClient.parseHiscores(payload));
+            }
+        }
         if (xp != null)
         {
             xpWeek = xp;
         }
-        List<WomEntry> ehb = womStatsClient.fetchGains("ehb");
         if (ehb != null)
         {
             ehbWeek = ehb;
+        }
+        if (!kc.isEmpty())
+        {
+            kcBoards = Collections.unmodifiableMap(kc);
+        }
+        if (!newest.isEmpty())
+        {
+            womSyncedAt = newest;
         }
     }
 

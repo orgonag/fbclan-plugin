@@ -22,7 +22,6 @@ import com.github.orgonag.fbclan.pb.PbTrackingService;
 import com.github.orgonag.fbclan.stats.DashboardService;
 import com.github.orgonag.fbclan.stats.MemberStatsService;
 import com.github.orgonag.fbclan.util.WelcomeMessageService;
-import com.github.orgonag.fbclan.wom.WomStatsClient;
 import com.github.orgonag.fbclan.wom.WomVerificationService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -157,7 +156,6 @@ public class FinalBossPlugin extends Plugin
     private PbSubmitService pbSubmitService;
     private PbSeedService pbSeedService;
     private LeaderboardService leaderboardService;
-    private WomStatsClient womStatsClient;
     private MemberStatsService memberStatsService;
     private DashboardService dashboardService;
 
@@ -218,9 +216,8 @@ public class FinalBossPlugin extends Plugin
         pbSubmitService = new PbSubmitService(okHttpClient);
         pbSeedService = new PbSeedService(configManager);
         leaderboardService = new LeaderboardService(okHttpClient);
-        womStatsClient = new WomStatsClient(okHttpClient);
         memberStatsService = new MemberStatsService(okHttpClient);
-        dashboardService = new DashboardService(okHttpClient, womStatsClient);
+        dashboardService = new DashboardService(okHttpClient);
 
         dropLogPanel = new DropLogPanel(dropService, executor);
         lfgPanel = new LfgPanel(lfgService, executor, config);
@@ -228,7 +225,7 @@ public class FinalBossPlugin extends Plugin
         // Warm the announcements cache and populate the tab; refresh() runs
         // the fetch on the executor, so startup never blocks on network.
         announcementsPanel.refresh();
-        leaderboardPanel = new LeaderboardPanel(leaderboardService, dashboardService, womStatsClient, executor);
+        leaderboardPanel = new LeaderboardPanel(leaderboardService, dashboardService, executor);
 
         lockedPanel = new LockedPanel();
         mainPanel = new FinalBossPanel(announcementsPanel, dropLogPanel, lfgPanel, leaderboardPanel);

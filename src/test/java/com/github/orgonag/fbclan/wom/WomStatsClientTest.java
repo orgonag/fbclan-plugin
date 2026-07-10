@@ -72,17 +72,4 @@ public class WomStatsClientTest
         assertEquals("abyssal_sire", WomStatsClient.BOSS_SLUGS.get(0));
         assertEquals("zulrah", WomStatsClient.BOSS_SLUGS.get(WomStatsClient.BOSS_SLUGS.size() - 1));
     }
-
-    @Test
-    public void testCacheReturnsWithinTtl()
-    {
-        long[] now = {0L};
-        WomStatsClient client = new WomStatsClient(null, () -> now[0]);
-        client.cachePut("k", java.util.Collections.singletonList(new WomEntry("A", 1)));
-        assertNotNull(client.cacheGet("k"));
-        now[0] = WomStatsClient.CACHE_TTL_MS - 1;
-        assertNotNull(client.cacheGet("k"));
-        now[0] = WomStatsClient.CACHE_TTL_MS + 1;
-        assertNull(client.cacheGet("k"));
-    }
 }

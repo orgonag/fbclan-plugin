@@ -3,8 +3,6 @@ package com.github.orgonag.fbclan.wom;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -12,28 +10,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.LongSupplier;
-import lombok.extern.slf4j.Slf4j;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
 
 /**
- * Read-only Wise Old Man v2 group queries for the dashboard: weekly gains
- * (XP/EHB podiums) and per-boss group hiscores (Kill Counts section,
- * fetched lazily per boss). Everything is cached for CACHE_TTL_MS —
- * weekly numbers move slowly and WOM allows 20 requests/minute
- * unauthenticated, so tab-hopping must not re-fetch.
+ * Static WOM helpers: boss metric slugs, display names, and parsers for
+ * raw WOM response arrays served from the wom_cache table (the plugin no
+ * longer calls WOM directly — an hourly Apps Script fills the cache).
  */
-@Slf4j
-public class WomStatsClient
+public final class WomStatsClient
 {
-    static final long CACHE_TTL_MS = 10 * 60 * 1000;
-    private static final String BASE = "https://api.wiseoldman.net/v2/groups/1055";
-    // WOM asks for an identifying User-Agent (no UA risks an IP ban).
-    private static final String USER_AGENT = "fbclan-plugin (github.com/orgonag/fbclan-plugin)";
-
     // Complete WOM boss metric slug list (verified against
     // wise-old-man/server/src/types/metric.enum.ts, 2026-07-10),
     // alphabetical. New bosses arrive with plugin updates.
@@ -73,92 +57,16 @@ public class WomStatsClient
         DISPLAY_OVERRIDES.put("phosanis_nightmare", "Phosani's Nightmare");
     }
 
-    private final OkHttpClient httpClient;
-    private final LongSupplier clock;
-    private final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
-
-    private static class CacheEntry
+    private WomStatsClient()
     {
-        final List<WomEntry> value;
-        final long at;
-
-        CacheEntry(List<WomEntry> value, long at)
-        {
-            this.value = value;
-            this.at = at;
-        }
     }
 
-    public WomStatsClient(OkHttpClient httpClient)
-    {
-        this(httpClient, System::currentTimeMillis);
-    }
-
-    WomStatsClient(OkHttpClient httpClient, LongSupplier clock)
-    {
-        this.httpClient = httpClient;
-        this.clock = clock;
-    }
-
-    // Weekly gains podium (metric = "overall" for XP, "ehb"). Runs on the
-    // executor. Returns cached/last-known data; null means "never fetched
-    // successfully" so the panel can show the WOM-unreachable state.
-    public List<WomEntry> fetchGains(String metric)
-    {
-        String url = BASE + "/gained?metric=" + metric + "&period=week&limit=3";
-        return fetch(url, true);
-    }
-
-    // Top-5 KC for one boss (Kill Counts section, lazy per expand).
-    // WOM ignores small limit values on this endpoint and returns a full
-    // page (observed live: limit=3 came back with 20 rows), so the panel
-    // truncates to 5 as well — the param is kept for when WOM honors it.
-    public List<WomEntry> fetchBossHiscores(String bossSlug)
-    {
-        String url = BASE + "/hiscores?metric=" + bossSlug + "&limit=5";
-        return fetch(url, false);
-    }
-
-    private List<WomEntry> fetch(String url, boolean gains)
-    {
-        List<WomEntry> cached = cacheGet(url);
-        if (cached != null)
-        {
-            return cached;
-        }
-        try
-        {
-            Request request = new Request.Builder()
-                .url(url)
-                .header("User-Agent", USER_AGENT)
-                .get()
-                .build();
-            try (Response response = httpClient.newCall(request).execute())
-            {
-                if (!response.isSuccessful() || response.body() == null)
-                {
-                    log.warn("WOM GET failed: {} {}", response.code(), url);
-                    return null;
-                }
-                JsonArray rows = new JsonParser().parse(response.body().string()).getAsJsonArray();
-                List<WomEntry> parsed = gains ? parseGains(rows) : parseHiscores(rows);
-                cachePut(url, parsed);
-                return parsed;
-            }
-        }
-        catch (IOException | RuntimeException e)
-        {
-            log.warn("WOM fetch failed: {}", url, e);
-            return null;
-        }
-    }
-
-    static List<WomEntry> parseGains(JsonArray rows)
+    public static List<WomEntry> parseGains(JsonArray rows)
     {
         return parse(rows, "gained");
     }
 
-    static List<WomEntry> parseHiscores(JsonArray rows)
+    public static List<WomEntry> parseHiscores(JsonArray rows)
     {
         return parse(rows, "kills");
     }
@@ -205,20 +113,5 @@ public class WomStatsClient
               .append(word.substring(1).toLowerCase(Locale.ROOT));
         }
         return sb.toString();
-    }
-
-    List<WomEntry> cacheGet(String key)
-    {
-        CacheEntry e = cache.get(key);
-        if (e == null || clock.getAsLong() - e.at > CACHE_TTL_MS)
-        {
-            return null;
-        }
-        return e.value;
-    }
-
-    void cachePut(String key, List<WomEntry> value)
-    {
-        cache.put(key, new CacheEntry(value, clock.getAsLong()));
     }
 }
