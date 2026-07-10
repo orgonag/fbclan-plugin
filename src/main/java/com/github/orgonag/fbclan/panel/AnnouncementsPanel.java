@@ -4,7 +4,6 @@ import com.github.orgonag.fbclan.announcements.Announcement;
 import com.github.orgonag.fbclan.announcements.AnnouncementsService;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
-import java.awt.Rectangle;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -16,7 +15,6 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
 import javax.swing.JTextArea;
-import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import net.runelite.client.ui.ColorScheme;
@@ -150,42 +148,5 @@ public class AnnouncementsPanel extends JPanel
         // the full panel width and wrapping tracks it.
         area.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
         return area;
-    }
-
-    // JPanel does not implement Scrollable, so inside a JScrollPane it
-    // takes its preferred width and long unwrappable lines force
-    // horizontal overflow. Tracking the viewport width makes the
-    // JTextAreas wrap to the actual panel width instead.
-    private static class ScrollableListPanel extends JPanel implements Scrollable
-    {
-        @Override
-        public Dimension getPreferredScrollableViewportSize()
-        {
-            return getPreferredSize();
-        }
-
-        @Override
-        public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction)
-        {
-            return 16;
-        }
-
-        @Override
-        public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction)
-        {
-            return 64;
-        }
-
-        @Override
-        public boolean getScrollableTracksViewportWidth()
-        {
-            return true;
-        }
-
-        @Override
-        public boolean getScrollableTracksViewportHeight()
-        {
-            return false;
-        }
     }
 }
