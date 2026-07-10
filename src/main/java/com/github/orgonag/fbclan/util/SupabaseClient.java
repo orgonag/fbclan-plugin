@@ -24,6 +24,9 @@ public class SupabaseClient
     //   by the sheet-sync Apps Script's service-role key)
     // - announcements table: SELECT only (clan-curated posts, written solely
     //   by the sheet-sync Apps Script's service-role key)
+    // - personal_bests table: NO direct anon access at all. Writes go through
+    //   the submit_pbs() function (improve-only); reads through the
+    //   pb_leaderboard / recent_clan_bests views (SELECT granted on views only)
     // - drop-screenshots storage bucket: INSERT only (screenshots are immutable
     //   once uploaded; the bucket is public-read so the panel can link to them)
     private static final String PROJECT_URL = "https://rzhtoqadvbxylwjndnlo.supabase.co";
@@ -48,6 +51,11 @@ public class SupabaseClient
     public static String publicStorageUrl(String bucket, String path)
     {
         return PROJECT_URL + "/storage/v1/object/public/" + bucket + "/" + path;
+    }
+
+    public static String buildRpcUrl(String function)
+    {
+        return PROJECT_URL + "/rest/v1/rpc/" + function;
     }
 
     public static Request.Builder baseRequest(String url)
@@ -173,6 +181,29 @@ public class SupabaseClient
             if (!response.isSuccessful())
             {
                 log.warn("Supabase DELETE failed: {} {}", response.code(), response.message());
+                return false;
+            }
+            return true;
+        }
+    }
+
+    // Calls a Postgres function exposed via PostgREST. Used for writes that
+    // need server-side validation the anon key can't be trusted with
+    // (e.g. submit_pbs only accepts a time that beats the existing one).
+    public static boolean rpc(OkHttpClient httpClient, String function, JsonObject args) throws IOException
+    {
+        String url = buildRpcUrl(function);
+        RequestBody body = RequestBody.create(JSON, args.toString());
+        Request request = baseRequest(url)
+            .header("Content-Type", "application/json")
+            .post(body)
+            .build();
+
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (!response.isSuccessful())
+            {
+                log.warn("Supabase RPC {} failed: {} {}", function, response.code(), response.message());
                 return false;
             }
             return true;

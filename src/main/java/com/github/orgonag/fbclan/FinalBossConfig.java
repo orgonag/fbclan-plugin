@@ -33,6 +33,13 @@ public interface FinalBossConfig extends Config
     )
     String discordSection = "discord";
 
+    @ConfigSection(
+        name = "Leaderboards",
+        description = "Clan leaderboards settings",
+        position = 3
+    )
+    String leaderboardsSection = "leaderboards";
+
     // Off by default: no drop data leaves the client unless the user
     // explicitly opts in.
     @ConfigItem(
@@ -108,5 +115,18 @@ public interface FinalBossConfig extends Config
     default String discordWebhookUrl()
     {
         return "";
+    }
+
+    @ConfigItem(
+        keyName = "enablePbUpload",
+        name = "Upload personal bests",
+        description = "Send your boss personal-best times (RSN, boss name, time) to the clan's leaderboard database. "
+            + "Viewing the Leaderboards tab works without this. Skipped on Leagues/Deadman/speedrun worlds.",
+        section = leaderboardsSection,
+        position = 0
+    )
+    default boolean enablePbUpload()
+    {
+        return false;
     }
 }
