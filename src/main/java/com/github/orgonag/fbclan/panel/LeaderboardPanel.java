@@ -4,6 +4,7 @@ import com.github.orgonag.fbclan.pb.LeaderboardService;
 import com.github.orgonag.fbclan.pb.PbEntry;
 import com.github.orgonag.fbclan.pb.PbFormat;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.event.MouseAdapter;
@@ -39,7 +40,12 @@ import net.runelite.client.ui.FontManager;
  */
 public class LeaderboardPanel extends JPanel
 {
-    private static final String[] MEDALS = {"🥇", "🥈", "🥉"}; // 🥇🥈🥉
+    // RuneLite's RuneScape fonts have no emoji/arrow glyphs (they render as
+    // boxes and can eat adjacent letters), so ranks are colored text and the
+    // collapse markers are plain +/-.
+    private static final Color RANK_GOLD = new Color(0xffd700);
+    private static final Color RANK_SILVER = new Color(0xc0c0c0);
+    private static final Color RANK_BRONZE = new Color(0xcd7f32);
 
     private final LeaderboardService leaderboardService;
     private final ScheduledExecutorService executor;
@@ -166,7 +172,7 @@ public class LeaderboardPanel extends JPanel
         header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
         header.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-        JLabel label = new JLabel((expanded ? "▾ " : "▸ ") + displayName);
+        JLabel label = new JLabel((expanded ? "- " : "+ ") + displayName);
         label.setFont(FontManager.getRunescapeSmallFont());
         label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         header.add(label, BorderLayout.CENTER);
@@ -188,15 +194,19 @@ public class LeaderboardPanel extends JPanel
 
     private JPanel pbRow(PbEntry entry)
     {
-        String medal = entry.getRank() >= 1 && entry.getRank() <= 3
-            ? MEDALS[entry.getRank() - 1] + " " : "";
         JPanel row = new JPanel(new BorderLayout());
         row.setBackground(ColorScheme.DARK_GRAY_COLOR);
         row.setBorder(BorderFactory.createEmptyBorder(2, 14, 2, 6));
         row.setAlignmentX(LEFT_ALIGNMENT);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
 
-        JLabel name = new JLabel(medal + entry.getRsn());
+        JLabel rank = new JLabel(rankText(entry.getRank()));
+        rank.setFont(FontManager.getRunescapeSmallFont());
+        rank.setForeground(rankColor(entry.getRank()));
+        rank.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
+        row.add(rank, BorderLayout.WEST);
+
+        JLabel name = new JLabel(entry.getRsn());
         name.setFont(FontManager.getRunescapeSmallFont());
         name.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         row.add(name, BorderLayout.CENTER);
@@ -232,6 +242,36 @@ public class LeaderboardPanel extends JPanel
         stack.add(bottom);
         row.add(stack, BorderLayout.CENTER);
         return row;
+    }
+
+    private static String rankText(int rank)
+    {
+        switch (rank)
+        {
+            case 1:
+                return "1st";
+            case 2:
+                return "2nd";
+            case 3:
+                return "3rd";
+            default:
+                return rank + "th";
+        }
+    }
+
+    private static Color rankColor(int rank)
+    {
+        switch (rank)
+        {
+            case 1:
+                return RANK_GOLD;
+            case 2:
+                return RANK_SILVER;
+            case 3:
+                return RANK_BRONZE;
+            default:
+                return ColorScheme.LIGHT_GRAY_COLOR;
+        }
     }
 
     // Same bucketing as DropLogPanel.formatTimeAgo.
