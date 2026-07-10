@@ -28,7 +28,6 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
-import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.text.AbstractDocument;
 import javax.swing.text.AttributeSet;
@@ -229,12 +228,9 @@ public class LfgPanel extends JPanel
 
     public void refresh()
     {
-        executor.submit(() -> {
-            List<LfgEntry> entries = lfgService.getActiveEntries();
-            SwingUtilities.invokeLater(() -> {
-                cachedEntries = entries;
-                rebuildList();
-            });
+        PanelUi.asyncRefresh(executor, lfgService::getActiveEntries, entries -> {
+            cachedEntries = entries;
+            rebuildList();
         });
     }
 
@@ -244,10 +240,7 @@ public class LfgPanel extends JPanel
 
         if (cachedEntries.isEmpty())
         {
-            JLabel emptyLabel = new JLabel("No one is looking for a group right now.");
-            emptyLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-            emptyLabel.setHorizontalAlignment(SwingConstants.CENTER);
-            listPanel.add(emptyLabel);
+            listPanel.add(PanelUi.emptyStateLabel("No one is looking for a group right now."));
         }
         else if (groupedView)
         {

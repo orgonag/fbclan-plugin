@@ -15,8 +15,6 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
 import javax.swing.JTextArea;
-import javax.swing.SwingConstants;
-import javax.swing.SwingUtilities;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 
@@ -58,17 +56,16 @@ public class AnnouncementsPanel extends JPanel
         rebuildList();
     }
 
-    // Fetch on the executor, rebuild on the EDT (same shape as
-    // LfgPanel.refresh). Called when the tab is opened and once at startup.
+    // Fetch on the executor, rebuild on the EDT. Called when the tab is
+    // opened and once at startup.
     public void refresh()
     {
-        executor.submit(() -> {
+        PanelUi.asyncRefresh(executor, () -> {
             announcementsService.refresh();
-            List<Announcement> latest = announcementsService.getAnnouncements();
-            SwingUtilities.invokeLater(() -> {
-                cached = latest;
-                rebuildList();
-            });
+            return announcementsService.getAnnouncements();
+        }, latest -> {
+            cached = latest;
+            rebuildList();
         });
     }
 
@@ -78,10 +75,7 @@ public class AnnouncementsPanel extends JPanel
 
         if (cached.isEmpty())
         {
-            JLabel emptyLabel = new JLabel("No announcements yet.");
-            emptyLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-            emptyLabel.setHorizontalAlignment(SwingConstants.CENTER);
-            emptyLabel.setAlignmentX(CENTER_ALIGNMENT);
+            JLabel emptyLabel = PanelUi.emptyStateLabel("No announcements yet.");
             emptyLabel.setBorder(BorderFactory.createEmptyBorder(20, 0, 20, 0));
             listPanel.add(emptyLabel);
         }
