@@ -30,6 +30,8 @@ public class SupabaseClient
     // - member_stats table: NO direct anon access. Writes via submit_stats()
     //   (improve-only per column); reads via cl_leaderboard/ca_leaderboard.
     // - gp_week_total / gp_week_top views: SELECT only (aggregates of drops)
+    // - wom_cache table: SELECT only (hourly Wise Old Man snapshot, written
+    //   solely by the wom-cache-sync Apps Script's service-role key)
     // - drop-screenshots storage bucket: INSERT only (screenshots are immutable
     //   once uploaded; the bucket is public-read so the panel can link to them)
     private static final String PROJECT_URL = "https://rzhtoqadvbxylwjndnlo.supabase.co";
