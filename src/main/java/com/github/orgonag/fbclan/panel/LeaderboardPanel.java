@@ -3,6 +3,13 @@ package com.github.orgonag.fbclan.panel;
 import com.github.orgonag.fbclan.pb.LeaderboardService;
 import com.github.orgonag.fbclan.pb.PbEntry;
 import com.github.orgonag.fbclan.pb.PbFormat;
+import com.github.orgonag.fbclan.stats.CaEntry;
+import com.github.orgonag.fbclan.stats.ClEntry;
+import com.github.orgonag.fbclan.stats.DashboardService;
+import com.github.orgonag.fbclan.stats.GpWeek;
+import com.github.orgonag.fbclan.stats.StatFormat;
+import com.github.orgonag.fbclan.wom.WomEntry;
+import com.github.orgonag.fbclan.wom.WomStatsClient;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
@@ -32,32 +39,41 @@ import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 
 /**
- * Clan PB leaderboard: "New clan bests" feed on top, then every boss with
- * data as a collapsible A–Z section showing at most its top 3. Collapsed
- * by default; expansion state lives for the session only. All remote
- * strings are rendered as plain JLabel text (no HTML mode), so no
- * escaping is needed.
+ * The clan dashboard: eight collapsible sections (weekly WOM podiums,
+ * collection log and combat achievement top-20s, the phase-1 clan-bests
+ * feed and A-Z PB list, WOM kill counts served from the wom_cache table,
+ * GP-this-week). All shiny elements are painted components — no font
+ * glyphs. Expansion state is per-session. All remote strings render as
+ * plain JLabel text.
  */
 public class LeaderboardPanel extends JPanel
 {
-    // RuneLite's RuneScape fonts have no emoji/arrow glyphs (they render as
-    // boxes and can eat adjacent letters), so ranks are colored text and the
-    // collapse markers are plain +/-.
-    private static final Color RANK_GOLD = new Color(0xffd700);
-    private static final Color RANK_SILVER = new Color(0xc0c0c0);
-    private static final Color RANK_BRONZE = new Color(0xcd7f32);
+    private static final String[] SECTIONS = {
+        "XP Gained This Week", "EHB This Week", "Collection Log",
+        "Combat Achievements", "New Clan Bests", "All-Time PBs",
+        "Kill Counts", "GP This Week",
+    };
+    private static final boolean[] DEFAULT_EXPANDED = {
+        true, true, true, true, false, false, false, false,
+    };
 
     private final LeaderboardService leaderboardService;
+    private final DashboardService dashboardService;
     private final ScheduledExecutorService executor;
     private final JPanel listPanel;
-    private final Set<String> expandedKeys = new HashSet<>();
+
+    private final boolean[] expanded = DEFAULT_EXPANDED.clone();
+    private final Set<String> expandedPbBosses = new HashSet<>();
+    private final Set<String> expandedKcBosses = new HashSet<>();
 
     private List<PbEntry> cachedBoard = Collections.emptyList();
     private List<PbEntry> cachedRecent = Collections.emptyList();
 
-    public LeaderboardPanel(LeaderboardService leaderboardService, ScheduledExecutorService executor)
+    public LeaderboardPanel(LeaderboardService leaderboardService,
+        DashboardService dashboardService, ScheduledExecutorService executor)
     {
         this.leaderboardService = leaderboardService;
+        this.dashboardService = dashboardService;
         this.executor = executor;
 
         setLayout(new BorderLayout());
@@ -76,7 +92,6 @@ public class LeaderboardPanel extends JPanel
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
 
         add(scrollPane, BorderLayout.CENTER);
-
         rebuild();
     }
 
@@ -84,6 +99,7 @@ public class LeaderboardPanel extends JPanel
     {
         executor.submit(() -> {
             leaderboardService.refresh();
+            dashboardService.refresh();
             List<PbEntry> board = leaderboardService.getLeaderboard();
             List<PbEntry> recent = leaderboardService.getRecentBests();
             SwingUtilities.invokeLater(() -> {
@@ -94,99 +110,328 @@ public class LeaderboardPanel extends JPanel
         });
     }
 
+    private void toggleSection(int index)
+    {
+        expanded[index] = !expanded[index];
+        rebuild();
+    }
+
     private void rebuild()
     {
         listPanel.removeAll();
-
-        if (cachedBoard.isEmpty() && cachedRecent.isEmpty())
+        for (int i = 0; i < SECTIONS.length; i++)
         {
-            JLabel empty = new JLabel("No personal bests recorded yet.");
-            empty.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-            empty.setHorizontalAlignment(SwingConstants.CENTER);
-            empty.setAlignmentX(CENTER_ALIGNMENT);
-            empty.setBorder(BorderFactory.createEmptyBorder(20, 0, 20, 0));
-            listPanel.add(empty);
+            final int index = i;
+            CollapsibleSection section = new CollapsibleSection(
+                SECTIONS[i], expanded[i], () -> toggleSection(index));
+            if (expanded[i])
+            {
+                buildSectionContent(i, section.getContent());
+            }
+            listPanel.add(section);
         }
-        else
-        {
-            if (!cachedRecent.isEmpty())
-            {
-                listPanel.add(sectionHeader("New clan bests"));
-                for (PbEntry e : cachedRecent)
-                {
-                    listPanel.add(recentRow(e));
-                }
-            }
-
-            // Group top-3 rows per boss, ordered A–Z by display name.
-            Map<String, List<PbEntry>> byBoss = new LinkedHashMap<>();
-            for (PbEntry e : cachedBoard)
-            {
-                byBoss.computeIfAbsent(e.getBossKey(), k -> new ArrayList<>()).add(e);
-            }
-            Map<String, String> sorted = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-            for (String key : byBoss.keySet())
-            {
-                sorted.put(PbFormat.displayName(key), key);
-            }
-
-            if (!sorted.isEmpty())
-            {
-                listPanel.add(sectionHeader("All bosses"));
-                for (Map.Entry<String, String> e : sorted.entrySet())
-                {
-                    String bossKey = e.getValue();
-                    boolean expanded = expandedKeys.contains(bossKey);
-                    listPanel.add(bossHeader(e.getKey(), bossKey, expanded));
-                    if (expanded)
-                    {
-                        for (PbEntry entry : byBoss.get(bossKey))
-                        {
-                            listPanel.add(pbRow(entry));
-                        }
-                    }
-                }
-            }
-        }
-
         listPanel.revalidate();
         listPanel.repaint();
     }
 
-    private JLabel sectionHeader(String text)
+    private void buildSectionContent(int index, JPanel content)
     {
-        JLabel label = new JLabel(text);
-        label.setFont(FontManager.getRunescapeBoldFont());
-        label.setForeground(ColorScheme.BRAND_ORANGE);
-        label.setAlignmentX(LEFT_ALIGNMENT);
-        label.setBorder(BorderFactory.createEmptyBorder(6, 0, 4, 0));
-        return label;
+        switch (index)
+        {
+            case 0:
+                buildPodiumSection(content, dashboardService.getXpWeek(),
+                    v -> StatFormat.shortNumber((long) v), "via Wise Old Man" + syncedSuffix());
+                break;
+            case 1:
+                buildPodiumSection(content, dashboardService.getEhbWeek(),
+                    StatFormat::oneDecimal, "efficient hours bossed" + syncedSuffix());
+                break;
+            case 2:
+                buildClSection(content);
+                break;
+            case 3:
+                buildCaSection(content);
+                break;
+            case 4:
+                buildRecentSection(content);
+                break;
+            case 5:
+                buildPbSection(content);
+                break;
+            case 6:
+                buildKcSection(content);
+                break;
+            case 7:
+                buildGpSection(content);
+                break;
+        }
     }
 
-    private JPanel bossHeader(String displayName, String bossKey, boolean expanded)
+    private interface ValueFormatter
+    {
+        String format(double value);
+    }
+
+    private void buildPodiumSection(JPanel content, List<WomEntry> entries,
+        ValueFormatter fmt, String caption)
+    {
+        if (entries == null)
+        {
+            // Null = the wom_cache row hasn't been read yet (sync not run,
+            // or Supabase unreachable) — same wording as the KC section.
+            content.add(noteLabel("waiting for WOM sync"));
+            return;
+        }
+        if (entries.isEmpty())
+        {
+            content.add(noteLabel("No data this week."));
+            return;
+        }
+        PodiumComponent podium = new PodiumComponent();
+        List<String> names = new ArrayList<>();
+        List<String> values = new ArrayList<>();
+        for (WomEntry e : entries)
+        {
+            names.add(e.getRsn());
+            values.add(fmt.format(e.getValue()));
+        }
+        podium.setEntries(names, values);
+        content.add(podium);
+        content.add(captionLabel(caption));
+    }
+
+    private void buildClSection(JPanel content)
+    {
+        List<ClEntry> board = dashboardService.getClBoard();
+        if (board.isEmpty())
+        {
+            content.add(noteLabel("No collection logs uploaded yet."));
+            return;
+        }
+        int rank = 1;
+        for (ClEntry e : board)
+        {
+            content.add(statRow(rank++, e.getRsn(), null,
+                String.format("%,d/%,d", e.getObtained(), e.getTotal())));
+        }
+    }
+
+    private void buildCaSection(JPanel content)
+    {
+        List<CaEntry> board = dashboardService.getCaBoard();
+        if (board.isEmpty())
+        {
+            content.add(noteLabel("No combat achievements uploaded yet."));
+            return;
+        }
+        int rank = 1;
+        for (CaEntry e : board)
+        {
+            content.add(statRow(rank++, e.getRsn(), e.getTier(),
+                String.format("%,d", e.getPoints())));
+        }
+    }
+
+    private void buildGpSection(JPanel content)
+    {
+        GpWeek gp = dashboardService.getGpWeek();
+        JLabel total = new JLabel("Clan total: " + StatFormat.shortNumber(gp.getTotalGp())
+            + " GP · " + gp.getDropCount() + " drops");
+        total.setFont(FontManager.getRunescapeSmallFont());
+        total.setForeground(new Color(0xffd700));
+        total.setAlignmentX(LEFT_ALIGNMENT);
+        total.setBorder(BorderFactory.createEmptyBorder(0, 6, 4, 0));
+        content.add(total);
+
+        if (gp.getTop().isEmpty())
+        {
+            content.add(noteLabel("No logged drops in the last 7 days."));
+            return;
+        }
+        PodiumComponent podium = new PodiumComponent();
+        List<String> names = new ArrayList<>();
+        List<String> values = new ArrayList<>();
+        for (WomEntry e : gp.getTop())
+        {
+            names.add(e.getRsn());
+            values.add(StatFormat.shortNumber((long) e.getValue()));
+        }
+        podium.setEntries(names, values);
+        content.add(podium);
+        content.add(captionLabel("logged drops (1M+/notables) · last 7 days"));
+    }
+
+    private void buildRecentSection(JPanel content)
+    {
+        if (cachedRecent.isEmpty())
+        {
+            content.add(noteLabel("No new clan bests yet."));
+            return;
+        }
+        for (PbEntry e : cachedRecent)
+        {
+            content.add(recentRow(e));
+        }
+    }
+
+    private void buildPbSection(JPanel content)
+    {
+        if (cachedBoard.isEmpty())
+        {
+            content.add(noteLabel("No personal bests recorded yet."));
+            return;
+        }
+        Map<String, List<PbEntry>> byBoss = new LinkedHashMap<>();
+        for (PbEntry e : cachedBoard)
+        {
+            byBoss.computeIfAbsent(e.getBossKey(), k -> new ArrayList<>()).add(e);
+        }
+        Map<String, String> sorted = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (String key : byBoss.keySet())
+        {
+            sorted.put(PbFormat.displayName(key), key);
+        }
+        for (Map.Entry<String, String> e : sorted.entrySet())
+        {
+            String bossKey = e.getValue();
+            boolean open = expandedPbBosses.contains(bossKey);
+            content.add(innerHeader(e.getKey(), open, () -> {
+                if (!expandedPbBosses.remove(bossKey))
+                {
+                    expandedPbBosses.add(bossKey);
+                }
+                rebuild();
+            }));
+            if (open)
+            {
+                for (PbEntry entry : byBoss.get(bossKey))
+                {
+                    content.add(pbRow(entry));
+                }
+            }
+        }
+    }
+
+    private void buildKcSection(JPanel content)
+    {
+        Map<String, List<WomEntry>> boards = dashboardService.getKcBoards();
+        content.add(captionLabel("top 5 per boss · via Wise Old Man" + syncedSuffix()));
+        if (boards.isEmpty())
+        {
+            content.add(noteLabel("waiting for WOM sync"));
+            return;
+        }
+        for (String slug : WomStatsClient.BOSS_SLUGS)
+        {
+            boolean open = expandedKcBosses.contains(slug);
+            content.add(innerHeader(WomStatsClient.bossDisplayName(slug), open, () -> {
+                if (!expandedKcBosses.remove(slug))
+                {
+                    expandedKcBosses.add(slug);
+                }
+                rebuild();
+            }));
+            if (open)
+            {
+                List<WomEntry> rows = boards.get(slug);
+                if (rows == null)
+                {
+                    content.add(noteLabel("not synced yet"));
+                }
+                else if (rows.isEmpty())
+                {
+                    content.add(noteLabel("no ranked members"));
+                }
+                else
+                {
+                    int rank = 1;
+                    for (WomEntry e : rows.subList(0, Math.min(5, rows.size())))
+                    {
+                        content.add(statRow(rank++, e.getRsn(), null,
+                            String.format("%,d", (long) e.getValue())));
+                    }
+                }
+            }
+        }
+    }
+
+    // "· synced 2h ago" appended to WOM captions; empty until first sync.
+    private String syncedSuffix()
+    {
+        String at = dashboardService.getWomSyncedAt();
+        if (at.isEmpty())
+        {
+            return "";
+        }
+        String ago = formatTimeAgo(at);
+        return ago.isEmpty() ? "" : " · synced " + ago;
+    }
+
+    // ---- shared row builders ----
+
+    private JPanel statRow(int rank, String rsn, String tier, String value)
+    {
+        JPanel row = new JPanel(new BorderLayout());
+        row.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        row.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 6));
+        row.setAlignmentX(LEFT_ALIGNMENT);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
+
+        JLabel rankLabel = new JLabel();
+        MedalIcon medal = MedalIcon.forRank(rank);
+        if (medal != null)
+        {
+            rankLabel.setIcon(medal);
+        }
+        else
+        {
+            rankLabel.setText(Integer.toString(rank));
+            rankLabel.setFont(FontManager.getRunescapeSmallFont());
+            rankLabel.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
+        }
+        rankLabel.setPreferredSize(new Dimension(20, 16));
+        row.add(rankLabel, BorderLayout.WEST);
+
+        JLabel name = new JLabel(rsn);
+        name.setFont(FontManager.getRunescapeSmallFont());
+        name.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        row.add(name, BorderLayout.CENTER);
+
+        JPanel east = new JPanel();
+        east.setLayout(new BoxLayout(east, BoxLayout.X_AXIS));
+        east.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        if (tier != null && !tier.isEmpty())
+        {
+            east.add(TierBadge.of(tier));
+            east.add(javax.swing.Box.createRigidArea(new Dimension(5, 0)));
+        }
+        JLabel valueLabel = new JLabel(value);
+        valueLabel.setFont(FontManager.getRunescapeSmallFont());
+        valueLabel.setForeground(new Color(0xffd700));
+        east.add(valueLabel);
+        row.add(east, BorderLayout.EAST);
+        return row;
+    }
+
+    private JPanel innerHeader(String displayName, boolean open, Runnable onToggle)
     {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-        header.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
+        header.setBorder(BorderFactory.createEmptyBorder(3, 6, 3, 6));
         header.setAlignmentX(LEFT_ALIGNMENT);
-        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
         header.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-        JLabel label = new JLabel((expanded ? "- " : "+ ") + displayName);
+        JLabel label = new JLabel((open ? "- " : "+ ") + displayName);
         label.setFont(FontManager.getRunescapeSmallFont());
         label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         header.add(label, BorderLayout.CENTER);
-
         header.addMouseListener(new MouseAdapter()
         {
             @Override
             public void mousePressed(MouseEvent ev)
             {
-                if (!expandedKeys.remove(bossKey))
-                {
-                    expandedKeys.add(bossKey);
-                }
-                rebuild();
+                onToggle.run();
             }
         });
         return header;
@@ -194,28 +439,8 @@ public class LeaderboardPanel extends JPanel
 
     private JPanel pbRow(PbEntry entry)
     {
-        JPanel row = new JPanel(new BorderLayout());
-        row.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        row.setBorder(BorderFactory.createEmptyBorder(2, 14, 2, 6));
-        row.setAlignmentX(LEFT_ALIGNMENT);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
-
-        JLabel rank = new JLabel(rankText(entry.getRank()));
-        rank.setFont(FontManager.getRunescapeSmallFont());
-        rank.setForeground(rankColor(entry.getRank()));
-        rank.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
-        row.add(rank, BorderLayout.WEST);
-
-        JLabel name = new JLabel(entry.getRsn());
-        name.setFont(FontManager.getRunescapeSmallFont());
-        name.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-        row.add(name, BorderLayout.CENTER);
-
-        JLabel time = new JLabel(PbFormat.formatSeconds(entry.getSeconds()));
-        time.setFont(FontManager.getRunescapeSmallFont());
-        time.setForeground(ColorScheme.BRAND_ORANGE);
-        row.add(time, BorderLayout.EAST);
-        return row;
+        return statRow(entry.getRank(), entry.getRsn(), null,
+            PbFormat.formatSeconds(entry.getSeconds()));
     }
 
     private JPanel recentRow(PbEntry entry)
@@ -226,8 +451,10 @@ public class LeaderboardPanel extends JPanel
         row.setAlignmentX(LEFT_ALIGNMENT);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
 
+        // Plain hyphen: em dash is outside Latin-1 and may box in the
+        // RuneScape font (same family of glyph failures as the old arrows).
         JLabel top = new JLabel(PbFormat.displayName(entry.getBossKey())
-            + " — " + PbFormat.formatSeconds(entry.getSeconds()));
+            + " - " + PbFormat.formatSeconds(entry.getSeconds()));
         top.setFont(FontManager.getRunescapeSmallFont());
         top.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 
@@ -244,34 +471,33 @@ public class LeaderboardPanel extends JPanel
         return row;
     }
 
-    private static String rankText(int rank)
+    private JLabel noteLabel(String text)
     {
-        switch (rank)
-        {
-            case 1:
-                return "1st";
-            case 2:
-                return "2nd";
-            case 3:
-                return "3rd";
-            default:
-                return rank + "th";
-        }
+        JLabel label = new JLabel(text);
+        label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        label.setFont(FontManager.getRunescapeSmallFont());
+        label.setHorizontalAlignment(SwingConstants.CENTER);
+        // Same mixed-alignmentX rule as captionLabel: LEFT + full width.
+        label.setAlignmentX(LEFT_ALIGNMENT);
+        label.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+        label.setBorder(BorderFactory.createEmptyBorder(6, 0, 6, 0));
+        return label;
     }
 
-    private static Color rankColor(int rank)
+    private JLabel captionLabel(String text)
     {
-        switch (rank)
-        {
-            case 1:
-                return RANK_GOLD;
-            case 2:
-                return RANK_SILVER;
-            case 3:
-                return RANK_BRONZE;
-            default:
-                return ColorScheme.LIGHT_GRAY_COLOR;
-        }
+        JLabel label = new JLabel(text);
+        label.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
+        label.setFont(FontManager.getRunescapeSmallFont());
+        label.setHorizontalAlignment(SwingConstants.CENTER);
+        // LEFT + full-width max, NOT CENTER_ALIGNMENT: BoxLayout shifts
+        // children sideways when siblings mix alignmentX values (this is
+        // what squeezed the podium off-center). Text centers via
+        // horizontalAlignment inside the full-width label instead.
+        label.setAlignmentX(LEFT_ALIGNMENT);
+        label.setMaximumSize(new Dimension(Integer.MAX_VALUE, 18));
+        label.setBorder(BorderFactory.createEmptyBorder(2, 0, 4, 0));
+        return label;
     }
 
     // Same bucketing as DropLogPanel.formatTimeAgo.
