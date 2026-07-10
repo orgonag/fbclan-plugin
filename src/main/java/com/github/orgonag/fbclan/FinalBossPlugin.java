@@ -19,7 +19,10 @@ import com.github.orgonag.fbclan.pb.PbSeedService;
 import com.github.orgonag.fbclan.pb.PbSubmission;
 import com.github.orgonag.fbclan.pb.PbSubmitService;
 import com.github.orgonag.fbclan.pb.PbTrackingService;
+import com.github.orgonag.fbclan.stats.DashboardService;
+import com.github.orgonag.fbclan.stats.MemberStatsService;
 import com.github.orgonag.fbclan.util.WelcomeMessageService;
+import com.github.orgonag.fbclan.wom.WomStatsClient;
 import com.github.orgonag.fbclan.wom.WomVerificationService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -31,6 +34,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -46,6 +50,8 @@ import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.clan.ClanChannelMember;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.VarbitChanged;
+import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -77,19 +83,22 @@ import okhttp3.OkHttpClient;
  * <li>Wise Old Man API (read-only): checks whether the logged-in player is a
  *     member of the clan's WOM group. The panel stays locked for non-members.</li>
  * <li>Supabase (clan-owned database): stores drop log rows, LFG statuses,
- *     (opt-in) drop screenshots, and (opt-in) boss personal-best times. Only
- *     ever sends the local player's own RSN, drop details, LFG activity/note,
- *     screenshots, and PB times. PB submissions go through the submit_pbs
- *     function, which only ever improves a member's stored time; leaderboard
- *     reads come from read-only views. Also reads the clan-curated
- *     notable-items list and welcome message at startup (read-only, no
- *     player data sent).</li>
+ *     (opt-in) drop screenshots, boss personal-best times, and collection
+ *     log counts and combat achievement points (opt-out). Only ever sends
+ *     the local player's own RSN, drop details, LFG activity/note,
+ *     screenshots, PB times, and collection-log/CA counts. PB submissions
+ *     go through the submit_pbs function, and member stats go through the
+ *     submit_stats function (improve-only); leaderboard reads come from
+ *     read-only views. Also reads the clan-curated notable-items list and
+ *     welcome message at startup (read-only, no player data sent).</li>
  * <li>Discord webhook (optional, user-supplied URL): drop notifications.</li>
  * </ul>
  *
  * No player data is sent anywhere unless the player is a verified clan
- * member. Drop logging, screenshots, and PB tracking are additionally gated
- * behind opt-in config toggles (all default off; see {@link FinalBossConfig}).
+ * member. Drop logging, PB tracking, and collection-log/combat-achievement
+ * uploads are ON by default for verified members and can each be disabled
+ * in the config; drop screenshots remain opt-in (default off). See
+ * {@link FinalBossConfig}.
  */
 @Slf4j
 @PluginDescriptor(
@@ -148,6 +157,9 @@ public class FinalBossPlugin extends Plugin
     private PbSubmitService pbSubmitService;
     private PbSeedService pbSeedService;
     private LeaderboardService leaderboardService;
+    private WomStatsClient womStatsClient;
+    private MemberStatsService memberStatsService;
+    private DashboardService dashboardService;
 
     private DropLogPanel dropLogPanel;
     private LfgPanel lfgPanel;
@@ -206,6 +218,9 @@ public class FinalBossPlugin extends Plugin
         pbSubmitService = new PbSubmitService(okHttpClient);
         pbSeedService = new PbSeedService(configManager);
         leaderboardService = new LeaderboardService(okHttpClient);
+        womStatsClient = new WomStatsClient(okHttpClient);
+        memberStatsService = new MemberStatsService(okHttpClient);
+        dashboardService = new DashboardService(okHttpClient, womStatsClient);
 
         dropLogPanel = new DropLogPanel(dropService, executor);
         lfgPanel = new LfgPanel(lfgService, executor, config);
@@ -213,7 +228,7 @@ public class FinalBossPlugin extends Plugin
         // Warm the announcements cache and populate the tab; refresh() runs
         // the fetch on the executor, so startup never blocks on network.
         announcementsPanel.refresh();
-        leaderboardPanel = new LeaderboardPanel(leaderboardService, executor);
+        leaderboardPanel = new LeaderboardPanel(leaderboardService, dashboardService, womStatsClient, executor);
 
         lockedPanel = new LockedPanel();
         mainPanel = new FinalBossPanel(announcementsPanel, dropLogPanel, lfgPanel, leaderboardPanel);
@@ -328,6 +343,7 @@ public class FinalBossPlugin extends Plugin
                     startPolling();
                     maybeShowWelcome();
                     maybeSeedPbs();
+                    maybeSubmitStats();
                 }
                 else
                 {
@@ -394,6 +410,71 @@ public class FinalBossPlugin extends Plugin
             List<PbSubmission> seeds = pbSeedService.collectLocalPbs();
             pbSubmitService.submit(rsn, seeds);
         });
+    }
+
+    // Reads the collection-log varps and CA varbits on the calling thread
+    // (client thread for varb events; verification runs on the executor,
+    // where plain varb reads are the same pragmatic pattern as
+    // maybeSeedPbs' world check). Submission itself goes to the executor.
+    private void maybeSubmitStats()
+    {
+        String rsn = currentRsn;
+        if (!verified || !config.enableStatsUpload() || rsn == null
+            || !PbTrackingService.isStandardWorld(client.getWorldType()))
+        {
+            return;
+        }
+        int clObtained = client.getVarpValue(VarPlayerID.COLLECTION_COUNT);
+        int clTotal = client.getVarpValue(VarPlayerID.COLLECTION_COUNT_MAX);
+        int caPoints = client.getVarbitValue(VarbitID.CA_POINTS);
+        if (clObtained <= 0 && caPoints <= 0)
+        {
+            // Nothing readable yet (fresh login, log data not loaded) —
+            // don't schedule no-op submissions on every varb change.
+            return;
+        }
+        if (!memberStatsService.shouldSubmit(clObtained, caPoints))
+        {
+            return;
+        }
+        String caTier = MemberStatsService.tierFor(caPoints, caTierThresholds());
+        executor.submit(() -> memberStatsService.submit(rsn, clObtained, clTotal, caPoints, caTier));
+    }
+
+    // Tier cutoffs read live from the game (Dink pattern): re-scales
+    // automatically when Jagex adds tasks. Zero-valued varbits (not yet
+    // loaded) are skipped; an empty map yields a null tier.
+    private TreeMap<Integer, String> caTierThresholds()
+    {
+        TreeMap<Integer, String> thresholds = new TreeMap<>();
+        putThreshold(thresholds, VarbitID.CA_THRESHOLD_EASY, "Easy");
+        putThreshold(thresholds, VarbitID.CA_THRESHOLD_MEDIUM, "Medium");
+        putThreshold(thresholds, VarbitID.CA_THRESHOLD_HARD, "Hard");
+        putThreshold(thresholds, VarbitID.CA_THRESHOLD_ELITE, "Elite");
+        putThreshold(thresholds, VarbitID.CA_THRESHOLD_MASTER, "Master");
+        putThreshold(thresholds, VarbitID.CA_THRESHOLD_GRANDMASTER, "Grandmaster");
+        return thresholds;
+    }
+
+    private void putThreshold(TreeMap<Integer, String> map, int varbitId, String tier)
+    {
+        int value = client.getVarbitValue(varbitId);
+        if (value > 0)
+        {
+            map.put(value, tier);
+        }
+    }
+
+    @Subscribe
+    public void onVarbitChanged(VarbitChanged event)
+    {
+        // Collection log count is a varp; CA points a varbit. Either
+        // rising mid-session re-submits (deduped by shouldSubmit).
+        if (event.getVarpId() == VarPlayerID.COLLECTION_COUNT
+            || event.getVarbitId() == VarbitID.CA_POINTS)
+        {
+            maybeSubmitStats();
+        }
     }
 
     private void showMainPanel()

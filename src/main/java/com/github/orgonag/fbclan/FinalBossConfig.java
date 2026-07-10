@@ -40,18 +40,16 @@ public interface FinalBossConfig extends Config
     )
     String leaderboardsSection = "leaderboards";
 
-    // Off by default: no drop data leaves the client unless the user
-    // explicitly opts in.
     @ConfigItem(
         keyName = "enableDropLogging",
         name = "Enable Drop Logging",
-        description = "Log valuable drops to the clan database (opt-in)",
+        description = "Log valuable drops to the clan database. On by default for verified clan members — disable to opt out.",
         section = dropLoggingSection,
         position = 0
     )
     default boolean enableDropLogging()
     {
-        return false;
+        return true;
     }
 
     @Range(min = DropTrackingService.MIN_THRESHOLD_GP)
@@ -121,12 +119,26 @@ public interface FinalBossConfig extends Config
         keyName = "enablePbUpload",
         name = "Upload personal bests",
         description = "Send your boss personal-best times (RSN, boss name, time) to the clan's leaderboard database. "
-            + "Viewing the Leaderboards tab works without this. Skipped on Leagues/Deadman/speedrun worlds.",
+            + "On by default — disable to opt out. Skipped on Leagues/Deadman/speedrun worlds.",
         section = leaderboardsSection,
         position = 0
     )
     default boolean enablePbUpload()
     {
-        return false;
+        return true;
+    }
+
+    @ConfigItem(
+        keyName = "enableStatsUpload",
+        name = "Upload collection log & CA",
+        description = "Send your collection log count and combat achievement points (with your RSN) "
+            + "to the clan's dashboard. On by default — disable to opt out. "
+            + "Skipped on Leagues/Deadman/speedrun worlds.",
+        section = leaderboardsSection,
+        position = 1
+    )
+    default boolean enableStatsUpload()
+    {
+        return true;
     }
 }

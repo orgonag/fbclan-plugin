@@ -90,8 +90,9 @@ public class MemberStatsService
 
     // Highest tier whose cumulative threshold is <= points. Thresholds
     // come from the live CA_THRESHOLD_* varbits (Dink pattern), so new
-    // tasks re-scale without a plugin update. Null = below Easy.
-    static String tierFor(int points, TreeMap<Integer, String> thresholds)
+    // tasks re-scale without a plugin update. Null = below Easy. Public:
+    // called cross-package from FinalBossPlugin.maybeSubmitStats().
+    public static String tierFor(int points, TreeMap<Integer, String> thresholds)
     {
         Map.Entry<Integer, String> e = thresholds.floorEntry(points);
         return e == null ? null : e.getValue();

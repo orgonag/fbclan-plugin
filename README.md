@@ -33,25 +33,33 @@ side panel. The panel unlocks after clan membership is verified.
   worlds are never uploaded. Viewing the leaderboard requires no opt-in.
 - **Welcome Message** — A clan-curated one-liner shown once per session
   in verified members' chatboxes.
+- **Clan Dashboard** — Weekly XP gained and EHB podiums sourced live from
+  the clan's Wise Old Man group, a collection-log top 20 and a combat
+  achievements top 20 (with tier badges) built from member uploads,
+  per-boss kill counts fetched lazily from Wise Old Man group hiscores,
+  and a "GP This Week" board summarizing the last 7 days of logged drops
+  — all as collapsible sections alongside the PB leaderboards.
 
 ## Setup
 
 1. Install from the RuneLite Plugin Hub
-2. (Optional) Enable drop logging / screenshots / PB upload in plugin
-   settings — all off by default
+2. (Optional) Adjust drop logging / screenshots / PB upload / stats upload
+   in plugin settings — drop logging, PB upload, and stats upload are on
+   by default for verified members; screenshots remain off by default
 3. (Optional) Set a Discord webhook URL for drop notifications
 
 ## Configuration
 
 | Setting | Description | Default |
 |---|---|---|
-| Enable Drop Logging | Log valuable drops to clan database (opt-in) | Off |
+| Enable Drop Logging | Log valuable drops to clan database | On |
 | Drop Threshold (GP) | Minimum GP value for a drop to be logged/screenshotted (1,000,000 minimum) | 1,000,000 |
 | Screenshot Drops | Upload a full client screenshot for drops above the threshold | Off |
 | Enable LFG | Enable Looking For Group feature | On |
 | LFG Timeout | Minutes before your LFG status expires and is removed (10–720) | 60 |
 | Discord Webhook URL | Discord webhook for drop notifications | Empty |
-| Upload personal bests | Send your boss PB times (RSN, boss, time) to the clan leaderboard | Off |
+| Upload personal bests | Send your boss PB times (RSN, boss, time) to the clan leaderboard | On |
+| Upload collection log & CA | Send your collection log count and combat achievement points to the clan dashboard | On |
 
 ## Data & Security
 
@@ -69,6 +77,7 @@ for personal bests, a server-side function:
 | `welcome_message` | Denied | Allowed | Denied | Denied |
 | `announcements` | Denied | Allowed | Denied | Denied |
 | `personal_bests` | Denied* | Denied* | Denied | Denied |
+| `member_stats` | Denied* | Denied* | Denied | Denied |
 
 \* Personal bests have **no direct table access at all**. Writes go
 through a `submit_pbs()` database function that only ever *improves* a
@@ -78,9 +87,15 @@ reads come from two read-only views (`pb_leaderboard`, top 3 per boss;
 slow time over someone's record, edit another member's rows, or delete
 anything.
 
-- **Drop logging, screenshots, and PB upload are opt-in** — all three
-  toggles default to off, so none of that data leaves the client unless
-  the user enables it
+\* Member stats (collection log count, combat achievement points) also
+have **no direct table access**. Writes go through a `submit_stats()`
+database function that only ever *improves* a member's stored counters
+(a lower resubmission is a silent no-op), and reads come from two
+read-only views (`cl_leaderboard`, `ca_leaderboard`, top 20 each).
+
+- **Drop logging, PB upload, and stats upload are on by default for
+  verified clan members and can be disabled individually** — screenshots
+  remain off by default and must be turned on explicitly
 - **Drops are append-only** — no one can modify or delete drop records
   via the API
 - **Screenshots are immutable** — uploaded once, never modifiable via the
