@@ -67,6 +67,8 @@ public final class PbMessageParser
     }
 
     // KC line carries the boss name; returns the canonical lowercase key.
+    // Rows with neither pre nor post are personal-chest openings core
+    // ignores for PBs; we ignore them too (they never precede a PB line).
     public static Optional<String> parseKillCount(String message)
     {
         Matcher m = KILLCOUNT_PATTERN.matcher(message);
