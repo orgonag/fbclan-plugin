@@ -492,7 +492,9 @@ public class LeaderboardPanel extends JPanel
         label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         label.setFont(FontManager.getRunescapeSmallFont());
         label.setHorizontalAlignment(SwingConstants.CENTER);
-        label.setAlignmentX(CENTER_ALIGNMENT);
+        // Same mixed-alignmentX rule as captionLabel: LEFT + full width.
+        label.setAlignmentX(LEFT_ALIGNMENT);
+        label.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
         label.setBorder(BorderFactory.createEmptyBorder(6, 0, 6, 0));
         return label;
     }
@@ -503,7 +505,12 @@ public class LeaderboardPanel extends JPanel
         label.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
         label.setFont(FontManager.getRunescapeSmallFont());
         label.setHorizontalAlignment(SwingConstants.CENTER);
-        label.setAlignmentX(CENTER_ALIGNMENT);
+        // LEFT + full-width max, NOT CENTER_ALIGNMENT: BoxLayout shifts
+        // children sideways when siblings mix alignmentX values (this is
+        // what squeezed the podium off-center). Text centers via
+        // horizontalAlignment inside the full-width label instead.
+        label.setAlignmentX(LEFT_ALIGNMENT);
+        label.setMaximumSize(new Dimension(Integer.MAX_VALUE, 18));
         label.setBorder(BorderFactory.createEmptyBorder(2, 0, 4, 0));
         return label;
     }
