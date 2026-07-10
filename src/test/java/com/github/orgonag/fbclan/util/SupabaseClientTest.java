@@ -19,4 +19,11 @@ public class SupabaseClientTest
         String url = SupabaseClient.buildUrl("lfg_entries", "select=*&order=updated_at.desc");
         assertTrue(url.contains("/rest/v1/lfg_entries?select=*&order=updated_at.desc"));
     }
+
+    @Test
+    public void testBuildRpcUrl()
+    {
+        assertEquals("https://rzhtoqadvbxylwjndnlo.supabase.co/rest/v1/rpc/submit_pbs",
+            SupabaseClient.buildRpcUrl("submit_pbs"));
+    }
 }

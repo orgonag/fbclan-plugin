@@ -50,6 +50,11 @@ public class SupabaseClient
         return PROJECT_URL + "/storage/v1/object/public/" + bucket + "/" + path;
     }
 
+    public static String buildRpcUrl(String function)
+    {
+        return PROJECT_URL + "/rest/v1/rpc/" + function;
+    }
+
     public static Request.Builder baseRequest(String url)
     {
         return new Request.Builder()
@@ -173,6 +178,29 @@ public class SupabaseClient
             if (!response.isSuccessful())
             {
                 log.warn("Supabase DELETE failed: {} {}", response.code(), response.message());
+                return false;
+            }
+            return true;
+        }
+    }
+
+    // Calls a Postgres function exposed via PostgREST. Used for writes that
+    // need server-side validation the anon key can't be trusted with
+    // (e.g. submit_pbs only accepts a time that beats the existing one).
+    public static boolean rpc(OkHttpClient httpClient, String function, JsonObject args) throws IOException
+    {
+        String url = buildRpcUrl(function);
+        RequestBody body = RequestBody.create(JSON, args.toString());
+        Request request = baseRequest(url)
+            .header("Content-Type", "application/json")
+            .post(body)
+            .build();
+
+        try (Response response = httpClient.newCall(request).execute())
+        {
+            if (!response.isSuccessful())
+            {
+                log.warn("Supabase RPC {} failed: {} {}", function, response.code(), response.message());
                 return false;
             }
             return true;
