@@ -94,8 +94,8 @@ import okhttp3.OkHttpClient;
 @Slf4j
 @PluginDescriptor(
     name = "Final Boss",
-    description = "Clan tools for Final Boss — drop logging, LFG, and more",
-    tags = {"clan", "final boss", "drops", "lfg", "looking for group"}
+    description = "Clan tools for Final Boss — announcements, drop log, LFG, and PB leaderboards",
+    tags = {"clan", "final boss", "drops", "lfg", "looking for group", "leaderboard", "personal best", "pb", "announcements"}
 )
 public class FinalBossPlugin extends Plugin
 {
