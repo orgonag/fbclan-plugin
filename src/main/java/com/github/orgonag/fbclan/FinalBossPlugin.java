@@ -24,6 +24,7 @@ import com.github.orgonag.fbclan.stats.MemberStatsService;
 import com.github.orgonag.fbclan.stats.StatsUploadCoordinator;
 import com.github.orgonag.fbclan.welcome.WelcomeMessagePresenter;
 import com.github.orgonag.fbclan.welcome.WelcomeMessageService;
+import com.github.orgonag.fbclan.wom.VerificationController;
 import com.github.orgonag.fbclan.wom.WomVerificationService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -64,7 +65,9 @@ import okhttp3.OkHttpClient;
  * External services this plugin communicates with:
  * <ul>
  * <li>Wise Old Man API (read-only): checks whether the logged-in player is a
- *     member of the clan's WOM group. The panel stays locked for non-members.</li>
+ *     member of the clan's WOM group. The panel stays locked for non-members.
+ *     This once-per-login verification call is the plugin's single
+ *     deliberate non-Supabase data source.</li>
  * <li>Supabase (clan-owned database): stores drop log rows, LFG statuses,
  *     (opt-in) drop screenshots, boss personal-best times, and collection
  *     log counts and combat achievement points (opt-out). Only ever sends
@@ -128,7 +131,6 @@ public class FinalBossPlugin extends Plugin
     private FinalBossPanel mainPanel;
     private RootPanel rootPanel;
 
-    private WomVerificationService womService;
     private SupabaseDropService dropService;
     private DiscordWebhookService discordService;
     private DropScreenshotService screenshotService;
@@ -141,6 +143,7 @@ public class FinalBossPlugin extends Plugin
     private LeaderboardService leaderboardService;
     private StatsUploadCoordinator statsUploadCoordinator;
     private DashboardService dashboardService;
+    private VerificationController verificationController;
 
     private DropLogPanel dropLogPanel;
     private LfgPanel lfgPanel;
@@ -160,7 +163,7 @@ public class FinalBossPlugin extends Plugin
     @Override
     protected void startUp()
     {
-        womService = new WomVerificationService(okHttpClient);
+        WomVerificationService womService = new WomVerificationService(okHttpClient);
         dropService = new SupabaseDropService(okHttpClient);
         discordService = new DiscordWebhookService(okHttpClient);
         screenshotService = new DropScreenshotService(okHttpClient);
@@ -209,7 +212,48 @@ public class FinalBossPlugin extends Plugin
         mainPanel = new FinalBossPanel(announcementsPanel, dropLogPanel, lfgPanel, leaderboardPanel);
         rootPanel = new RootPanel(lockedPanel, mainPanel);
 
-        lockedPanel.setRetryAction(e -> verifyMembership());
+        verificationController = new VerificationController(client, clientThread, executor,
+            womService, session, new VerificationController.Listener()
+        {
+            @Override
+            public void onRsnCaptured(String rsn)
+            {
+                SwingUtilities.invokeLater(() -> lfgPanel.setCurrentRsn(rsn));
+            }
+
+            @Override
+            public void onVerifying()
+            {
+                SwingUtilities.invokeLater(() -> lockedPanel.showVerifying());
+            }
+
+            @Override
+            public void onVerified()
+            {
+                SwingUtilities.invokeLater(() -> {
+                    rootPanel.showMain();
+                    mainPanel.refreshActiveTab();
+                });
+                startPolling();
+                welcomePresenter.maybeShow();
+                pbUploadCoordinator.maybeSeed();
+                statsUploadCoordinator.maybeSubmit();
+            }
+
+            @Override
+            public void onNotMember()
+            {
+                SwingUtilities.invokeLater(() -> lockedPanel.showNotMember());
+            }
+
+            @Override
+            public void onError()
+            {
+                SwingUtilities.invokeLater(() -> lockedPanel.showError());
+            }
+        });
+
+        lockedPanel.setRetryAction(e -> verificationController.verify());
 
         // One button for the plugin's lifetime; verification flips the
         // RootPanel card, so an open sidebar stays open.
@@ -225,7 +269,7 @@ public class FinalBossPlugin extends Plugin
         // fire, so kick off verification directly.
         if (client.getGameState() == GameState.LOGGED_IN)
         {
-            kickOffInitialVerification(0);
+            verificationController.kickOff(0);
         }
     }
 
@@ -243,8 +287,7 @@ public class FinalBossPlugin extends Plugin
         stopPolling();
 
         clientToolbar.removeNavigation(navButton);
-        session.reset();
-        womService.clearCache();
+        verificationController.reset();
     }
 
     @Subscribe
@@ -258,7 +301,7 @@ public class FinalBossPlugin extends Plugin
             }
             // 3s delay gives the login flow time to settle before we read
             // getLocalPlayer().getName().
-            kickOffInitialVerification(3);
+            verificationController.kickOff(3);
         }
         else if (event.getGameState() == GameState.LOGIN_SCREEN)
         {
@@ -266,60 +309,13 @@ public class FinalBossPlugin extends Plugin
             {
                 return;
             }
-            session.reset();
-            womService.clearCache();
+            verificationController.reset();
             stopPolling();
             SwingUtilities.invokeLater(() -> {
                 rootPanel.showLocked();
                 lockedPanel.showVerifying();
             });
         }
-    }
-
-    // Captures the player's RSN and triggers WOM verification, after an
-    // optional delay to let the login flow settle.
-    private void kickOffInitialVerification(long delaySeconds)
-    {
-        executor.schedule(() -> clientThread.invokeLater(() -> {
-            if (client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
-            {
-                return;
-            }
-            String rsn = client.getLocalPlayer().getName();
-            session.setRsn(rsn);
-            SwingUtilities.invokeLater(() -> lfgPanel.setCurrentRsn(rsn));
-            verifyMembership();
-        }), delaySeconds, TimeUnit.SECONDS);
-    }
-
-    private void verifyMembership()
-    {
-        SwingUtilities.invokeLater(() -> lockedPanel.showVerifying());
-
-        executor.submit(() -> {
-            try
-            {
-                boolean isMember = womService.verify(session.getRsn());
-                if (isMember)
-                {
-                    session.setVerified(true);
-                    SwingUtilities.invokeLater(this::showMainPanel);
-                    startPolling();
-                    welcomePresenter.maybeShow();
-                    pbUploadCoordinator.maybeSeed();
-                    statsUploadCoordinator.maybeSubmit();
-                }
-                else
-                {
-                    SwingUtilities.invokeLater(() -> lockedPanel.showNotMember());
-                }
-            }
-            catch (Exception e)
-            {
-                log.warn("WOM verification failed", e);
-                SwingUtilities.invokeLater(() -> lockedPanel.showError());
-            }
-        });
     }
 
     @Subscribe
@@ -332,12 +328,6 @@ public class FinalBossPlugin extends Plugin
         {
             statsUploadCoordinator.maybeSubmit();
         }
-    }
-
-    private void showMainPanel()
-    {
-        rootPanel.showMain();
-        mainPanel.refreshActiveTab();
     }
 
     private void startPolling()
