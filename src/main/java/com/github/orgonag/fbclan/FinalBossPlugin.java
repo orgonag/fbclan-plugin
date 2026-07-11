@@ -16,9 +16,9 @@ import com.github.orgonag.fbclan.panel.LockedPanel;
 import com.github.orgonag.fbclan.panel.RootPanel;
 import com.github.orgonag.fbclan.pb.LeaderboardService;
 import com.github.orgonag.fbclan.pb.PbSeedService;
-import com.github.orgonag.fbclan.pb.PbSubmission;
 import com.github.orgonag.fbclan.pb.PbSubmitService;
 import com.github.orgonag.fbclan.pb.PbTrackingService;
+import com.github.orgonag.fbclan.pb.PbUploadCoordinator;
 import com.github.orgonag.fbclan.stats.DashboardService;
 import com.github.orgonag.fbclan.stats.MemberStatsService;
 import com.github.orgonag.fbclan.util.WelcomeMessageService;
@@ -27,7 +27,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -145,9 +144,7 @@ public class FinalBossPlugin extends Plugin
     private NotableItemsService notableItemsService;
     private WelcomeMessageService welcomeMessageService;
     private AnnouncementsService announcementsService;
-    private PbTrackingService pbTrackingService;
-    private PbSubmitService pbSubmitService;
-    private PbSeedService pbSeedService;
+    private PbUploadCoordinator pbUploadCoordinator;
     private LeaderboardService leaderboardService;
     private MemberStatsService memberStatsService;
     private DashboardService dashboardService;
@@ -164,10 +161,6 @@ public class FinalBossPlugin extends Plugin
     // plugin instance across toggle off/on, so this is reset in startUp
     // rather than relying on field initialization.
     private volatile boolean welcomeShown = false;
-
-    // Once-per-session latch for the PB seed upload (same reuse caveat
-    // as welcomeShown: reset in startUp, not field init).
-    private volatile boolean pbSeeded = false;
 
     private final ClanSession session = new ClanSession();
     private ScheduledFuture<?> lfgPollFuture;
@@ -196,7 +189,6 @@ public class FinalBossPlugin extends Plugin
             discordService, screenshotService);
 
         welcomeShown = false;
-        pbSeeded = false;
         welcomeMessageService = new WelcomeMessageService(okHttpClient);
         // Fetch once per session, then attempt display — covers the case where
         // verification already finished before the fetch (maybeShowWelcome is
@@ -207,9 +199,11 @@ public class FinalBossPlugin extends Plugin
         });
 
         announcementsService = new AnnouncementsService(okHttpClient);
-        pbTrackingService = new PbTrackingService(this::tobTeamSize, this::toaTeamSize);
-        pbSubmitService = new PbSubmitService(okHttpClient);
-        pbSeedService = new PbSeedService(configManager);
+        PbSubmitService pbSubmitService = new PbSubmitService(okHttpClient);
+        PbSeedService pbSeedService = new PbSeedService(configManager);
+        pbUploadCoordinator = new PbUploadCoordinator(client, config, session, executor,
+            pbSubmitService, pbSeedService);
+        pbUploadCoordinator.reset();
         leaderboardService = new LeaderboardService(okHttpClient);
         memberStatsService = new MemberStatsService(okHttpClient);
         dashboardService = new DashboardService(okHttpClient);
@@ -332,7 +326,7 @@ public class FinalBossPlugin extends Plugin
                     SwingUtilities.invokeLater(this::showMainPanel);
                     startPolling();
                     maybeShowWelcome();
-                    maybeSeedPbs();
+                    pbUploadCoordinator.maybeSeed();
                     maybeSubmitStats();
                 }
                 else
@@ -384,28 +378,11 @@ public class FinalBossPlugin extends Plugin
         });
     }
 
-    private void maybeSeedPbs()
-    {
-        String rsn = session.getRsn();
-        if (!session.canUpload() || pbSeeded || !config.enablePbUpload())
-        {
-            return;
-        }
-        if (!PbTrackingService.isStandardWorld(client.getWorldType()))
-        {
-            return;
-        }
-        pbSeeded = true;
-        executor.submit(() -> {
-            List<PbSubmission> seeds = pbSeedService.collectLocalPbs();
-            pbSubmitService.submit(rsn, seeds);
-        });
-    }
-
     // Reads the collection-log varps and CA varbits on the calling thread
     // (client thread for varb events; verification runs on the executor,
     // where plain varb reads are the same pragmatic pattern as
-    // maybeSeedPbs' world check). Submission itself goes to the executor.
+    // PbUploadCoordinator.maybeSeed's world check). Submission itself goes
+    // to the executor.
     private void maybeSubmitStats()
     {
         String rsn = session.getRsn();
@@ -612,57 +589,12 @@ public class FinalBossPlugin extends Plugin
         dropCaptureService.handleLoot(event.getName(), event.getItems());
     }
 
-    // Pets never appear in loot events — the game only announces them in
-    // chat. They are untradeable (GE value 0), so they bypass the GP
-    // threshold and are always logged while drop logging is enabled.
     @Subscribe
     public void onChatMessage(ChatMessage event)
     {
-        handlePbChatMessage(event);
+        pbUploadCoordinator.onChatMessage(event);
+        // Pets never appear in loot events — the game only announces them
+        // in chat, so the drop pipeline listens here too.
         dropCaptureService.handlePetChatMessage(event);
-    }
-
-    private void handlePbChatMessage(ChatMessage event)
-    {
-        ChatMessageType type = event.getType();
-        // Core ChatCommands accepts these three for PB lines; TRADE is
-        // irrelevant here.
-        if (type != ChatMessageType.GAMEMESSAGE && type != ChatMessageType.SPAM
-            && type != ChatMessageType.FRIENDSCHATNOTIFICATION)
-        {
-            return;
-        }
-        String rsn = session.getRsn();
-        if (!session.canUpload() || !config.enablePbUpload()
-            || !PbTrackingService.isStandardWorld(client.getWorldType()))
-        {
-            return;
-        }
-        List<PbSubmission> subs = pbTrackingService.onGameMessage(event.getMessage(), client.getTickCount());
-        if (!subs.isEmpty())
-        {
-            executor.submit(() -> pbSubmitService.submit(rsn, subs));
-        }
-    }
-
-    private int tobTeamSize()
-    {
-        return Math.min(client.getVarbitValue(VarbitID.TOB_CLIENT_P0), 1) +
-            Math.min(client.getVarbitValue(VarbitID.TOB_CLIENT_P1), 1) +
-            Math.min(client.getVarbitValue(VarbitID.TOB_CLIENT_P2), 1) +
-            Math.min(client.getVarbitValue(VarbitID.TOB_CLIENT_P3), 1) +
-            Math.min(client.getVarbitValue(VarbitID.TOB_CLIENT_P4), 1);
-    }
-
-    private int toaTeamSize()
-    {
-        return Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P0), 1) +
-            Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P1), 1) +
-            Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P2), 1) +
-            Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P3), 1) +
-            Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P4), 1) +
-            Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P5), 1) +
-            Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P6), 1) +
-            Math.min(client.getVarbitValue(VarbitID.TOA_CLIENT_P7), 1);
     }
 }
