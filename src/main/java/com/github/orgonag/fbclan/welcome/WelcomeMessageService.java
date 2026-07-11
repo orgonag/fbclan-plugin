@@ -1,5 +1,6 @@
-package com.github.orgonag.fbclan.util;
+package com.github.orgonag.fbclan.welcome;
 
+import com.github.orgonag.fbclan.util.SupabaseClient;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import lombok.extern.slf4j.Slf4j;

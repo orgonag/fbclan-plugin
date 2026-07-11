@@ -1,4 +1,4 @@
-package com.github.orgonag.fbclan.util;
+package com.github.orgonag.fbclan.welcome;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;

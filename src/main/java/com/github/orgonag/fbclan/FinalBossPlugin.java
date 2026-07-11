@@ -21,7 +21,8 @@ import com.github.orgonag.fbclan.pb.PbUploadCoordinator;
 import com.github.orgonag.fbclan.stats.DashboardService;
 import com.github.orgonag.fbclan.stats.MemberStatsService;
 import com.github.orgonag.fbclan.stats.StatsUploadCoordinator;
-import com.github.orgonag.fbclan.util.WelcomeMessageService;
+import com.github.orgonag.fbclan.welcome.WelcomeMessagePresenter;
+import com.github.orgonag.fbclan.welcome.WelcomeMessageService;
 import com.github.orgonag.fbclan.wom.WomVerificationService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -34,7 +35,6 @@ import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.clan.ClanChannel;
@@ -141,7 +141,7 @@ public class FinalBossPlugin extends Plugin
     private DropCaptureService dropCaptureService;
     private LfgService lfgService;
     private NotableItemsService notableItemsService;
-    private WelcomeMessageService welcomeMessageService;
+    private WelcomeMessagePresenter welcomePresenter;
     private AnnouncementsService announcementsService;
     private PbUploadCoordinator pbUploadCoordinator;
     private LeaderboardService leaderboardService;
@@ -152,14 +152,6 @@ public class FinalBossPlugin extends Plugin
     private LfgPanel lfgPanel;
     private AnnouncementsPanel announcementsPanel;
     private LeaderboardPanel leaderboardPanel;
-
-    // Hex colour for the welcome message chat line (RuneLite <col=> tag).
-    private static final String WELCOME_COLOR = "a020f0";
-
-    // Once-per-session latch for the welcome message. RuneLite REUSES the
-    // plugin instance across toggle off/on, so this is reset in startUp
-    // rather than relying on field initialization.
-    private volatile boolean welcomeShown = false;
 
     private final ClanSession session = new ClanSession();
     private ScheduledFuture<?> lfgPollFuture;
@@ -187,14 +179,15 @@ public class FinalBossPlugin extends Plugin
             drawManager, partyService, executor, notableItemsService, dropService,
             discordService, screenshotService);
 
-        welcomeShown = false;
-        welcomeMessageService = new WelcomeMessageService(okHttpClient);
+        WelcomeMessageService welcomeMessageService = new WelcomeMessageService(okHttpClient);
+        welcomePresenter = new WelcomeMessagePresenter(client, clientThread, session, welcomeMessageService);
+        welcomePresenter.reset();
         // Fetch once per session, then attempt display — covers the case where
-        // verification already finished before the fetch (maybeShowWelcome is
-        // also called on verification success, whichever comes last wins).
+        // verification already finished before the fetch (maybeShow is also
+        // called on verification success, whichever comes last wins).
         executor.submit(() -> {
             welcomeMessageService.refresh();
-            maybeShowWelcome();
+            welcomePresenter.maybeShow();
         });
 
         announcementsService = new AnnouncementsService(okHttpClient);
@@ -326,7 +319,7 @@ public class FinalBossPlugin extends Plugin
                     session.setVerified(true);
                     SwingUtilities.invokeLater(this::showMainPanel);
                     startPolling();
-                    maybeShowWelcome();
+                    welcomePresenter.maybeShow();
                     pbUploadCoordinator.maybeSeed();
                     statsUploadCoordinator.maybeSubmit();
                 }
@@ -340,42 +333,6 @@ public class FinalBossPlugin extends Plugin
                 log.warn("WOM verification failed", e);
                 SwingUtilities.invokeLater(() -> lockedPanel.showError());
             }
-        });
-    }
-
-    // Called when the startup fetch completes AND when verification succeeds;
-    // whichever happens last shows the message. Both callers run on executor
-    // threads — synchronized so they can't double-print.
-    private synchronized void maybeShowWelcome()
-    {
-        String message = welcomeMessageService.getMessage();
-        if (!session.isVerified() || welcomeShown || message.isEmpty())
-        {
-            return;
-        }
-        welcomeShown = true;
-        clientThread.invokeLater(() ->
-        {
-            GameState gs = client.getGameState();
-            if (gs == GameState.LOADING || gs == GameState.HOPPING || gs == GameState.CONNECTION_LOST)
-            {
-                // Transient state — try again next client tick.
-                return false;
-            }
-            if (!session.isVerified() || gs != GameState.LOGGED_IN)
-            {
-                // True logout (or plugin shut down mid-flight) — un-latch so the
-                // next verification success re-attempts.
-                welcomeShown = false;
-                return true;
-            }
-            // postEvent=false keeps our own printed text out of the chat-event
-            // pipeline (onChatMessage's pet matching would otherwise see it).
-            // The col tag wraps the already-sanitized message (all angle
-            // brackets stripped upstream), so the sheet text cannot alter it.
-            client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
-                "<col=" + WELCOME_COLOR + ">[Final Boss] " + message + "</col>", null, false);
-            return true;
         });
     }
 
