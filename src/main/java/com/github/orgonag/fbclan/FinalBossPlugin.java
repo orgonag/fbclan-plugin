@@ -17,10 +17,10 @@ import com.github.orgonag.fbclan.panel.RootPanel;
 import com.github.orgonag.fbclan.pb.LeaderboardService;
 import com.github.orgonag.fbclan.pb.PbSeedService;
 import com.github.orgonag.fbclan.pb.PbSubmitService;
-import com.github.orgonag.fbclan.pb.PbTrackingService;
 import com.github.orgonag.fbclan.pb.PbUploadCoordinator;
 import com.github.orgonag.fbclan.stats.DashboardService;
 import com.github.orgonag.fbclan.stats.MemberStatsService;
+import com.github.orgonag.fbclan.stats.StatsUploadCoordinator;
 import com.github.orgonag.fbclan.util.WelcomeMessageService;
 import com.github.orgonag.fbclan.wom.WomVerificationService;
 import java.nio.charset.StandardCharsets;
@@ -28,7 +28,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -146,7 +145,7 @@ public class FinalBossPlugin extends Plugin
     private AnnouncementsService announcementsService;
     private PbUploadCoordinator pbUploadCoordinator;
     private LeaderboardService leaderboardService;
-    private MemberStatsService memberStatsService;
+    private StatsUploadCoordinator statsUploadCoordinator;
     private DashboardService dashboardService;
 
     private DropLogPanel dropLogPanel;
@@ -205,7 +204,9 @@ public class FinalBossPlugin extends Plugin
             pbSubmitService, pbSeedService);
         pbUploadCoordinator.reset();
         leaderboardService = new LeaderboardService(okHttpClient);
-        memberStatsService = new MemberStatsService(okHttpClient);
+        MemberStatsService memberStatsService = new MemberStatsService(okHttpClient);
+        statsUploadCoordinator = new StatsUploadCoordinator(client, config, session,
+            executor, memberStatsService);
         dashboardService = new DashboardService(okHttpClient);
 
         dropLogPanel = new DropLogPanel(dropService, executor);
@@ -327,7 +328,7 @@ public class FinalBossPlugin extends Plugin
                     startPolling();
                     maybeShowWelcome();
                     pbUploadCoordinator.maybeSeed();
-                    maybeSubmitStats();
+                    statsUploadCoordinator.maybeSubmit();
                 }
                 else
                 {
@@ -378,60 +379,6 @@ public class FinalBossPlugin extends Plugin
         });
     }
 
-    // Reads the collection-log varps and CA varbits on the calling thread
-    // (client thread for varb events; verification runs on the executor,
-    // where plain varb reads are the same pragmatic pattern as
-    // PbUploadCoordinator.maybeSeed's world check). Submission itself goes
-    // to the executor.
-    private void maybeSubmitStats()
-    {
-        String rsn = session.getRsn();
-        if (!session.canUpload() || !config.enableStatsUpload()
-            || !PbTrackingService.isStandardWorld(client.getWorldType()))
-        {
-            return;
-        }
-        int clObtained = client.getVarpValue(VarPlayerID.COLLECTION_COUNT);
-        int clTotal = client.getVarpValue(VarPlayerID.COLLECTION_COUNT_MAX);
-        int caPoints = client.getVarbitValue(VarbitID.CA_POINTS);
-        if (clObtained <= 0 && caPoints <= 0)
-        {
-            // Nothing readable yet (fresh login, log data not loaded) —
-            // don't schedule no-op submissions on every varb change.
-            return;
-        }
-        if (!memberStatsService.shouldSubmit(clObtained, caPoints))
-        {
-            return;
-        }
-        String caTier = MemberStatsService.tierFor(caPoints, caTierThresholds());
-        executor.submit(() -> memberStatsService.submit(rsn, clObtained, clTotal, caPoints, caTier));
-    }
-
-    // Tier cutoffs read live from the game (Dink pattern): re-scales
-    // automatically when Jagex adds tasks. Zero-valued varbits (not yet
-    // loaded) are skipped; an empty map yields a null tier.
-    private TreeMap<Integer, String> caTierThresholds()
-    {
-        TreeMap<Integer, String> thresholds = new TreeMap<>();
-        putThreshold(thresholds, VarbitID.CA_THRESHOLD_EASY, "Easy");
-        putThreshold(thresholds, VarbitID.CA_THRESHOLD_MEDIUM, "Medium");
-        putThreshold(thresholds, VarbitID.CA_THRESHOLD_HARD, "Hard");
-        putThreshold(thresholds, VarbitID.CA_THRESHOLD_ELITE, "Elite");
-        putThreshold(thresholds, VarbitID.CA_THRESHOLD_MASTER, "Master");
-        putThreshold(thresholds, VarbitID.CA_THRESHOLD_GRANDMASTER, "Grandmaster");
-        return thresholds;
-    }
-
-    private void putThreshold(TreeMap<Integer, String> map, int varbitId, String tier)
-    {
-        int value = client.getVarbitValue(varbitId);
-        if (value > 0)
-        {
-            map.put(value, tier);
-        }
-    }
-
     @Subscribe
     public void onVarbitChanged(VarbitChanged event)
     {
@@ -440,7 +387,7 @@ public class FinalBossPlugin extends Plugin
         if (event.getVarpId() == VarPlayerID.COLLECTION_COUNT
             || event.getVarbitId() == VarbitID.CA_POINTS)
         {
-            maybeSubmitStats();
+            statsUploadCoordinator.maybeSubmit();
         }
     }
 
