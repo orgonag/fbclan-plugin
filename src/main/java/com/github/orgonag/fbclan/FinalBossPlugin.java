@@ -237,7 +237,10 @@ public class FinalBossPlugin extends Plugin
                 startPolling();
                 welcomePresenter.maybeShow();
                 pbUploadCoordinator.maybeSeed();
-                statsUploadCoordinator.maybeSubmit();
+                // Varp/varbit reads assert the client thread (visible with
+                // -ea in the dev client) — hop before submitting stats. The
+                // varb-change path already arrives on the client thread.
+                clientThread.invokeLater(statsUploadCoordinator::maybeSubmit);
             }
 
             @Override

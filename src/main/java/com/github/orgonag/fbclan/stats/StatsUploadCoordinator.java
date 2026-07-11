@@ -32,11 +32,10 @@ public class StatsUploadCoordinator
         this.memberStatsService = memberStatsService;
     }
 
-    // Reads the collection-log varps and CA varbits on the calling thread
-    // (client thread for varb events; verification runs on the executor,
-    // where plain varb reads are the same pragmatic pattern as
-    // PbUploadCoordinator.maybeSeed's world check). Submission itself goes
-    // to the executor.
+    // Reads the collection-log varps and CA varbits — both callers arrive
+    // on the client thread (varb events natively; the verification path
+    // hops via clientThread.invokeLater, since varp reads assert the
+    // client thread under -ea). Submission itself goes to the executor.
     public void maybeSubmit()
     {
         String rsn = session.getRsn();
