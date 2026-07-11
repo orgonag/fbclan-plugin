@@ -12,11 +12,11 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Static WOM helpers: boss metric slugs, display names, and parsers for
+ * Static WOM parsing helpers: boss metric slugs, display names, and parsers for
  * raw WOM response arrays served from the wom_cache table (the plugin no
  * longer calls WOM directly — an hourly Apps Script fills the cache).
  */
-public final class WomStatsClient
+public final class WomStatsParser
 {
     // Complete WOM boss metric slug list (verified against
     // wise-old-man/server/src/types/metric.enum.ts, 2026-07-10),
@@ -57,7 +57,7 @@ public final class WomStatsClient
         DISPLAY_OVERRIDES.put("phosanis_nightmare", "Phosani's Nightmare");
     }
 
-    private WomStatsClient()
+    private WomStatsParser()
     {
     }
 

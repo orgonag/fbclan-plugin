@@ -2,7 +2,7 @@ package com.github.orgonag.fbclan.stats;
 
 import com.github.orgonag.fbclan.util.SupabaseClient;
 import com.github.orgonag.fbclan.wom.WomEntry;
-import com.github.orgonag.fbclan.wom.WomStatsClient;
+import com.github.orgonag.fbclan.wom.WomStatsParser;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import java.util.ArrayList;
@@ -103,7 +103,7 @@ public class DashboardService
         }
     }
 
-    // payload is the RAW WOM response array, so the WomStatsClient
+    // payload is the RAW WOM response array, so the WomStatsParser
     // parsers apply unchanged. Unknown metrics are ignored (forward
     // compatible). An absent/empty table leaves everything null/empty →
     // the panel shows "waiting for WOM sync".
@@ -129,15 +129,15 @@ public class DashboardService
             }
             if ("gains_overall_week".equals(metric))
             {
-                xp = WomStatsClient.parseGains(payload);
+                xp = WomStatsParser.parseGains(payload);
             }
             else if ("gains_ehb_week".equals(metric))
             {
-                ehb = WomStatsClient.parseGains(payload);
+                ehb = WomStatsParser.parseGains(payload);
             }
             else if (metric.startsWith("kc_"))
             {
-                kc.put(metric.substring(3), WomStatsClient.parseHiscores(payload));
+                kc.put(metric.substring(3), WomStatsParser.parseHiscores(payload));
             }
         }
         if (xp != null)

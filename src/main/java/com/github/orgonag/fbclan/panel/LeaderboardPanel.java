@@ -9,7 +9,7 @@ import com.github.orgonag.fbclan.stats.DashboardService;
 import com.github.orgonag.fbclan.stats.GpWeek;
 import com.github.orgonag.fbclan.stats.StatFormat;
 import com.github.orgonag.fbclan.wom.WomEntry;
-import com.github.orgonag.fbclan.wom.WomStatsClient;
+import com.github.orgonag.fbclan.wom.WomStatsParser;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -327,10 +327,10 @@ public class LeaderboardPanel extends JPanel
             content.add(PanelUi.emptyStateLabel("waiting for WOM sync"));
             return;
         }
-        for (String slug : WomStatsClient.BOSS_SLUGS)
+        for (String slug : WomStatsParser.BOSS_SLUGS)
         {
             boolean open = expandedKcBosses.contains(slug);
-            content.add(CollapsibleSection.toggleHeader(WomStatsClient.bossDisplayName(slug), open, () -> {
+            content.add(CollapsibleSection.toggleHeader(WomStatsParser.bossDisplayName(slug), open, () -> {
                 if (!expandedKcBosses.remove(slug))
                 {
                     expandedKcBosses.add(slug);
