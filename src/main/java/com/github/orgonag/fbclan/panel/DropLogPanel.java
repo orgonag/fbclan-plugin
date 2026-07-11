@@ -2,8 +2,7 @@ package com.github.orgonag.fbclan.panel;
 
 import com.github.orgonag.fbclan.drops.DropScreenshotService;
 import com.github.orgonag.fbclan.drops.DropTrackingService;
-import com.github.orgonag.fbclan.drops.SupabaseDropService;
-import com.google.gson.JsonArray;
+import com.github.orgonag.fbclan.drops.DropLogService;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.awt.BorderLayout;
@@ -21,19 +20,17 @@ import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.SwingConstants;
-import javax.swing.SwingUtilities;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.util.LinkBrowser;
 
 public class DropLogPanel extends JPanel
 {
-    private final SupabaseDropService dropService;
+    private final DropLogService dropService;
     private final ScheduledExecutorService executor;
     private final JPanel listPanel;
 
-    public DropLogPanel(SupabaseDropService dropService, ScheduledExecutorService executor)
+    public DropLogPanel(DropLogService dropService, ScheduledExecutorService executor)
     {
         this.dropService = dropService;
         this.executor = executor;
@@ -55,30 +52,21 @@ public class DropLogPanel extends JPanel
 
     public void refresh()
     {
-        executor.submit(() -> {
-            JsonArray drops = dropService.getRecentDrops(50);
-            SwingUtilities.invokeLater(() -> {
-                listPanel.removeAll();
-
-                if (drops.size() == 0)
+        PanelUi.asyncRefresh(executor, () -> dropService.getRecentDrops(50), drops -> {
+            listPanel.removeAll();
+            if (drops.size() == 0)
+            {
+                listPanel.add(PanelUi.emptyStateLabel("No drops logged yet."));
+            }
+            else
+            {
+                for (JsonElement element : drops)
                 {
-                    JLabel emptyLabel = new JLabel("No drops logged yet.");
-                    emptyLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-                    emptyLabel.setHorizontalAlignment(SwingConstants.CENTER);
-                    listPanel.add(emptyLabel);
+                    listPanel.add(createDropRow(element.getAsJsonObject()));
                 }
-                else
-                {
-                    for (JsonElement element : drops)
-                    {
-                        JsonObject drop = element.getAsJsonObject();
-                        listPanel.add(createDropRow(drop));
-                    }
-                }
-
-                listPanel.revalidate();
-                listPanel.repaint();
-            });
+            }
+            listPanel.revalidate();
+            listPanel.repaint();
         });
     }
 

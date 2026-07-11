@@ -3,7 +3,6 @@ package com.github.orgonag.fbclan.announcements;
 import com.github.orgonag.fbclan.util.SupabaseClient;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -41,23 +40,16 @@ public class AnnouncementsService
         return announcements;
     }
 
-    // Network failure (IOException) keeps the previous list (empty on first
-    // run); HTTP errors surface from SupabaseClient.get as an empty array
-    // and clear the list. RuntimeException is caught so a malformed 2xx
-    // body can't vanish into the executor's uninspected Future.
     public void refresh()
     {
-        try
+        JsonArray rows = SupabaseClient.tryGet(httpClient, "announcements",
+            "select=posted_at,title,body&order=posted_at.desc,sort_order.asc", "announcements");
+        if (rows == null)
         {
-            JsonArray rows = SupabaseClient.get(httpClient, "announcements",
-                "select=posted_at,title,body&order=posted_at.desc,sort_order.asc");
-            announcements = parseAnnouncements(rows);
-            log.debug("Loaded {} announcement(s)", announcements.size());
+            return;
         }
-        catch (IOException | RuntimeException e)
-        {
-            log.warn("Failed to fetch announcements", e);
-        }
+        announcements = parseAnnouncements(rows);
+        log.debug("Loaded {} announcement(s)", announcements.size());
     }
 
     // No tag stripping here (unlike WelcomeMessageService): the panel

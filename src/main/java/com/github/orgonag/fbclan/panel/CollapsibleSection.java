@@ -28,26 +28,7 @@ class CollapsibleSection extends JPanel
         setBackground(ColorScheme.DARK_GRAY_COLOR);
         setAlignmentX(LEFT_ALIGNMENT);
 
-        JPanel header = new JPanel(new BorderLayout());
-        header.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-        header.setBorder(BorderFactory.createEmptyBorder(5, 6, 5, 6));
-        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
-        header.setAlignmentX(LEFT_ALIGNMENT);
-        header.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-
-        JLabel label = new JLabel((expanded ? "- " : "+ ") + title);
-        label.setFont(FontManager.getRunescapeBoldFont());
-        label.setForeground(ColorScheme.BRAND_ORANGE);
-        header.add(label, BorderLayout.CENTER);
-        header.addMouseListener(new MouseAdapter()
-        {
-            @Override
-            public void mousePressed(MouseEvent e)
-            {
-                onToggle.run();
-            }
-        });
-        add(header);
+        add(toggleHeader(title, expanded, onToggle, true));
 
         content = new JPanel();
         content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
@@ -61,5 +42,34 @@ class CollapsibleSection extends JPanel
     JPanel getContent()
     {
         return content;
+    }
+
+    // Shared clickable "+/-" header row. `section` style = bold orange
+    // (top-level dashboard section); otherwise the small gray inner-header
+    // style used for per-boss rows. Font-safe: plain +/- text, no glyphs.
+    static JPanel toggleHeader(String title, boolean expanded, Runnable onToggle, boolean section)
+    {
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        header.setBorder(section
+            ? BorderFactory.createEmptyBorder(5, 6, 5, 6)
+            : BorderFactory.createEmptyBorder(3, 6, 3, 6));
+        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, section ? 28 : 24));
+        header.setAlignmentX(JPanel.LEFT_ALIGNMENT);
+        header.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+        JLabel label = new JLabel((expanded ? "- " : "+ ") + title);
+        label.setFont(section ? FontManager.getRunescapeBoldFont() : FontManager.getRunescapeSmallFont());
+        label.setForeground(section ? ColorScheme.BRAND_ORANGE : ColorScheme.LIGHT_GRAY_COLOR);
+        header.add(label, BorderLayout.CENTER);
+        header.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mousePressed(MouseEvent e)
+            {
+                onToggle.run();
+            }
+        });
+        return header;
     }
 }

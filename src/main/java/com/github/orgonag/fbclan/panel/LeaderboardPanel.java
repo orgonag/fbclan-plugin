@@ -9,13 +9,10 @@ import com.github.orgonag.fbclan.stats.DashboardService;
 import com.github.orgonag.fbclan.stats.GpWeek;
 import com.github.orgonag.fbclan.stats.StatFormat;
 import com.github.orgonag.fbclan.wom.WomEntry;
-import com.github.orgonag.fbclan.wom.WomStatsClient;
+import com.github.orgonag.fbclan.wom.WomStatsParser;
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Cursor;
 import java.awt.Dimension;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
@@ -34,7 +31,6 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SwingConstants;
-import javax.swing.SwingUtilities;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 
@@ -95,18 +91,28 @@ public class LeaderboardPanel extends JPanel
         rebuild();
     }
 
+    private static final class Boards
+    {
+        final List<PbEntry> board;
+        final List<PbEntry> recent;
+
+        Boards(List<PbEntry> board, List<PbEntry> recent)
+        {
+            this.board = board;
+            this.recent = recent;
+        }
+    }
+
     public void refresh()
     {
-        executor.submit(() -> {
+        PanelUi.asyncRefresh(executor, () -> {
             leaderboardService.refresh();
             dashboardService.refresh();
-            List<PbEntry> board = leaderboardService.getLeaderboard();
-            List<PbEntry> recent = leaderboardService.getRecentBests();
-            SwingUtilities.invokeLater(() -> {
-                cachedBoard = board;
-                cachedRecent = recent;
-                rebuild();
-            });
+            return new Boards(leaderboardService.getLeaderboard(), leaderboardService.getRecentBests());
+        }, boards -> {
+            cachedBoard = boards.board;
+            cachedRecent = boards.recent;
+            rebuild();
         });
     }
 
@@ -179,12 +185,12 @@ public class LeaderboardPanel extends JPanel
         {
             // Null = the wom_cache row hasn't been read yet (sync not run,
             // or Supabase unreachable) — same wording as the KC section.
-            content.add(noteLabel("waiting for WOM sync"));
+            content.add(PanelUi.emptyStateLabel("waiting for WOM sync"));
             return;
         }
         if (entries.isEmpty())
         {
-            content.add(noteLabel("No data this week."));
+            content.add(PanelUi.emptyStateLabel("No data this week."));
             return;
         }
         PodiumComponent podium = new PodiumComponent();
@@ -205,7 +211,7 @@ public class LeaderboardPanel extends JPanel
         List<ClEntry> board = dashboardService.getClBoard();
         if (board.isEmpty())
         {
-            content.add(noteLabel("No collection logs uploaded yet."));
+            content.add(PanelUi.emptyStateLabel("No collection logs uploaded yet."));
             return;
         }
         int rank = 1;
@@ -221,7 +227,7 @@ public class LeaderboardPanel extends JPanel
         List<CaEntry> board = dashboardService.getCaBoard();
         if (board.isEmpty())
         {
-            content.add(noteLabel("No combat achievements uploaded yet."));
+            content.add(PanelUi.emptyStateLabel("No combat achievements uploaded yet."));
             return;
         }
         int rank = 1;
@@ -245,7 +251,7 @@ public class LeaderboardPanel extends JPanel
 
         if (gp.getTop().isEmpty())
         {
-            content.add(noteLabel("No logged drops in the last 7 days."));
+            content.add(PanelUi.emptyStateLabel("No logged drops in the last 7 days."));
             return;
         }
         PodiumComponent podium = new PodiumComponent();
@@ -265,7 +271,7 @@ public class LeaderboardPanel extends JPanel
     {
         if (cachedRecent.isEmpty())
         {
-            content.add(noteLabel("No new clan bests yet."));
+            content.add(PanelUi.emptyStateLabel("No new clan bests yet."));
             return;
         }
         for (PbEntry e : cachedRecent)
@@ -278,7 +284,7 @@ public class LeaderboardPanel extends JPanel
     {
         if (cachedBoard.isEmpty())
         {
-            content.add(noteLabel("No personal bests recorded yet."));
+            content.add(PanelUi.emptyStateLabel("No personal bests recorded yet."));
             return;
         }
         Map<String, List<PbEntry>> byBoss = new LinkedHashMap<>();
@@ -295,13 +301,13 @@ public class LeaderboardPanel extends JPanel
         {
             String bossKey = e.getValue();
             boolean open = expandedPbBosses.contains(bossKey);
-            content.add(innerHeader(e.getKey(), open, () -> {
+            content.add(CollapsibleSection.toggleHeader(e.getKey(), open, () -> {
                 if (!expandedPbBosses.remove(bossKey))
                 {
                     expandedPbBosses.add(bossKey);
                 }
                 rebuild();
-            }));
+            }, false));
             if (open)
             {
                 for (PbEntry entry : byBoss.get(bossKey))
@@ -318,29 +324,29 @@ public class LeaderboardPanel extends JPanel
         content.add(captionLabel("top 5 per boss · via Wise Old Man" + syncedSuffix()));
         if (boards.isEmpty())
         {
-            content.add(noteLabel("waiting for WOM sync"));
+            content.add(PanelUi.emptyStateLabel("waiting for WOM sync"));
             return;
         }
-        for (String slug : WomStatsClient.BOSS_SLUGS)
+        for (String slug : WomStatsParser.BOSS_SLUGS)
         {
             boolean open = expandedKcBosses.contains(slug);
-            content.add(innerHeader(WomStatsClient.bossDisplayName(slug), open, () -> {
+            content.add(CollapsibleSection.toggleHeader(WomStatsParser.bossDisplayName(slug), open, () -> {
                 if (!expandedKcBosses.remove(slug))
                 {
                     expandedKcBosses.add(slug);
                 }
                 rebuild();
-            }));
+            }, false));
             if (open)
             {
                 List<WomEntry> rows = boards.get(slug);
                 if (rows == null)
                 {
-                    content.add(noteLabel("not synced yet"));
+                    content.add(PanelUi.emptyStateLabel("not synced yet"));
                 }
                 else if (rows.isEmpty())
                 {
-                    content.add(noteLabel("no ranked members"));
+                    content.add(PanelUi.emptyStateLabel("no ranked members"));
                 }
                 else
                 {
@@ -413,30 +419,6 @@ public class LeaderboardPanel extends JPanel
         return row;
     }
 
-    private JPanel innerHeader(String displayName, boolean open, Runnable onToggle)
-    {
-        JPanel header = new JPanel(new BorderLayout());
-        header.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-        header.setBorder(BorderFactory.createEmptyBorder(3, 6, 3, 6));
-        header.setAlignmentX(LEFT_ALIGNMENT);
-        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
-        header.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-
-        JLabel label = new JLabel((open ? "- " : "+ ") + displayName);
-        label.setFont(FontManager.getRunescapeSmallFont());
-        label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-        header.add(label, BorderLayout.CENTER);
-        header.addMouseListener(new MouseAdapter()
-        {
-            @Override
-            public void mousePressed(MouseEvent ev)
-            {
-                onToggle.run();
-            }
-        });
-        return header;
-    }
-
     private JPanel pbRow(PbEntry entry)
     {
         return statRow(entry.getRank(), entry.getRsn(), null,
@@ -469,19 +451,6 @@ public class LeaderboardPanel extends JPanel
         stack.add(bottom);
         row.add(stack, BorderLayout.CENTER);
         return row;
-    }
-
-    private JLabel noteLabel(String text)
-    {
-        JLabel label = new JLabel(text);
-        label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-        label.setFont(FontManager.getRunescapeSmallFont());
-        label.setHorizontalAlignment(SwingConstants.CENTER);
-        // Same mixed-alignmentX rule as captionLabel: LEFT + full width.
-        label.setAlignmentX(LEFT_ALIGNMENT);
-        label.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
-        label.setBorder(BorderFactory.createEmptyBorder(6, 0, 6, 0));
-        return label;
     }
 
     private JLabel captionLabel(String text)

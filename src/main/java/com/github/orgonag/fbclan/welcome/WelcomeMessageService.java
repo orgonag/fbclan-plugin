@@ -1,8 +1,8 @@
-package com.github.orgonag.fbclan.util;
+package com.github.orgonag.fbclan.welcome;
 
+import com.github.orgonag.fbclan.util.SupabaseClient;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import java.io.IOException;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 
@@ -34,24 +34,20 @@ public class WelcomeMessageService
         return message;
     }
 
-    // Fetched once at plugin startup. Network failure (IOException) keeps
-    // the previous value (empty on first run); HTTP errors surface from
-    // SupabaseClient.get as an empty array and clear the message. Either
-    // way: no message this session, nothing else affected.
-    // RuntimeException is caught so a malformed 2xx body can't vanish into
-    // the executor's uninspected Future.
+    // Fetched once at plugin startup. Network failure keeps the previous
+    // value (empty on first run); HTTP errors surface from tryGet as an
+    // empty array and clear the message. Either way: no message this
+    // session, nothing else affected.
     public void refresh()
     {
-        try
+        JsonArray rows = SupabaseClient.tryGet(httpClient, "welcome_message",
+            "select=message&id=eq.1", "welcome message");
+        if (rows == null)
         {
-            JsonArray rows = SupabaseClient.get(httpClient, "welcome_message", "select=message&id=eq.1");
-            message = parseMessage(rows);
-            log.debug("Welcome message loaded ({} chars)", message.length());
+            return;
         }
-        catch (IOException | RuntimeException e)
-        {
-            log.warn("Failed to fetch welcome message", e);
-        }
+        message = parseMessage(rows);
+        log.debug("Welcome message loaded ({} chars)", message.length());
     }
 
     static String parseMessage(JsonArray rows)
