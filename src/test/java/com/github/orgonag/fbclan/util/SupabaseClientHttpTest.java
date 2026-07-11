@@ -1,6 +1,7 @@
 package com.github.orgonag.fbclan.util;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import java.io.IOException;
 import okhttp3.HttpUrl;
 import okhttp3.Interceptor;
@@ -14,6 +15,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -96,5 +98,84 @@ public class SupabaseClientHttpTest
         assertEquals("/rest/v1/drops?select=rsn&limit=1", req.getPath());
         assertNotNull(req.getHeader("apikey"));
         assertTrue(req.getHeader("Authorization").startsWith("Bearer "));
+    }
+
+    @Test
+    public void insertPostsJsonWithMinimalReturn() throws Exception
+    {
+        server.enqueue(new MockResponse().setResponseCode(201));
+        JsonObject data = new JsonObject();
+        data.addProperty("rsn", "Alice");
+        assertTrue(SupabaseClient.insert(client, "drops", data));
+        RecordedRequest req = server.takeRequest();
+        assertEquals("POST", req.getMethod());
+        assertEquals("/rest/v1/drops", req.getPath());
+        assertEquals("return=minimal", req.getHeader("Prefer"));
+        assertEquals("{\"rsn\":\"Alice\"}", req.getBody().readUtf8());
+    }
+
+    @Test
+    public void insertReturnsFalseOnHttpError() throws Exception
+    {
+        server.enqueue(new MockResponse().setResponseCode(403));
+        assertFalse(SupabaseClient.insert(client, "drops", new JsonObject()));
+    }
+
+    @Test
+    public void upsertSetsOnConflictAndMergePrefer() throws Exception
+    {
+        server.enqueue(new MockResponse().setResponseCode(201));
+        JsonObject data = new JsonObject();
+        data.addProperty("rsn", "Alice");
+        assertTrue(SupabaseClient.upsert(client, "lfg_entries", data, "rsn"));
+        RecordedRequest req = server.takeRequest();
+        assertEquals("/rest/v1/lfg_entries?on_conflict=rsn", req.getPath());
+        assertEquals("resolution=merge-duplicates,return=minimal", req.getHeader("Prefer"));
+    }
+
+    @Test
+    public void updatePatchesWithFilter() throws Exception
+    {
+        server.enqueue(new MockResponse().setResponseCode(204));
+        JsonObject data = new JsonObject();
+        data.addProperty("party_id", "abc");
+        assertTrue(SupabaseClient.update(client, "lfg_entries", "rsn=eq.Alice", data));
+        RecordedRequest req = server.takeRequest();
+        assertEquals("PATCH", req.getMethod());
+        assertEquals("/rest/v1/lfg_entries?rsn=eq.Alice", req.getPath());
+    }
+
+    @Test
+    public void deleteUsesFilter() throws Exception
+    {
+        server.enqueue(new MockResponse().setResponseCode(204));
+        assertTrue(SupabaseClient.delete(client, "lfg_entries", "rsn=eq.Alice"));
+        RecordedRequest req = server.takeRequest();
+        assertEquals("DELETE", req.getMethod());
+        assertEquals("/rest/v1/lfg_entries?rsn=eq.Alice", req.getPath());
+    }
+
+    @Test
+    public void rpcPostsToFunctionUrl() throws Exception
+    {
+        server.enqueue(new MockResponse().setResponseCode(204));
+        JsonObject args = new JsonObject();
+        args.addProperty("p_rsn", "Alice");
+        assertTrue(SupabaseClient.rpc(client, "submit_pbs", args));
+        RecordedRequest req = server.takeRequest();
+        assertEquals("/rest/v1/rpc/submit_pbs", req.getPath());
+        assertEquals("{\"p_rsn\":\"Alice\"}", req.getBody().readUtf8());
+    }
+
+    @Test
+    public void uploadFilePostsBytesWithContentType() throws Exception
+    {
+        server.enqueue(new MockResponse().setResponseCode(200));
+        byte[] bytes = {1, 2, 3};
+        assertTrue(SupabaseClient.uploadFile(client, "drop-screenshots", "a/b.png", bytes, "image/png"));
+        RecordedRequest req = server.takeRequest();
+        assertEquals("/storage/v1/object/drop-screenshots/a/b.png", req.getPath());
+        assertTrue(req.getHeader("Content-Type").startsWith("image/png"));
+        assertEquals(3, req.getBodySize());
     }
 }
