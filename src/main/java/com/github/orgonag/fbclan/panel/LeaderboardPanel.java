@@ -12,10 +12,7 @@ import com.github.orgonag.fbclan.wom.WomEntry;
 import com.github.orgonag.fbclan.wom.WomStatsClient;
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Cursor;
 import java.awt.Dimension;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
@@ -304,13 +301,13 @@ public class LeaderboardPanel extends JPanel
         {
             String bossKey = e.getValue();
             boolean open = expandedPbBosses.contains(bossKey);
-            content.add(innerHeader(e.getKey(), open, () -> {
+            content.add(CollapsibleSection.toggleHeader(e.getKey(), open, () -> {
                 if (!expandedPbBosses.remove(bossKey))
                 {
                     expandedPbBosses.add(bossKey);
                 }
                 rebuild();
-            }));
+            }, false));
             if (open)
             {
                 for (PbEntry entry : byBoss.get(bossKey))
@@ -333,13 +330,13 @@ public class LeaderboardPanel extends JPanel
         for (String slug : WomStatsClient.BOSS_SLUGS)
         {
             boolean open = expandedKcBosses.contains(slug);
-            content.add(innerHeader(WomStatsClient.bossDisplayName(slug), open, () -> {
+            content.add(CollapsibleSection.toggleHeader(WomStatsClient.bossDisplayName(slug), open, () -> {
                 if (!expandedKcBosses.remove(slug))
                 {
                     expandedKcBosses.add(slug);
                 }
                 rebuild();
-            }));
+            }, false));
             if (open)
             {
                 List<WomEntry> rows = boards.get(slug);
@@ -420,30 +417,6 @@ public class LeaderboardPanel extends JPanel
         east.add(valueLabel);
         row.add(east, BorderLayout.EAST);
         return row;
-    }
-
-    private JPanel innerHeader(String displayName, boolean open, Runnable onToggle)
-    {
-        JPanel header = new JPanel(new BorderLayout());
-        header.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-        header.setBorder(BorderFactory.createEmptyBorder(3, 6, 3, 6));
-        header.setAlignmentX(LEFT_ALIGNMENT);
-        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
-        header.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-
-        JLabel label = new JLabel((open ? "- " : "+ ") + displayName);
-        label.setFont(FontManager.getRunescapeSmallFont());
-        label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-        header.add(label, BorderLayout.CENTER);
-        header.addMouseListener(new MouseAdapter()
-        {
-            @Override
-            public void mousePressed(MouseEvent ev)
-            {
-                onToggle.run();
-            }
-        });
-        return header;
     }
 
     private JPanel pbRow(PbEntry entry)
