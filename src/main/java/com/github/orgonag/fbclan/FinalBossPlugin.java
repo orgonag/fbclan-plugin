@@ -6,6 +6,7 @@ import com.github.orgonag.fbclan.drops.DropCaptureService;
 import com.github.orgonag.fbclan.drops.DropScreenshotService;
 import com.github.orgonag.fbclan.drops.NotableItemsService;
 import com.github.orgonag.fbclan.drops.SupabaseDropService;
+import com.github.orgonag.fbclan.lfg.LfgPartyBridge;
 import com.github.orgonag.fbclan.lfg.LfgService;
 import com.github.orgonag.fbclan.panel.AnnouncementsPanel;
 import com.github.orgonag.fbclan.panel.DropLogPanel;
@@ -24,11 +25,6 @@ import com.github.orgonag.fbclan.stats.StatsUploadCoordinator;
 import com.github.orgonag.fbclan.welcome.WelcomeMessagePresenter;
 import com.github.orgonag.fbclan.welcome.WelcomeMessageService;
 import com.github.orgonag.fbclan.wom.WomVerificationService;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -37,8 +33,6 @@ import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
-import net.runelite.api.clan.ClanChannel;
-import net.runelite.api.clan.ClanChannelMember;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.VarbitChanged;
@@ -152,9 +146,9 @@ public class FinalBossPlugin extends Plugin
     private LfgPanel lfgPanel;
     private AnnouncementsPanel announcementsPanel;
     private LeaderboardPanel leaderboardPanel;
+    private LfgPartyBridge lfgPartyBridge;
 
     private final ClanSession session = new ClanSession();
-    private ScheduledFuture<?> lfgPollFuture;
     private ScheduledFuture<?> dropRefreshFuture;
 
     @Provides
@@ -204,6 +198,7 @@ public class FinalBossPlugin extends Plugin
 
         dropLogPanel = new DropLogPanel(dropService, executor);
         lfgPanel = new LfgPanel(lfgService, executor, config);
+        lfgPartyBridge = new LfgPartyBridge(client, clientThread, partyService, config, executor, lfgPanel);
         announcementsPanel = new AnnouncementsPanel(announcementsService, executor);
         // Warm the announcements cache and populate the tab; refresh() runs
         // the fetch on the executor, so startup never blocks on network.
@@ -245,16 +240,7 @@ public class FinalBossPlugin extends Plugin
             executor.submit(() -> lfgService.removeStatus(rsnSnapshot));
         }
 
-        if (lfgPollFuture != null)
-        {
-            lfgPollFuture.cancel(true);
-            lfgPollFuture = null;
-        }
-        if (dropRefreshFuture != null)
-        {
-            dropRefreshFuture.cancel(true);
-            dropRefreshFuture = null;
-        }
+        stopPolling();
 
         clientToolbar.removeNavigation(navButton);
         session.reset();
@@ -356,21 +342,7 @@ public class FinalBossPlugin extends Plugin
 
     private void startPolling()
     {
-        if (config.enableLfg())
-        {
-            updateOnlineClanMembers();
-            // Seed the initial party state; afterwards it is driven only by
-            // the party event handlers. Pushing it on every poll tick would
-            // re-upsert the LFG row and reset its "X min ago" timer.
-            pushLocalPartyStateToPanel();
-            lfgPollFuture = executor.scheduleAtFixedRate(() -> {
-                try {
-                    updateOnlineClanMembers();
-                    lfgPanel.refresh();
-                }
-                catch (Exception e) { log.warn("LFG poll error", e); }
-            }, 30, 30, TimeUnit.SECONDS);
-        }
+        lfgPartyBridge.startPolling();
 
         if (config.enableDropLogging())
         {
@@ -381,90 +353,30 @@ public class FinalBossPlugin extends Plugin
         }
     }
 
-    // Pushes the local Party plugin state to the panel; (null, null) when
-    // the user is not in a party.
-    void pushLocalPartyStateToPanel()
-    {
-        String partyId = null;
-        Integer partySize = null;
-        if (partyService.isInParty())
-        {
-            partyId = hashPartyId(partyService.getPartyId());
-            partySize = partyService.getMembers().size();
-        }
-        lfgPanel.onLocalPartyStateChanged(partyId, partySize);
-    }
-
-    // The raw partyId is derived from the party passphrase and could let an
-    // attacker eavesdrop on the party channel, so it never leaves the client.
-    // A truncated SHA-256 preserves equality (grouping still works) without
-    // being reversible.
-    private static String hashPartyId(long partyId)
-    {
-        try
-        {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(Long.toString(partyId).getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(16);
-            for (int i = 0; i < 8; i++)
-            {
-                sb.append(String.format("%02x", digest[i] & 0xFF));
-            }
-            return sb.toString();
-        }
-        catch (NoSuchAlgorithmException e)
-        {
-            throw new IllegalStateException("SHA-256 unavailable", e);
-        }
-    }
-
     // These three events keep the panel's party state in sync without the
     // user having to re-click Set Status. The panel decides whether to
     // re-upsert (only when there is an active LFG status).
     @Subscribe
     public void onPartyChanged(PartyChanged event)
     {
-        pushLocalPartyStateToPanel();
+        lfgPartyBridge.pushLocalPartyState();
     }
 
     @Subscribe
     public void onUserJoin(UserJoin event)
     {
-        pushLocalPartyStateToPanel();
+        lfgPartyBridge.pushLocalPartyState();
     }
 
     @Subscribe
     public void onUserPart(UserPart event)
     {
-        pushLocalPartyStateToPanel();
-    }
-
-    private void updateOnlineClanMembers()
-    {
-        clientThread.invokeLater(() -> {
-            Set<String> online = new HashSet<>();
-            ClanChannel cc = client.getClanChannel();
-            if (cc != null)
-            {
-                for (ClanChannelMember m : cc.getMembers())
-                {
-                    if (m.getName() != null)
-                    {
-                        online.add(m.getName());
-                    }
-                }
-            }
-            lfgPanel.setOnlineNames(online);
-        });
+        lfgPartyBridge.pushLocalPartyState();
     }
 
     private void stopPolling()
     {
-        if (lfgPollFuture != null)
-        {
-            lfgPollFuture.cancel(true);
-            lfgPollFuture = null;
-        }
+        lfgPartyBridge.stopPolling();
         if (dropRefreshFuture != null)
         {
             dropRefreshFuture.cancel(true);
