@@ -176,8 +176,7 @@ public class FinalBossPlugin extends Plugin
     // as welcomeShown: reset in startUp, not field init).
     private volatile boolean pbSeeded = false;
 
-    private volatile boolean verified = false;
-    private volatile String currentRsn = null;
+    private final ClanSession session = new ClanSession();
     private ScheduledFuture<?> lfgPollFuture;
     private ScheduledFuture<?> dropRefreshFuture;
 
@@ -256,7 +255,7 @@ public class FinalBossPlugin extends Plugin
     {
         // Snapshot the RSN before it's nulled below — the executor task may
         // run after this method finishes.
-        String rsnSnapshot = currentRsn;
+        String rsnSnapshot = session.getRsn();
         if (rsnSnapshot != null && config.enableLfg())
         {
             executor.submit(() -> lfgService.removeStatus(rsnSnapshot));
@@ -274,8 +273,7 @@ public class FinalBossPlugin extends Plugin
         }
 
         clientToolbar.removeNavigation(navButton);
-        verified = false;
-        currentRsn = null;
+        session.reset();
         womService.clearCache();
     }
 
@@ -284,7 +282,7 @@ public class FinalBossPlugin extends Plugin
     {
         if (event.getGameState() == GameState.LOGGED_IN)
         {
-            if (verified)
+            if (session.isVerified())
             {
                 return;
             }
@@ -294,12 +292,11 @@ public class FinalBossPlugin extends Plugin
         }
         else if (event.getGameState() == GameState.LOGIN_SCREEN)
         {
-            if (!verified && currentRsn == null)
+            if (!session.isVerified() && session.getRsn() == null)
             {
                 return;
             }
-            verified = false;
-            currentRsn = null;
+            session.reset();
             womService.clearCache();
             stopPolling();
             SwingUtilities.invokeLater(() -> {
@@ -319,7 +316,7 @@ public class FinalBossPlugin extends Plugin
                 return;
             }
             String rsn = client.getLocalPlayer().getName();
-            currentRsn = rsn;
+            session.setRsn(rsn);
             SwingUtilities.invokeLater(() -> lfgPanel.setCurrentRsn(rsn));
             verifyMembership();
         }), delaySeconds, TimeUnit.SECONDS);
@@ -332,10 +329,10 @@ public class FinalBossPlugin extends Plugin
         executor.submit(() -> {
             try
             {
-                boolean isMember = womService.verify(currentRsn);
+                boolean isMember = womService.verify(session.getRsn());
                 if (isMember)
                 {
-                    verified = true;
+                    session.setVerified(true);
                     SwingUtilities.invokeLater(this::showMainPanel);
                     startPolling();
                     maybeShowWelcome();
@@ -361,7 +358,7 @@ public class FinalBossPlugin extends Plugin
     private synchronized void maybeShowWelcome()
     {
         String message = welcomeMessageService.getMessage();
-        if (!verified || welcomeShown || message.isEmpty())
+        if (!session.isVerified() || welcomeShown || message.isEmpty())
         {
             return;
         }
@@ -374,7 +371,7 @@ public class FinalBossPlugin extends Plugin
                 // Transient state — try again next client tick.
                 return false;
             }
-            if (!verified || gs != GameState.LOGGED_IN)
+            if (!session.isVerified() || gs != GameState.LOGGED_IN)
             {
                 // True logout (or plugin shut down mid-flight) — un-latch so the
                 // next verification success re-attempts.
@@ -393,12 +390,12 @@ public class FinalBossPlugin extends Plugin
 
     private void maybeSeedPbs()
     {
-        if (!verified || pbSeeded || !config.enablePbUpload())
+        String rsn = session.getRsn();
+        if (!session.canUpload() || pbSeeded || !config.enablePbUpload())
         {
             return;
         }
-        String rsn = currentRsn;
-        if (rsn == null || !PbTrackingService.isStandardWorld(client.getWorldType()))
+        if (!PbTrackingService.isStandardWorld(client.getWorldType()))
         {
             return;
         }
@@ -415,8 +412,8 @@ public class FinalBossPlugin extends Plugin
     // maybeSeedPbs' world check). Submission itself goes to the executor.
     private void maybeSubmitStats()
     {
-        String rsn = currentRsn;
-        if (!verified || !config.enableStatsUpload() || rsn == null
+        String rsn = session.getRsn();
+        if (!session.canUpload() || !config.enableStatsUpload()
             || !PbTrackingService.isStandardWorld(client.getWorldType()))
         {
             return;
@@ -639,8 +636,8 @@ public class FinalBossPlugin extends Plugin
         {
             return;
         }
-        String rsn = currentRsn;
-        if (!verified || !config.enablePbUpload() || rsn == null
+        String rsn = session.getRsn();
+        if (!session.canUpload() || !config.enablePbUpload()
             || !PbTrackingService.isStandardWorld(client.getWorldType()))
         {
             return;
@@ -654,9 +651,9 @@ public class FinalBossPlugin extends Plugin
 
     private void handlePetChatMessage(ChatMessage event)
     {
-        String rsn = currentRsn;
-        if (event.getType() != ChatMessageType.GAMEMESSAGE || !verified
-            || !config.enableDropLogging() || rsn == null)
+        String rsn = session.getRsn();
+        if (event.getType() != ChatMessageType.GAMEMESSAGE || !session.canUpload()
+            || !config.enableDropLogging())
         {
             return;
         }
@@ -689,8 +686,8 @@ public class FinalBossPlugin extends Plugin
 
     private void handleLoot(String sourceName, Collection<ItemStack> items)
     {
-        String rsn = currentRsn;
-        if (!verified || !config.enableDropLogging() || rsn == null)
+        String rsn = session.getRsn();
+        if (!session.canUpload() || !config.enableDropLogging())
         {
             return;
         }
