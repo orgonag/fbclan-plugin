@@ -2,7 +2,7 @@ package com.github.orgonag.fbclan.panel;
 
 import com.github.orgonag.fbclan.drops.DropScreenshotService;
 import com.github.orgonag.fbclan.drops.DropTrackingService;
-import com.github.orgonag.fbclan.drops.SupabaseDropService;
+import com.github.orgonag.fbclan.drops.DropLogService;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.awt.BorderLayout;
@@ -26,11 +26,11 @@ import net.runelite.client.util.LinkBrowser;
 
 public class DropLogPanel extends JPanel
 {
-    private final SupabaseDropService dropService;
+    private final DropLogService dropService;
     private final ScheduledExecutorService executor;
     private final JPanel listPanel;
 
-    public DropLogPanel(SupabaseDropService dropService, ScheduledExecutorService executor)
+    public DropLogPanel(DropLogService dropService, ScheduledExecutorService executor)
     {
         this.dropService = dropService;
         this.executor = executor;

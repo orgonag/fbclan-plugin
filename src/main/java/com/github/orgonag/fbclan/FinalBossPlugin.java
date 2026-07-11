@@ -5,7 +5,7 @@ import com.github.orgonag.fbclan.drops.DiscordWebhookService;
 import com.github.orgonag.fbclan.drops.DropCaptureService;
 import com.github.orgonag.fbclan.drops.DropScreenshotService;
 import com.github.orgonag.fbclan.drops.NotableItemsService;
-import com.github.orgonag.fbclan.drops.SupabaseDropService;
+import com.github.orgonag.fbclan.drops.DropLogService;
 import com.github.orgonag.fbclan.lfg.LfgPartyBridge;
 import com.github.orgonag.fbclan.lfg.LfgService;
 import com.github.orgonag.fbclan.panel.AnnouncementsPanel;
@@ -131,7 +131,7 @@ public class FinalBossPlugin extends Plugin
     private FinalBossPanel mainPanel;
     private RootPanel rootPanel;
 
-    private SupabaseDropService dropService;
+    private DropLogService dropService;
     private DiscordWebhookService discordService;
     private DropScreenshotService screenshotService;
     private DropCaptureService dropCaptureService;
@@ -164,7 +164,7 @@ public class FinalBossPlugin extends Plugin
     protected void startUp()
     {
         WomVerificationService womService = new WomVerificationService(okHttpClient);
-        dropService = new SupabaseDropService(okHttpClient);
+        dropService = new DropLogService(okHttpClient);
         discordService = new DiscordWebhookService(okHttpClient);
         screenshotService = new DropScreenshotService(okHttpClient);
         lfgService = new LfgService(okHttpClient);

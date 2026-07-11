@@ -8,11 +8,11 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 
 @Slf4j
-public class SupabaseDropService
+public class DropLogService
 {
     private final OkHttpClient httpClient;
 
-    public SupabaseDropService(OkHttpClient httpClient)
+    public DropLogService(OkHttpClient httpClient)
     {
         this.httpClient = httpClient;
     }

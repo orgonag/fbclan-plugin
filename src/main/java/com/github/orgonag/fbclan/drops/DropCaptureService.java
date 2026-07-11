@@ -36,14 +36,14 @@ public class DropCaptureService
     private final PartyService partyService;
     private final ScheduledExecutorService executor;
     private final NotableItemsService notableItemsService;
-    private final SupabaseDropService dropService;
+    private final DropLogService dropService;
     private final DiscordWebhookService discordService;
     private final DropScreenshotService screenshotService;
 
     public DropCaptureService(Client client, FinalBossConfig config, ClanSession session,
         ItemManager itemManager, DrawManager drawManager, PartyService partyService,
         ScheduledExecutorService executor, NotableItemsService notableItemsService,
-        SupabaseDropService dropService, DiscordWebhookService discordService,
+        DropLogService dropService, DiscordWebhookService discordService,
         DropScreenshotService screenshotService)
     {
         this.client = client;
