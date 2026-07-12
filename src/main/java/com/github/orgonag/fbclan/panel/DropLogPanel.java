@@ -9,6 +9,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.Duration;
@@ -38,7 +39,7 @@ public class DropLogPanel extends JPanel
         setLayout(new BorderLayout());
         setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-        listPanel = new JPanel();
+        listPanel = new ScrollableListPanel();
         listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
         listPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
@@ -46,6 +47,8 @@ public class DropLogPanel extends JPanel
         scrollPane.setBackground(ColorScheme.DARK_GRAY_COLOR);
         scrollPane.getViewport().setBackground(ColorScheme.DARK_GRAY_COLOR);
         scrollPane.setBorder(null);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
 
         add(scrollPane, BorderLayout.CENTER);
     }
@@ -77,28 +80,37 @@ public class DropLogPanel extends JPanel
         row.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         row.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createMatteBorder(0, 0, 1, 0, ColorScheme.DARK_GRAY_COLOR),
-            BorderFactory.createEmptyBorder(5, 8, 5, 8)
+            BorderFactory.createEmptyBorder(3, 8, 3, 8)
         ));
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
 
-        String itemName = escapeHtml(drop.get("item_name").getAsString());
+        String itemName = drop.get("item_name").getAsString();
         long geValue = drop.get("ge_value").getAsLong();
-        String rsn = escapeHtml(drop.get("rsn").getAsString());
-        String npcName = escapeHtml(drop.get("npc_name").getAsString());
+        String rsn = drop.get("rsn").getAsString();
+        String npcName = drop.get("npc_name").getAsString();
 
         // Untradeables (pets) have no GE value — suppress the "(0 GP)".
         String valueSuffix = geValue > 0 ? " (" + DropTrackingService.formatGp(geValue) + " GP)" : "";
-        JLabel mainLabel = new JLabel("<html><b>" + itemName + "</b>" + valueSuffix + "</html>");
+        // Plain label, not HTML: an HTML label wraps when the panel is
+        // narrow (growing the row) where a plain label truncates with "...",
+        // and plain text needs no escaping.
+        JLabel mainLabel = new JLabel(itemName + valueSuffix);
         mainLabel.setForeground(Color.WHITE);
-        mainLabel.setFont(FontManager.getRunescapeSmallFont());
+        mainLabel.setFont(FontManager.getRunescapeSmallFont().deriveFont(Font.BOLD));
 
         String timeAgo = formatTimeAgo(drop.get("created_at").getAsString());
         JLabel detailLabel = new JLabel(rsn + " \u2014 " + npcName + " \u2014 " + timeAgo);
         detailLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         detailLabel.setFont(FontManager.getRunescapeSmallFont());
 
-        row.add(mainLabel, BorderLayout.NORTH);
-        row.add(detailLabel, BorderLayout.SOUTH);
+        // Labels stack in CENTER so EAST keeps its width and the text
+        // truncates instead of pushing the [pic] tag off the panel edge.
+        JPanel stack = new JPanel();
+        stack.setLayout(new BoxLayout(stack, BoxLayout.Y_AXIS));
+        stack.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        stack.add(mainLabel);
+        stack.add(detailLabel);
+        row.add(stack, BorderLayout.CENTER);
 
         // Drops logged with a screenshot get a [pic] tag and open the image
         // in the browser on click. The drops table is anon-writable, so the
@@ -127,11 +139,6 @@ public class DropLogPanel extends JPanel
         }
 
         return row;
-    }
-
-    private static String escapeHtml(String text)
-    {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private static String formatTimeAgo(String isoTimestamp)
