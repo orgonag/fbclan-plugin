@@ -100,7 +100,7 @@ public interface FinalBossConfig extends Config
     @Units(Units.MINUTES)
     default int lfgTimeoutMinutes()
     {
-        return 60;
+        return 240;
     }
 
     @ConfigItem(
