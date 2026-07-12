@@ -24,14 +24,27 @@ public class PbFormatTest
     public void testDisplayNamePlain()
     {
         assertEquals("Zulrah", PbFormat.displayName("zulrah"));
-        assertEquals("Chambers Of Xeric", PbFormat.displayName("chambers of xeric"));
+        assertEquals("Hallowed Sepulchre Floor 5", PbFormat.displayName("hallowed sepulchre floor 5"));
+    }
+
+    @Test
+    public void testDisplayNameRaidAbbreviations()
+    {
+        assertEquals("COX", PbFormat.displayName("chambers of xeric"));
+        assertEquals("CM", PbFormat.displayName("chambers of xeric challenge mode"));
+        assertEquals("TOB", PbFormat.displayName("theatre of blood"));
+        assertEquals("HMT", PbFormat.displayName("theatre of blood hard mode"));
+        assertEquals("TOB Entry Mode", PbFormat.displayName("theatre of blood entry mode"));
+        assertEquals("TOA", PbFormat.displayName("tombs of amascut"));
+        assertEquals("TOA Expert", PbFormat.displayName("tombs of amascut expert mode"));
+        assertEquals("TOA Entry Mode", PbFormat.displayName("tombs of amascut entry mode"));
     }
 
     @Test
     public void testDisplayNameTeamSuffix()
     {
-        assertEquals("Theatre Of Blood (4 players)", PbFormat.displayName("theatre of blood 4 players"));
-        assertEquals("Chambers Of Xeric (Solo)", PbFormat.displayName("chambers of xeric solo"));
-        assertEquals("Hallowed Sepulchre Floor 5", PbFormat.displayName("hallowed sepulchre floor 5"));
+        assertEquals("TOB (4 players)", PbFormat.displayName("theatre of blood 4 players"));
+        assertEquals("COX (Solo)", PbFormat.displayName("chambers of xeric solo"));
+        assertEquals("CM (11-15 players)", PbFormat.displayName("chambers of xeric challenge mode 11-15 players"));
     }
 }

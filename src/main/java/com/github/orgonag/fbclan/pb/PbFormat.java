@@ -12,6 +12,17 @@ public final class PbFormat
     private static final Pattern TEAM_SUFFIX =
         Pattern.compile(" (solo|\\d+(?:\\+|-\\d+)? players?)$");
 
+    // Community abbreviations for raid prefixes. Longest match first so
+    // challenge/hard mode don't fall through to the base raid name.
+    private static final String[][] RAID_ABBREVIATIONS = {
+        {"chambers of xeric challenge mode", "CM"},
+        {"chambers of xeric", "COX"},
+        {"theatre of blood hard mode", "HMT"},
+        {"theatre of blood", "TOB"},
+        {"tombs of amascut expert mode", "TOA Expert"},
+        {"tombs of amascut", "TOA"},
+    };
+
     private PbFormat()
     {
     }
@@ -46,6 +57,21 @@ public final class PbFormat
         }
 
         StringBuilder sb = new StringBuilder();
+        for (String[] abbr : RAID_ABBREVIATIONS)
+        {
+            if (base.equals(abbr[0]))
+            {
+                sb.append(abbr[1]);
+                base = "";
+                break;
+            }
+            if (base.startsWith(abbr[0] + " "))
+            {
+                sb.append(abbr[1]);
+                base = base.substring(abbr[0].length() + 1);
+                break;
+            }
+        }
         for (String word : base.split(" "))
         {
             if (word.isEmpty())
