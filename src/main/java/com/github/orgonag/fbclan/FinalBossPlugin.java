@@ -1,6 +1,8 @@
 package com.github.orgonag.fbclan;
 
 import com.github.orgonag.fbclan.announcements.AnnouncementsService;
+import com.github.orgonag.fbclan.chat.CaBadgePresenter;
+import com.github.orgonag.fbclan.chat.CaBadgeService;
 import com.github.orgonag.fbclan.drops.DiscordWebhookService;
 import com.github.orgonag.fbclan.drops.DropCaptureService;
 import com.github.orgonag.fbclan.drops.DropScreenshotService;
@@ -44,6 +46,7 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.NpcLootReceived;
 import net.runelite.client.events.PartyChanged;
+import net.runelite.client.game.ChatIconManager;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.party.PartyService;
 import net.runelite.client.party.events.UserJoin;
@@ -124,6 +127,9 @@ public class FinalBossPlugin extends Plugin
     private DrawManager drawManager;
 
     @Inject
+    private ChatIconManager chatIconManager;
+
+    @Inject
     private ConfigManager configManager;
 
     private NavigationButton navButton;
@@ -144,6 +150,8 @@ public class FinalBossPlugin extends Plugin
     private StatsUploadCoordinator statsUploadCoordinator;
     private DashboardService dashboardService;
     private VerificationController verificationController;
+    private CaBadgeService caBadgeService;
+    private CaBadgePresenter caBadgePresenter;
 
     private DropLogPanel dropLogPanel;
     private LfgPanel lfgPanel;
@@ -153,6 +161,7 @@ public class FinalBossPlugin extends Plugin
 
     private final ClanSession session = new ClanSession();
     private ScheduledFuture<?> dropRefreshFuture;
+    private ScheduledFuture<?> badgeRefreshFuture;
 
     @Provides
     FinalBossConfig provideConfig(ConfigManager configManager)
@@ -198,6 +207,8 @@ public class FinalBossPlugin extends Plugin
         statsUploadCoordinator = new StatsUploadCoordinator(client, config, session,
             executor, memberStatsService);
         dashboardService = new DashboardService(okHttpClient);
+        caBadgeService = new CaBadgeService(okHttpClient);
+        caBadgePresenter = new CaBadgePresenter(chatIconManager, caBadgeService);
 
         dropLogPanel = new DropLogPanel(dropService, executor);
         lfgPanel = new LfgPanel(lfgService, executor, config);
@@ -344,6 +355,13 @@ public class FinalBossPlugin extends Plugin
                 catch (Exception e) { log.warn("Drop refresh error", e); }
             }, 60, 60, TimeUnit.SECONDS);
         }
+
+        // Tier data for chat badges: fetch on verification, then refresh
+        // every 5 minutes so newly earned tiers show without a relog.
+        badgeRefreshFuture = executor.scheduleAtFixedRate(() -> {
+            try { caBadgeService.refresh(); }
+            catch (Exception e) { log.warn("CA badge refresh error", e); }
+        }, 0, 300, TimeUnit.SECONDS);
     }
 
     // These three events keep the panel's party state in sync without the
@@ -375,6 +393,11 @@ public class FinalBossPlugin extends Plugin
             dropRefreshFuture.cancel(true);
             dropRefreshFuture = null;
         }
+        if (badgeRefreshFuture != null)
+        {
+            badgeRefreshFuture.cancel(true);
+            badgeRefreshFuture = null;
+        }
     }
 
     @Subscribe
@@ -405,5 +428,9 @@ public class FinalBossPlugin extends Plugin
         // Pets never appear in loot events — the game only announces them
         // in chat, so the drop pipeline listens here too.
         dropCaptureService.handlePetChatMessage(event);
+        if (config.enableChatBadges())
+        {
+            caBadgePresenter.onChatMessage(event);
+        }
     }
 }

@@ -129,6 +129,19 @@ public interface FinalBossConfig extends Config
     }
 
     @ConfigItem(
+        keyName = "enableChatBadges",
+        name = "CA slayer helm chat icons",
+        description = "Show the Tztok/Vampyric/Tzkal slayer helmet next to clan members' names in chat "
+            + "for Elite/Master/Grandmaster combat achievement tiers",
+        section = leaderboardsSection,
+        position = 2
+    )
+    default boolean enableChatBadges()
+    {
+        return true;
+    }
+
+    @ConfigItem(
         keyName = "enableStatsUpload",
         name = "Upload collection log & CA",
         description = "Send your collection log count and combat achievement points (with your RSN) "
