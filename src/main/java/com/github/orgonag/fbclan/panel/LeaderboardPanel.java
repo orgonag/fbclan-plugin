@@ -9,7 +9,6 @@ import com.github.orgonag.fbclan.stats.DashboardService;
 import com.github.orgonag.fbclan.stats.GpWeek;
 import com.github.orgonag.fbclan.stats.StatFormat;
 import com.github.orgonag.fbclan.wom.WomEntry;
-import com.github.orgonag.fbclan.wom.WomStatsParser;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -35,22 +34,21 @@ import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 
 /**
- * The clan dashboard: eight collapsible sections (weekly WOM podiums,
+ * The clan dashboard: seven collapsible sections (weekly WOM podiums,
  * collection log and combat achievement top-20s, the phase-1 clan-bests
- * feed and A-Z PB list, WOM kill counts served from the wom_cache table,
- * GP-this-week). All shiny elements are painted components — no font
- * glyphs. Expansion state is per-session. All remote strings render as
- * plain JLabel text.
+ * feed and A-Z PB list, GP-this-week). All shiny elements are painted
+ * components — no font glyphs. Expansion state is per-session. All
+ * remote strings render as plain JLabel text.
  */
 public class LeaderboardPanel extends JPanel
 {
     private static final String[] SECTIONS = {
         "XP Gained This Week", "EHB This Week", "Collection Log",
         "Combat Achievements", "New Clan Bests", "All-Time PBs",
-        "Kill Counts", "GP This Week",
+        "GP This Week",
     };
     private static final boolean[] DEFAULT_EXPANDED = {
-        true, true, true, true, false, false, false, false,
+        true, true, true, true, false, false, false,
     };
 
     private final LeaderboardService leaderboardService;
@@ -60,7 +58,6 @@ public class LeaderboardPanel extends JPanel
 
     private final boolean[] expanded = DEFAULT_EXPANDED.clone();
     private final Set<String> expandedPbBosses = new HashSet<>();
-    private final Set<String> expandedKcBosses = new HashSet<>();
 
     private List<PbEntry> cachedBoard = Collections.emptyList();
     private List<PbEntry> cachedRecent = Collections.emptyList();
@@ -165,9 +162,6 @@ public class LeaderboardPanel extends JPanel
                 buildPbSection(content);
                 break;
             case 6:
-                buildKcSection(content);
-                break;
-            case 7:
                 buildGpSection(content);
                 break;
         }
@@ -313,49 +307,6 @@ public class LeaderboardPanel extends JPanel
                 for (PbEntry entry : byBoss.get(bossKey))
                 {
                     content.add(pbRow(entry));
-                }
-            }
-        }
-    }
-
-    private void buildKcSection(JPanel content)
-    {
-        Map<String, List<WomEntry>> boards = dashboardService.getKcBoards();
-        content.add(captionLabel("top 5 per boss · via Wise Old Man" + syncedSuffix()));
-        if (boards.isEmpty())
-        {
-            content.add(PanelUi.emptyStateLabel("waiting for WOM sync"));
-            return;
-        }
-        for (String slug : WomStatsParser.BOSS_SLUGS)
-        {
-            boolean open = expandedKcBosses.contains(slug);
-            content.add(CollapsibleSection.toggleHeader(WomStatsParser.bossDisplayName(slug), open, () -> {
-                if (!expandedKcBosses.remove(slug))
-                {
-                    expandedKcBosses.add(slug);
-                }
-                rebuild();
-            }, false));
-            if (open)
-            {
-                List<WomEntry> rows = boards.get(slug);
-                if (rows == null)
-                {
-                    content.add(PanelUi.emptyStateLabel("not synced yet"));
-                }
-                else if (rows.isEmpty())
-                {
-                    content.add(PanelUi.emptyStateLabel("no ranked members"));
-                }
-                else
-                {
-                    int rank = 1;
-                    for (WomEntry e : rows.subList(0, Math.min(5, rows.size())))
-                    {
-                        content.add(statRow(rank++, e.getRsn(), null,
-                            String.format("%,d", (long) e.getValue())));
-                    }
                 }
             }
         }
