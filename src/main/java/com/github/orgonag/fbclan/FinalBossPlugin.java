@@ -8,6 +8,7 @@ import com.github.orgonag.fbclan.drops.DropCaptureService;
 import com.github.orgonag.fbclan.drops.DropScreenshotService;
 import com.github.orgonag.fbclan.drops.NotableItemsService;
 import com.github.orgonag.fbclan.drops.DropLogService;
+import com.github.orgonag.fbclan.lfg.LfgChatCommandHandler;
 import com.github.orgonag.fbclan.lfg.LfgPartyBridge;
 import com.github.orgonag.fbclan.lfg.LfgService;
 import com.github.orgonag.fbclan.panel.AnnouncementsPanel;
@@ -158,6 +159,7 @@ public class FinalBossPlugin extends Plugin
     private AnnouncementsPanel announcementsPanel;
     private LeaderboardPanel leaderboardPanel;
     private LfgPartyBridge lfgPartyBridge;
+    private LfgChatCommandHandler lfgChatCommandHandler;
 
     private final ClanSession session = new ClanSession();
     private ScheduledFuture<?> dropRefreshFuture;
@@ -213,6 +215,7 @@ public class FinalBossPlugin extends Plugin
         dropLogPanel = new DropLogPanel(dropService, executor);
         lfgPanel = new LfgPanel(lfgService, executor, config);
         lfgPartyBridge = new LfgPartyBridge(client, clientThread, partyService, config, executor, lfgPanel);
+        lfgChatCommandHandler = new LfgChatCommandHandler(client, config, session, lfgPanel);
         announcementsPanel = new AnnouncementsPanel(announcementsService, executor);
         // Warm the announcements cache and populate the tab; refresh() runs
         // the fetch on the executor, so startup never blocks on network.
@@ -432,5 +435,6 @@ public class FinalBossPlugin extends Plugin
         {
             caBadgePresenter.onChatMessage(event);
         }
+        lfgChatCommandHandler.onChatMessage(event);
     }
 }
