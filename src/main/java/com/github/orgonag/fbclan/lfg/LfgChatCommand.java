@@ -38,8 +38,10 @@ public final class LfgChatCommand
     }
 
     // ASCII punctuation only - this string renders in the in-game chat font.
+    // Square brackets, not angle brackets: the chat renderer treats <...>
+    // as a formatting tag and swallows it.
     public static final String USAGE =
-        "Usage: !lfg <event> [note] or !lfg off. Events: cox, tob, toa, groupboss, minigame, pvp, skilling, chilling";
+        "Usage: !lfg [Event] [Note] or !lfg off. Events: cox, tob, toa, groupboss, minigame, pvp, skilling, chilling";
 
     private static final String TRIGGER = "!lfg";
 
