@@ -98,4 +98,19 @@ public class LfgChatCommandTest
         // Trailing text after a clear keyword is tolerated and ignored
         assertEquals(LfgChatCommand.Action.CLEAR, LfgChatCommand.parse("!lfg off thanks all").getAction());
     }
+
+    @Test
+    public void testWhoKeyword()
+    {
+        assertEquals(LfgChatCommand.Action.WHO, LfgChatCommand.parse("!lfg who").getAction());
+        assertEquals(LfgChatCommand.Action.WHO, LfgChatCommand.parse("!lfg WHO").getAction());
+        // Trailing text after who is tolerated and ignored
+        assertEquals(LfgChatCommand.Action.WHO, LfgChatCommand.parse("!lfg who is on").getAction());
+    }
+
+    @Test
+    public void testUsageMentionsWho()
+    {
+        assertTrue(LfgChatCommand.USAGE.contains("!lfg who"));
+    }
 }

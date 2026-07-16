@@ -3,11 +3,17 @@ package com.github.orgonag.fbclan.lfg;
 import com.github.orgonag.fbclan.ClanSession;
 import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.panel.LfgPanel;
+import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.GameState;
 import net.runelite.api.events.ChatMessage;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.util.Text;
 
 /**
@@ -33,16 +39,22 @@ public class LfgChatCommandHandler
         ChatMessageType.PRIVATECHATOUT);
 
     private final Client client;
+    private final ClientThread clientThread;
     private final FinalBossConfig config;
     private final ClanSession session;
+    private final ScheduledExecutorService executor;
+    private final LfgService lfgService;
     private final LfgPanel lfgPanel;
 
-    public LfgChatCommandHandler(Client client, FinalBossConfig config,
-        ClanSession session, LfgPanel lfgPanel)
+    public LfgChatCommandHandler(Client client, ClientThread clientThread, FinalBossConfig config,
+        ClanSession session, ScheduledExecutorService executor, LfgService lfgService, LfgPanel lfgPanel)
     {
         this.client = client;
+        this.clientThread = clientThread;
         this.config = config;
         this.session = session;
+        this.executor = executor;
+        this.lfgService = lfgService;
         this.lfgPanel = lfgPanel;
     }
 
@@ -81,9 +93,71 @@ public class LfgChatCommandHandler
                 lfgPanel.removeStatusFromCommand();
                 sendGameMessage("LFG status removed.");
                 break;
+            case WHO:
+                // Network read - off the client thread; the reply hops back.
+                executor.submit(() -> {
+                    String summary = summarize(lfgService.getActiveEntries());
+                    clientThread.invokeLater(() -> {
+                        // The fetch may outlive the session (shared executor); don't
+                        // print into a client that is no longer logged in.
+                        if (client.getGameState() == GameState.LOGGED_IN)
+                        {
+                            sendGameMessage(summary);
+                        }
+                    });
+                });
+                break;
             case HELP:
                 sendGameMessage(LfgChatCommand.USAGE);
                 break;
+        }
+    }
+
+    // Counts active entries per activity in enum declaration order (the
+    // panel's grouped-view order), skipping empty activities.
+    // Package-private for tests.
+    static String summarize(List<LfgEntry> entries)
+    {
+        Map<LfgActivity, Integer> counts = new EnumMap<>(LfgActivity.class);
+        for (LfgEntry entry : entries)
+        {
+            counts.merge(entry.getActivity(), 1, Integer::sum);
+        }
+        if (counts.isEmpty())
+        {
+            return "No one is looking for a group right now.";
+        }
+        StringBuilder sb = new StringBuilder("LFG: ");
+        boolean first = true;
+        for (LfgActivity activity : LfgActivity.values())
+        {
+            Integer count = counts.get(activity);
+            if (count == null)
+            {
+                continue;
+            }
+            if (!first)
+            {
+                sb.append(", ");
+            }
+            first = false;
+            sb.append(shortLabel(activity)).append(" (").append(count).append(')');
+        }
+        return sb.toString();
+    }
+
+    // All-caps community abbreviations for the raids (PbFormat's style);
+    // display names elsewhere.
+    private static String shortLabel(LfgActivity activity)
+    {
+        switch (activity)
+        {
+            case COX:
+            case TOB:
+            case TOA:
+                return activity.name();
+            default:
+                return activity.getDisplayName();
         }
     }
 

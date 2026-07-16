@@ -20,7 +20,7 @@ public final class LfgChatCommand
 {
     public enum Action
     {
-        SET, CLEAR, HELP
+        SET, CLEAR, WHO, HELP
     }
 
     @Value
@@ -41,7 +41,7 @@ public final class LfgChatCommand
     // Square brackets, not angle brackets: the chat renderer treats <...>
     // as a formatting tag and swallows it.
     public static final String USAGE =
-        "Usage: !lfg [Event] [Note] or !lfg off. Events: cox, tob, toa, groupboss, minigame, pvp, skilling, chilling";
+        "Usage: !lfg [Event] [Note], !lfg who, or !lfg off. Events: cox, tob, toa, groupboss, minigame, pvp, skilling, chilling";
 
     private static final String TRIGGER = "!lfg";
 
@@ -104,6 +104,10 @@ public final class LfgChatCommand
         if (keyword.equals("off") || keyword.equals("clear") || keyword.equals("remove"))
         {
             return new Result(Action.CLEAR, null, null);
+        }
+        if (keyword.equals("who"))
+        {
+            return new Result(Action.WHO, null, null);
         }
 
         LfgActivity activity = EVENT_KEYWORDS.get(keyword);
