@@ -196,7 +196,7 @@ public class LeaderboardsTab extends JPanel
             values.add(Dashboard.shortNumber((long) e.getValue()));
         }
         content.add(new Podium(names, values));
-        content.add(caption("logged drops · last 7 days"));
+        content.add(caption("logged drops (1M+/notables) · last 7 days"));
     }
 
     private void allTimePbs(JPanel content)

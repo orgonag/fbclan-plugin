@@ -241,11 +241,12 @@ class HostForm extends JPanel
             teacherBox.setSelected(false);
         }
 
-        hostRoleBox.removeAllItems();
         if (activity.hasRoles())
         {
             boolean hard = hardModeBox.isSelected();
+            // Read the pick before clearing, so a size/mode change keeps it.
             Role previous = (Role) hostRoleBox.getSelectedItem();
+            hostRoleBox.removeAllItems();
             List<Role> roles = activity == Activity.TOB ? distinct(Role.tobComposition(size, hard)) : Role.playable(activity, hard);
             roles.forEach(hostRoleBox::addItem);
             if (previous != null && roles.contains(previous))
@@ -277,6 +278,10 @@ class HostForm extends JPanel
             {
                 dynamic.add(Ui.note("One of each role; a 5th may double up."));
             }
+        }
+        else
+        {
+            hostRoleBox.removeAllItems();
         }
         dynamic.revalidate();
         dynamic.repaint();

@@ -49,16 +49,16 @@ public class Leaderboards
         return recent;
     }
 
-    // Executor.
+    // Executor. A failed fetch keeps the previous board.
     public void refresh()
     {
-        JsonArray rows = db.get("pb_leaderboard", "select=rsn,boss_key,seconds,achieved_at,rank&order=boss_key.asc,rank.asc");
-        if (rows.size() > 0)
+        JsonArray rows = db.getOrNull("pb_leaderboard", "select=rsn,boss_key,seconds,achieved_at,rank&order=boss_key.asc,rank.asc");
+        if (rows != null)
         {
             board = parse(rows);
         }
-        rows = db.get("recent_clan_bests", "select=rsn,boss_key,seconds,achieved_at&order=achieved_at.desc");
-        if (rows.size() > 0)
+        rows = db.getOrNull("recent_clan_bests", "select=rsn,boss_key,seconds,achieved_at&order=achieved_at.desc");
+        if (rows != null)
         {
             recent = parse(rows);
         }

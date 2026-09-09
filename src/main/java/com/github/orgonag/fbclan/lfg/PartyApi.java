@@ -1,6 +1,7 @@
 package com.github.orgonag.fbclan.lfg;
 
 import com.github.orgonag.fbclan.core.Supabase;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.time.Instant;
@@ -32,10 +33,17 @@ public class PartyApi
         this.db = db;
     }
 
+    // Null when the fetch failed, so the board can keep its snapshot
+    // rather than announce every party as disbanded.
     public List<Party> parties()
     {
+        JsonArray rows = db.getOrNull("lfg_parties", "select=*,lfg_applicants(*)&order=created_at.desc");
+        if (rows == null)
+        {
+            return null;
+        }
         List<Party> out = new ArrayList<>();
-        for (JsonElement el : db.get("lfg_parties", "select=*,lfg_applicants(*)&order=created_at.desc"))
+        for (JsonElement el : rows)
         {
             Party p = el.isJsonObject() ? Party.fromRow(el.getAsJsonObject()) : null;
             if (p != null)
@@ -48,8 +56,13 @@ public class PartyApi
 
     public List<FormedParty> formed()
     {
+        JsonArray rows = db.getOrNull("lfg_formed_parties", "select=*&order=formed_at.desc");
+        if (rows == null)
+        {
+            return null;
+        }
         List<FormedParty> out = new ArrayList<>();
-        for (JsonElement el : db.get("lfg_formed_parties", "select=*&order=formed_at.desc"))
+        for (JsonElement el : rows)
         {
             FormedParty f = el.isJsonObject() ? FormedParty.fromRow(el.getAsJsonObject()) : null;
             if (f != null)

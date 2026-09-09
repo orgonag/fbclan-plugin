@@ -94,6 +94,7 @@ public class DropLogTab extends JPanel
             JLabel pic = Ui.small("[pic]", ColorScheme.BRAND_ORANGE);
             pic.setToolTipText("Click to view screenshot");
             row.add(pic, BorderLayout.EAST);
+            row.setToolTipText("Click to view screenshot");
             row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             row.addMouseListener(new MouseAdapter()
             {

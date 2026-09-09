@@ -70,18 +70,6 @@ public final class Ui
         });
     }
 
-    public static void onEdt(Runnable r)
-    {
-        if (SwingUtilities.isEventDispatchThread())
-        {
-            r.run();
-        }
-        else
-        {
-            SwingUtilities.invokeLater(r);
-        }
-    }
-
     // ------------------------------------------------------------ containers
 
     // A vertical list inside a scroll pane that tracks the viewport width.

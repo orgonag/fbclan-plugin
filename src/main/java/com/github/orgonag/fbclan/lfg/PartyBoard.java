@@ -164,10 +164,16 @@ public class PartyBoard
     }
 
     // Executor. Fetch; form the hosted party if it filled; heartbeat; diff.
+    // A failed fetch leaves the snapshot alone: an outage must never read
+    // as "every party was disbanded".
     public void refresh()
     {
         clientThread.invokeLater(this::readClient);
         List<Party> fetched = api.parties();
+        if (fetched == null)
+        {
+            return;
+        }
         String rsn = clan.rsn();
         Party mine = null;
         for (Party p : fetched)
@@ -179,7 +185,12 @@ public class PartyBoard
         }
         if (mine != null && mine.isFull() && api.form(mine))
         {
-            fetched = api.parties();
+            List<Party> again = api.parties();
+            if (again == null)
+            {
+                return;
+            }
+            fetched = again;
             mine = null;
         }
         if (mine != null && System.currentTimeMillis() - lastHeartbeat >= HEARTBEAT_MINUTES * 60_000L)
@@ -188,6 +199,10 @@ public class PartyBoard
             api.heartbeat(rsn);
         }
         List<FormedParty> formedNow = api.formed();
+        if (formedNow == null)
+        {
+            formedNow = formed;
+        }
         parties = fetched;
         formed = formedNow;
         notify(fetched, formedNow, rsn);
@@ -233,6 +248,8 @@ public class PartyBoard
         }
         online = names;
         world = client.getWorld();
+        // Online colours and the world label depend on this; re-render.
+        listener.onChanged();
     }
 
     // ------------------------------------------------------------ notifications

@@ -5,12 +5,14 @@ import com.github.orgonag.fbclan.core.Clan;
 import com.github.orgonag.fbclan.drops.DropLogger;
 import com.github.orgonag.fbclan.drops.DropRates;
 import com.github.orgonag.fbclan.drops.DropRules;
+import com.github.orgonag.fbclan.lfg.Killcounts;
 import com.github.orgonag.fbclan.lfg.LfgCommand;
 import com.github.orgonag.fbclan.lfg.PartyApi;
 import com.github.orgonag.fbclan.lfg.PartyBoard;
 import com.github.orgonag.fbclan.pbs.PersonalBests;
 import com.github.orgonag.fbclan.stats.CaBadges;
 import com.github.orgonag.fbclan.stats.MemberStats;
+import com.github.orgonag.fbclan.ui.AnnouncementsTab;
 import com.github.orgonag.fbclan.ui.DropLogTab;
 import com.github.orgonag.fbclan.ui.PartiesTab;
 import com.github.orgonag.fbclan.ui.Sidebar;
@@ -73,8 +75,10 @@ public class FinalBossPlugin extends Plugin
     @Inject private CaBadges badges;
     @Inject private PartyBoard parties;
     @Inject private PartyApi partyApi;
+    @Inject private Killcounts killcounts;
     @Inject private LfgCommand lfgCommand;
     @Inject private Sidebar sidebar;
+    @Inject private AnnouncementsTab announcementsTab;
     @Inject private DropLogTab dropLogTab;
     @Inject private PartiesTab partiesTab;
 
@@ -102,7 +106,8 @@ public class FinalBossPlugin extends Plugin
             content.refreshWelcome();
             content.maybeShowWelcome();
         });
-        executor.submit(content::refreshAnnouncements);
+        // Warms the cache and populates the tab before it's first opened.
+        announcementsTab.refresh();
 
         navButton = NavigationButton.builder()
             .tooltip("Final Boss")
@@ -153,15 +158,17 @@ public class FinalBossPlugin extends Plugin
         }
         startPolling();
         executor.submit(content::maybeShowWelcome);
-        pbs.maybeSeed();
-        // Varp reads assert the client thread.
-        clientThread.invokeLater(stats::maybeSubmit);
+        // World-type and varp reads belong on the client thread.
+        clientThread.invokeLater(() -> {
+            pbs.maybeSeed();
+            stats.maybeSubmit();
+        });
     }
 
     private void startPolling()
     {
         parties.start();
-        if (config.enableDropLogging())
+        if (config.enableDropLogging() && dropRefresh == null)
         {
             dropRefresh = executor.scheduleAtFixedRate(() -> {
                 try
@@ -176,6 +183,10 @@ public class FinalBossPlugin extends Plugin
         }
         // Badge tiers: fetch on verification, then every 5 minutes so
         // newly earned tiers show without a relog.
+        if (badgeRefresh != null)
+        {
+            return;
+        }
         badgeRefresh = executor.scheduleAtFixedRate(() -> {
             try
             {
@@ -192,6 +203,7 @@ public class FinalBossPlugin extends Plugin
     {
         parties.stop();
         partiesTab.reset();
+        killcounts.clear();
         if (dropRefresh != null)
         {
             dropRefresh.cancel(true);

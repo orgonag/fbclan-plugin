@@ -15,7 +15,7 @@ public final class Names
 
     public static String normalize(String name)
     {
-        return name == null ? "" : name.replace(' ', ' ').trim().toLowerCase(Locale.ROOT);
+        return name == null ? "" : name.replace('\u00A0', ' ').trim().toLowerCase(Locale.ROOT);
     }
 
     public static boolean same(String a, String b)

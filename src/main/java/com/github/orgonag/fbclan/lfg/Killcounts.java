@@ -1,7 +1,7 @@
 package com.github.orgonag.fbclan.lfg;
 
 import com.github.orgonag.fbclan.core.Names;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -55,9 +55,19 @@ public class Killcounts
         }
     }
 
+    private static final int MAX_ENTRIES = 250;
+
     private final ConfigManager configManager;
     private final HiscoreClient hiscores;
-    private final Map<String, CompletableFuture<Hiscore>> cache = new HashMap<>();
+    // One entry per (player, activity) a host has browsed; bounded LRU.
+    private final Map<String, CompletableFuture<Hiscore>> cache = new LinkedHashMap<String, CompletableFuture<Hiscore>>()
+    {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, CompletableFuture<Hiscore>> eldest)
+        {
+            return size() > MAX_ENTRIES;
+        }
+    };
 
     @Inject
     public Killcounts(ConfigManager configManager, HiscoreClient hiscores)
@@ -99,18 +109,33 @@ public class Killcounts
         return total;
     }
 
+    // Logout: nothing browsed is relevant to the next session.
+    public synchronized void clear()
+    {
+        cache.clear();
+    }
+
     // Cached hiscore answer, or null when none is known yet.
     public synchronized Hiscore cached(String rsn, Activity activity)
     {
+        if (rsn == null || activity == null)
+        {
+            return null;
+        }
         CompletableFuture<Hiscore> f = cache.get(key(rsn, activity));
         Hiscore h = f == null ? null : f.getNow(null);
         return h == null || h.stale() ? null : h;
     }
 
-    // Starts a lookup unless one is fresh or in flight; `onDone` runs
-    // (on the hiscore client's thread) once an answer exists.
+    // Starts a lookup unless one is fresh or in flight; `onDone` always
+    // runs once an answer exists — on the hiscore client's thread, so
+    // callers hop to the EDT themselves.
     public synchronized void lookup(String rsn, Activity activity, Runnable onDone)
     {
+        if (rsn == null || activity == null)
+        {
+            return;
+        }
         String key = key(rsn, activity);
         CompletableFuture<Hiscore> f = cache.get(key);
         if (f != null && (!f.isDone() || !f.getNow(null).stale()))
@@ -121,6 +146,9 @@ public class Killcounts
         List<HiscoreSkill> skills = activity.hiscoreSkills();
         if (skills.isEmpty())
         {
+            // No hiscore entry for this activity: a known "unranked".
+            cache.put(key, CompletableFuture.completedFuture(new Hiscore(-1, -1, false, System.currentTimeMillis())));
+            onDone.run();
             return;
         }
         CompletableFuture<Hiscore> next;

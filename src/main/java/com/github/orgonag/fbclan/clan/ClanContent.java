@@ -79,9 +79,14 @@ public class ClanContent
 
     // ------------------------------------------------------------ fetches
 
+    // Fetch failures keep the previous value; an empty table clears it.
     public void refreshAnnouncements()
     {
-        JsonArray rows = db.get("announcements", "select=posted_at,title,body&order=posted_at.desc,sort_order.asc");
+        JsonArray rows = db.getOrNull("announcements", "select=posted_at,title,body&order=posted_at.desc,sort_order.asc");
+        if (rows == null)
+        {
+            return;
+        }
         List<Announcement> out = new ArrayList<>();
         for (JsonElement el : rows)
         {
@@ -93,17 +98,14 @@ public class ClanContent
                 out.add(new Announcement(Supabase.str(row, "posted_at"), title, body));
             }
         }
-        if (rows.size() > 0 || out.isEmpty())
-        {
-            announcements = Collections.unmodifiableList(out);
-        }
+        announcements = Collections.unmodifiableList(out);
     }
 
     // Once per session: the list changes rarely.
     public void refreshNotableItems()
     {
-        JsonArray rows = db.get("notable_items", "select=name");
-        if (rows.size() == 0)
+        JsonArray rows = db.getOrNull("notable_items", "select=name");
+        if (rows == null)
         {
             return;
         }
@@ -121,14 +123,14 @@ public class ClanContent
 
     public void refreshWelcome()
     {
-        JsonArray rows = db.get("welcome_message", "select=message&id=eq.1");
-        if (rows.size() == 0)
+        JsonArray rows = db.getOrNull("welcome_message", "select=message&id=eq.1");
+        if (rows == null)
         {
             return;
         }
         // Remote text printed into the chatbox: strip anything that could
         // read as chat markup, collapse whitespace, cap the length.
-        String raw = Supabase.str(rows.get(0).getAsJsonObject(), "message");
+        String raw = rows.size() == 0 ? "" : Supabase.str(rows.get(0).getAsJsonObject(), "message");
         String clean = raw.replaceAll("<[^>]*>", "").replace("<", "").replace(">", "")
             .replaceAll("\\s+", " ").trim();
         welcome = cap(clean, MAX_WELCOME);

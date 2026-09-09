@@ -53,6 +53,10 @@ public class DropRates
 
     public void load()
     {
+        if (!bySource.isEmpty())
+        {
+            return; // already parsed this client session
+        }
         Map<String, List<RawDrop>> raw;
         try (InputStream is = DropRates.class.getResourceAsStream(RESOURCE);
              Reader reader = new BufferedReader(new InputStreamReader(

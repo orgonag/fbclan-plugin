@@ -43,9 +43,18 @@ public class CaBadges
     {
         this.db = db;
         this.icons = icons;
-        iconByTier.put("Elite", register("ca_elite.png"));
-        iconByTier.put("Master", register("ca_master.png"));
-        iconByTier.put("Grandmaster", register("ca_grandmaster.png"));
+    }
+
+    // Icons are registered on first use, not at injection time, so a
+    // loaded-but-disabled plugin registers nothing.
+    private synchronized void ensureIcons()
+    {
+        if (iconByTier.isEmpty())
+        {
+            iconByTier.put("Elite", register("ca_elite.png"));
+            iconByTier.put("Master", register("ca_master.png"));
+            iconByTier.put("Grandmaster", register("ca_grandmaster.png"));
+        }
     }
 
     private int register(String resource)
@@ -57,10 +66,10 @@ public class CaBadges
     // Executor.
     public void refresh()
     {
-        JsonArray rows = db.get("ca_leaderboard", "select=rsn,tier");
-        if (rows.size() == 0)
+        JsonArray rows = db.getOrNull("ca_leaderboard", "select=rsn,tier");
+        if (rows == null)
         {
-            return;
+            return; // keep the previous tiers through an outage
         }
         Map<String, String> tiers = new HashMap<>();
         for (JsonElement el : rows)
@@ -84,6 +93,7 @@ public class CaBadges
         {
             return;
         }
+        ensureIcons();
         Integer icon = iconByTier.get(tierByRsn.get(Text.standardize(event.getName())));
         if (icon == null)
         {

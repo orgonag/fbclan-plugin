@@ -60,7 +60,7 @@ public class LfgCommand
         }
         // PRIVATECHATOUT's name is the recipient; the author is us by definition.
         if (event.getType() != ChatMessageType.PRIVATECHATOUT
-            && !Names.same(Text.removeTags(event.getName()), clan.rsn()))
+            && (event.getName() == null || !Names.same(Text.removeTags(event.getName()), clan.rsn())))
         {
             return;
         }
@@ -78,7 +78,8 @@ public class LfgCommand
         if (keyword.isEmpty() || keyword.equals("parties") || keyword.equals("party"))
         {
             executor.submit(() -> {
-                String reply = summarize(api.parties());
+                List<Party> parties = api.parties();
+                String reply = parties == null ? "Couldn't reach the party board — try again." : summarize(parties);
                 clientThread.invokeLater(() -> {
                     if (client.getGameState() == GameState.LOGGED_IN)
                     {

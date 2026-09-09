@@ -47,8 +47,16 @@ public class Supabase
     // ------------------------------------------------------------ reads
 
     // Rows matching a PostgREST query ("select=a,b&order=x.desc"); an
-    // empty array on any failure so callers never null-check.
+    // empty array on any failure, for callers that render what they get.
     public JsonArray get(String table, String query)
+    {
+        JsonArray rows = getOrNull(table, query);
+        return rows == null ? new JsonArray() : rows;
+    }
+
+    // Same, but null on failure so a cache can keep its previous value
+    // and still clear when the table is genuinely empty.
+    public JsonArray getOrNull(String table, String query)
     {
         Request request = base(PROJECT_URL + "/rest/v1/" + table + "?" + query).get().build();
         try (Response response = http.newCall(request).execute())
@@ -56,14 +64,14 @@ public class Supabase
             if (!response.isSuccessful() || response.body() == null)
             {
                 log.warn("Supabase GET {} failed: {}", table, response.code());
-                return new JsonArray();
+                return null;
             }
             return new JsonParser().parse(response.body().string()).getAsJsonArray();
         }
         catch (IOException | RuntimeException e)
         {
             log.warn("Supabase GET {} failed", table, e);
-            return new JsonArray();
+            return null;
         }
     }
 

@@ -17,10 +17,10 @@ public interface FinalBossConfig extends Config
     @ConfigSection(name = "Looking For Group", description = "Settings for the LFG party board", position = 1)
     String lfgSection = "lfg";
 
-    @ConfigSection(name = "Discord Integration", description = "Discord webhook settings", position = 2)
+    @ConfigSection(name = "Discord Integration", description = "Settings for Discord webhook", position = 2)
     String discordSection = "discord";
 
-    @ConfigSection(name = "Leaderboards", description = "Personal bests, dashboard stats, and chat badges", position = 3)
+    @ConfigSection(name = "Leaderboards", description = "Clan leaderboards settings", position = 3)
     String leaderboardsSection = "leaderboards";
 
     // ------------------------------------------------------------ drops
@@ -28,7 +28,7 @@ public interface FinalBossConfig extends Config
     @ConfigItem(
         keyName = "enableDropLogging",
         name = "Enable Drop Logging",
-        description = "Log rare and valuable drops to the clan database. On by default — disable to opt out.",
+        description = "Log valuable drops to the clan database. On by default for verified clan members — disable to opt out.",
         section = dropLoggingSection,
         position = 0
     )
@@ -41,7 +41,7 @@ public interface FinalBossConfig extends Config
     @ConfigItem(
         keyName = "dropThresholdGp",
         name = "Valuable drop threshold (GP)",
-        description = "Any drop worth at least this much (GE price x quantity) is logged, rare or not (1,000,000 minimum)",
+        description = "Any drop worth at least this much (GE price x quantity) is logged, rare or not — 1m minimum",
         section = dropLoggingSection,
         position = 1
     )
@@ -54,7 +54,9 @@ public interface FinalBossConfig extends Config
     @ConfigItem(
         keyName = "rareDropThreshold",
         name = "Rare drop threshold (1 in X)",
-        description = "Log drops with a drop rate of 1 in X or rarer even below the valuable threshold; 0 turns the rule off",
+        description = "Log drops whose drop rate is 1 in X or rarer, even below the valuable threshold. "
+            + "100 = 1% or rarer. 0 turns the rarity rule off. Uses the OSRS Wiki drop table; "
+            + "drops it doesn't cover only qualify by value or the clan's notable list.",
         section = dropLoggingSection,
         position = 2
     )
@@ -67,7 +69,8 @@ public interface FinalBossConfig extends Config
     @ConfigItem(
         keyName = "rareDropMinValueGp",
         name = "Rare drop min value (GP)",
-        description = "A rare drop must also be worth at least this much; 0 logs every rare drop regardless of value",
+        description = "A rare drop must also be worth at least this much to be logged, so 1/128 rune junk "
+            + "stays out. Set to 0 to log every rare drop regardless of value (untradeables included).",
         section = dropLoggingSection,
         position = 3
     )

@@ -98,11 +98,12 @@ public class Dashboard
         return womSyncedAt;
     }
 
-    // Executor.
+    // Executor. Each source fails soft independently, keeping its
+    // previous value; an empty result is real and clears it.
     public void refresh()
     {
-        JsonArray cl = db.get("cl_leaderboard", "select=rsn,cl_obtained,cl_total");
-        if (cl.size() > 0)
+        JsonArray cl = db.getOrNull("cl_leaderboard", "select=rsn,cl_obtained,cl_total");
+        if (cl != null)
         {
             List<ClEntry> out = new ArrayList<>();
             for (JsonElement el : cl)
@@ -115,8 +116,8 @@ public class Dashboard
             }
             clBoard = Collections.unmodifiableList(out);
         }
-        JsonArray ca = db.get("ca_leaderboard", "select=rsn,ca_points,tier");
-        if (ca.size() > 0)
+        JsonArray ca = db.getOrNull("ca_leaderboard", "select=rsn,ca_points,tier");
+        if (ca != null)
         {
             List<CaEntry> out = new ArrayList<>();
             for (JsonElement el : ca)
@@ -129,11 +130,11 @@ public class Dashboard
             }
             caBoard = Collections.unmodifiableList(out);
         }
-        JsonArray total = db.get("gp_week_total", "select=total_gp,drop_count");
-        JsonArray top = db.get("gp_week_top", "select=rsn,gp");
-        if (total.size() > 0)
+        JsonArray total = db.getOrNull("gp_week_total", "select=total_gp,drop_count");
+        JsonArray top = db.getOrNull("gp_week_top", "select=rsn,gp");
+        if (total != null && top != null)
         {
-            JsonObject t = total.get(0).getAsJsonObject();
+            JsonObject t = total.size() > 0 ? total.get(0).getAsJsonObject() : new JsonObject();
             List<Named> names = new ArrayList<>();
             for (JsonElement el : top)
             {
@@ -146,7 +147,11 @@ public class Dashboard
             gpWeek = new GpWeek(Supabase.longOr(t, "total_gp", 0), Supabase.intOr(t, "drop_count", 0),
                 Collections.unmodifiableList(names));
         }
-        applyWomCache(db.get("wom_cache", "select=metric,payload,updated_at"));
+        JsonArray wom = db.getOrNull("wom_cache", "select=metric,payload,updated_at");
+        if (wom != null)
+        {
+            applyWomCache(wom);
+        }
     }
 
     // Each row's payload is the raw WOM response array for one metric.
