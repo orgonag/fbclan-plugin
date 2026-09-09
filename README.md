@@ -23,7 +23,8 @@ side panel. The panel unlocks after clan membership is verified.
   and in Discord. Covers NPC kills, raid chests (CoX/ToB/ToA), and reward
   chests the client reports differently — the Gauntlet, the Whisperer,
   Araxxor, the Royal Titans — which require the core Loot Tracker plugin
-  (enabled by default). Clue scrolls are never logged.
+  (enabled by default). Clue scrolls, long and curved bones, champion
+  scrolls, and keys are never logged by the automatic rules.
 - **Drop Screenshots** — Optional full-client screenshot per logged drop,
   annotated with party member names and viewable from the drop log.
 - **Discord Notifications** — Optional webhook for drop alerts.

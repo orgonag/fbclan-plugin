@@ -33,7 +33,8 @@ import net.runelite.client.ui.DrawManager;
  * <li><b>Notable</b>: on the clan-curated notable-items list.</li>
  * <li><b>Pet</b>: announced in chat (pets never appear in loot events).</li>
  * </ul>
- * Clue scrolls are always skipped. It then optionally grabs an annotated
+ * Clue scrolls, long/curved bones, champion scrolls, and keys are never
+ * logged by the automatic rules. It then optionally grabs an annotated
  * screenshot and fans out to the Supabase drop log and the user's Discord
  * webhook.
  */
@@ -137,10 +138,6 @@ public class DropCaptureService
             // notable items (GE price 0) would never survive a value-first gate.
             ItemComposition itemComp = itemManager.getItemComposition(itemId);
             String itemName = itemComp.getName();
-            if (DropTrackingService.isClueScroll(itemName))
-            {
-                continue;
-            }
 
             // Looked up for every item so a valuable drop's rarity is still
             // recorded; the display-name mapping (Hunllef -> Gauntlet) is
@@ -151,8 +148,10 @@ public class DropCaptureService
                 rarity = rarityService.getRarity(displaySource, itemId, quantity);
             }
 
-            boolean valuable = DropTrackingService.isValuableDrop(gePrice, quantity, threshold);
-            boolean rare = DropTrackingService.isRareDrop(rarity, rareDenominator) && totalValue >= rareMinValue;
+            boolean blocked = DropTrackingService.isNeverLogged(itemName);
+            boolean valuable = !blocked && DropTrackingService.isValuableDrop(gePrice, quantity, threshold);
+            boolean rare = !blocked && DropTrackingService.isRareDrop(rarity, rareDenominator)
+                && totalValue >= rareMinValue;
             boolean notable = DropTrackingService.isNotableDrop(itemName, notableNames);
             if (valuable || rare || notable)
             {

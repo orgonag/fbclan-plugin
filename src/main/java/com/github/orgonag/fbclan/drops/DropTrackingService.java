@@ -41,11 +41,25 @@ public class DropTrackingService
         return rarity.getAsDouble() <= 1.0 / thresholdDenominator;
     }
 
-    // Clue scrolls are ~1/128 from countless monsters; they'd flood the log
-    // under any sane rarity threshold and are never what "rare drop" means.
-    public static boolean isClueScroll(String itemName)
+    // Drops the clan never wants in the log regardless of value or rarity
+    // settings: clue scrolls (~1/128 from countless monsters), long and
+    // curved bones, champion scrolls, and keys (brimstone, Larran's,
+    // ecumenical, crystal, key halves, ...). The clan's notable list is an
+    // explicit choice and is not subject to this filter.
+    public static boolean isNeverLogged(String itemName)
     {
-        return itemName != null && itemName.toLowerCase(Locale.ROOT).startsWith("clue scroll");
+        if (itemName == null)
+        {
+            return false;
+        }
+        String n = itemName.toLowerCase(Locale.ROOT).trim();
+        return n.startsWith("clue scroll")
+            || n.equals("long bone")
+            || n.equals("curved bone")
+            || n.endsWith("champion scroll")
+            || n.endsWith(" key")
+            || n.endsWith(" half of key")
+            || n.contains(" key (");
     }
 
     // "1/512" style, rounded to the nearest whole denominator.
