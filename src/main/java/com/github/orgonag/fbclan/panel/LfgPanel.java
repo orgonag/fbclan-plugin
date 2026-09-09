@@ -443,21 +443,7 @@ public class LfgPanel extends JPanel
         submitStatus(selected, noteField.getText());
     }
 
-    // Entry point for the !lfg chat command. Arrives on the client thread,
-    // so hop to the EDT: the dropdown and note field are mirrored to match
-    // the command before submitting, keeping the panel and the DB in
-    // agreement. The parser has already capped the note at
-    // MAX_NOTE_LENGTH, so the note field's DocumentFilter accepts it.
-    public void setStatusFromCommand(LfgActivity activity, String note)
-    {
-        SwingUtilities.invokeLater(() -> {
-            activityDropdown.setSelectedItem(activity);
-            noteField.setText(note == null ? "" : note);
-            submitStatus(activity, note);
-        });
-    }
-
-    // Shared submit path for the Set Status button and the chat command.
+    // Submit path for the Set Status button.
     // Captures party state at submit time; if the user later joins or
     // leaves a party, onLocalPartyStateChanged re-upserts with the new
     // values automatically.
@@ -493,13 +479,6 @@ public class LfgPanel extends JPanel
             showError(ok ? null : "Couldn't remove status — try again.");
             refresh();
         });
-    }
-
-    // Entry point for "!lfg off". Touches no Swing state (showError already
-    // hops to the EDT), so it is safe to call from the client thread.
-    public void removeStatusFromCommand()
-    {
-        onRemoveStatus();
     }
 
     private void showError(String message)

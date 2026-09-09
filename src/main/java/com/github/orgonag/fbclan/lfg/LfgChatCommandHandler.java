@@ -2,7 +2,6 @@ package com.github.orgonag.fbclan.lfg;
 
 import com.github.orgonag.fbclan.ClanSession;
 import com.github.orgonag.fbclan.FinalBossConfig;
-import com.github.orgonag.fbclan.panel.LfgPanel;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -17,10 +16,11 @@ import net.runelite.client.callback.ClientThread;
 import net.runelite.client.util.Text;
 
 /**
- * Reacts to the local player's own "!lfg" chat messages by setting or
- * clearing their LFG status through the panel's shared submit path. The
- * typed message still posts to chat normally (it doubles as a visible
- * advertisement); this handler never consumes or modifies it, and never
+ * Answers the local player's own "!lfg" chat messages with a local-only
+ * summary: how many members are looking per event, or which parties are
+ * open. Read-only by design — nothing is set, cleared, or joined from
+ * chat. The typed message still posts to chat normally (it doubles as a
+ * visible ask); this handler never consumes or modifies it, and never
  * reacts to other players' commands.
  */
 public class LfgChatCommandHandler
@@ -45,11 +45,10 @@ public class LfgChatCommandHandler
     private final ScheduledExecutorService executor;
     private final LfgService lfgService;
     private final LfgPartyService partyService;
-    private final LfgPanel lfgPanel;
 
     public LfgChatCommandHandler(Client client, ClientThread clientThread, FinalBossConfig config,
         ClanSession session, ScheduledExecutorService executor, LfgService lfgService,
-        LfgPartyService partyService, LfgPanel lfgPanel)
+        LfgPartyService partyService)
     {
         this.client = client;
         this.clientThread = clientThread;
@@ -58,7 +57,6 @@ public class LfgChatCommandHandler
         this.executor = executor;
         this.lfgService = lfgService;
         this.partyService = partyService;
-        this.lfgPanel = lfgPanel;
     }
 
     // Runs on the client thread (chat message dispatch).
@@ -87,15 +85,6 @@ public class LfgChatCommandHandler
 
         switch (result.getAction())
         {
-            case SET:
-                lfgPanel.setStatusFromCommand(result.getActivity(), result.getNote());
-                sendGameMessage("LFG status set: " + result.getActivity().getDisplayName()
-                    + " - expires in " + config.lfgTimeoutMinutes() + " min");
-                break;
-            case CLEAR:
-                lfgPanel.removeStatusFromCommand();
-                sendGameMessage("LFG status removed.");
-                break;
             case WHO:
                 // Network read - off the client thread; the reply hops back.
                 replyAsync(() -> summarize(lfgService.getActiveEntries()));
@@ -105,7 +94,6 @@ public class LfgChatCommandHandler
                 break;
             case HELP:
                 sendGameMessage(LfgChatCommand.USAGE);
-                sendGameMessage(LfgChatCommand.EVENTS);
                 break;
         }
     }

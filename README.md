@@ -33,8 +33,10 @@ side panel. The panel unlocks after clan membership is verified.
   they're accepted; hosts see applicants with their hiscore kill count
   and accept, decline, or kick from the panel. **Looking**: the original
   status board — set what you're up for, with party clustering and an
-  optional note (e.g. "HMT NFRZ") — plus the `!lfg` chat command
-  (`!lfg tob need 2`, `!lfg who`, `!lfg parties`, `!lfg off`).
+  optional note (e.g. "HMT NFRZ"). The `!lfg` chat command is read-only:
+  `!lfg` prints how many members are looking per event and `!lfg parties`
+  lists open parties (both visible only to you); setting a status,
+  hosting, and applying are done in the panel.
 - **PB Leaderboards** — Clan-wide top-3 personal best times for every
   boss, raid (per team size), Gauntlet/Colosseum/Inferno, Wintertodt/
   Tempoross, Hallowed Sepulchre, and agility courses RuneLite tracks,

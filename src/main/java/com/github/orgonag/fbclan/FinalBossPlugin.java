@@ -256,7 +256,7 @@ public class FinalBossPlugin extends Plugin
         lfgPartyBridge = new LfgPartyBridge(client, clientThread, partyService, config, executor,
             lfgPanel, lfgPartiesPanel);
         lfgChatCommandHandler = new LfgChatCommandHandler(client, clientThread, config, session,
-            executor, lfgService, lfgPartyService, lfgPanel);
+            executor, lfgService, lfgPartyService);
         announcementsPanel = new AnnouncementsPanel(announcementsService, executor);
         // Warm the announcements cache and populate the tab; refresh() runs
         // the fetch on the executor, so startup never blocks on network.
