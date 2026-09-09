@@ -19,7 +19,7 @@ import net.runelite.client.callback.ClientThread;
  * Turns the 30s party poll into events for the local player by diffing
  * consecutive snapshots: new applicants to the party they host, their
  * own application being accepted/declined, being removed from a party,
- * and a party they were in being disbanded. Events surface as chatbox
+ * a party they were in forming (filling up) or being disbanded. Events surface as chatbox
  * game messages and, optionally, desktop notifications. Everything here
  * is local — nothing is sent anywhere.
  */
@@ -34,6 +34,7 @@ public class LfgPartyNotifier
     // Guarded by `this`: the poll runs on the executor; reset/local-action
     // hints arrive from the EDT.
     private Map<String, LfgParty> previous = Collections.emptyMap();
+    private Set<String> previousFormed = Collections.emptySet();
     private boolean primed = false;
     // Parties the local player withdrew from / disbanded themselves, so the
     // next diff doesn't announce their own action back at them.
@@ -52,6 +53,7 @@ public class LfgPartyNotifier
     public synchronized void reset()
     {
         previous = Collections.emptyMap();
+        previousFormed = Collections.emptySet();
         primed = false;
         selfLeft.clear();
     }
@@ -67,7 +69,9 @@ public class LfgPartyNotifier
 
     // Runs on the executor after each successful fetch. The first snapshot
     // only primes the baseline so a fresh login never replays history.
-    public void onPartiesFetched(List<LfgParty> parties)
+    // `formed` is the current formed-party list: a party that vanished
+    // because it formed is announced as such, not as disbanded.
+    public void onPartiesFetched(List<LfgParty> parties, List<LfgFormedParty> formed)
     {
         String rsn = session.getRsn();
         if (rsn == null)
@@ -79,14 +83,35 @@ public class LfgPartyNotifier
         {
             now.put(p.getId(), p);
         }
+        Set<String> formedIds = new HashSet<>();
+        Set<String> formedSourceIds = new HashSet<>();
+        for (LfgFormedParty f : formed)
+        {
+            formedIds.add(f.getId());
+            if (f.getPartyId() != null)
+            {
+                formedSourceIds.add(f.getPartyId());
+            }
+        }
         List<String> messages = new ArrayList<>();
         synchronized (this)
         {
             if (primed)
             {
-                diff(previous, now, rsn, messages);
+                diff(previous, now, rsn, formedSourceIds, messages);
+                for (LfgFormedParty f : formed)
+                {
+                    if (!previousFormed.contains(f.getId()) && f.includes(rsn))
+                    {
+                        String whose = f.isHostedBy(rsn) ? "Your" : f.getHostRsn() + "'s";
+                        messages.add(whose + " " + f.getTitle() + " party has formed"
+                            + (f.getWorld() != null ? " (World " + f.getWorld() + ")" : "")
+                            + ": " + f.getRoster() + ".");
+                    }
+                }
             }
             previous = now;
+            previousFormed = formedIds;
             primed = true;
         }
         for (String m : messages)
@@ -95,7 +120,8 @@ public class LfgPartyNotifier
         }
     }
 
-    private void diff(Map<String, LfgParty> prev, Map<String, LfgParty> now, String rsn, List<String> out)
+    private void diff(Map<String, LfgParty> prev, Map<String, LfgParty> now, String rsn,
+                      Set<String> formedSourceIds, List<String> out)
     {
         // Host: new pending applicants.
         for (LfgParty p : now.values())
@@ -145,10 +171,12 @@ public class LfgPartyNotifier
             }
         }
 
-        // Parties that vanished while the player was in them.
+        // Parties that vanished while the player was in them (a party that
+        // formed is announced separately, from the formed list).
         for (LfgParty before : prev.values())
         {
-            if (now.containsKey(before.getId()) || before.isHostedBy(rsn))
+            if (now.containsKey(before.getId()) || before.isHostedBy(rsn)
+                || formedSourceIds.contains(before.getId()))
             {
                 continue;
             }

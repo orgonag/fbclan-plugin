@@ -69,6 +69,9 @@ public class LfgApplicant
     // Kill count the applicant sent with the application (null = none).
     Integer kc;
     KcSource kcSource;
+    // True when the host added this member directly (a buddy who isn't on
+    // LFG); such rows are created already ACCEPTED.
+    boolean addedByHost;
 
     public boolean isAccepted()
     {
@@ -106,7 +109,9 @@ public class LfgApplicant
             Status.fromKey(optString(row, "status")),
             createdAt,
             kc,
-            KcSource.fromKey(optString(row, "kc_source")));
+            KcSource.fromKey(optString(row, "kc_source")),
+            row.has("added_by_host") && !row.get("added_by_host").isJsonNull()
+                && row.get("added_by_host").getAsBoolean());
     }
 
     static String optString(JsonObject row, String key)

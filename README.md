@@ -44,7 +44,13 @@ side panel. The panel unlocks after clan membership is verified.
   hiscores, and a value the applicant typed is shown last, marked
   "(self)". A party's minimum KC is shown to applicants but never
   blocks applying — the host decides. Hosts accept, decline, or kick
-  from the panel. **Looking**: the original
+  from the panel, and can seat a buddy who isn't on LFG by name and
+  role so the spot shows as taken to everyone browsing. When the last
+  seat fills the party **forms**: it leaves the open list, everyone in
+  it gets a "party has formed" message with the roster and world, and
+  the host is free to host again. Formed parties are visible to the
+  whole clan under "Show formed" for 7 days (the host can remove theirs
+  sooner). **Looking**: the original
   status board — set what you're up for, with party clustering and an
   optional note (e.g. "HMT NFRZ"). The `!lfg` chat command is read-only:
   `!lfg` prints how many members are looking per event and `!lfg parties`
@@ -88,7 +94,7 @@ side panel. The panel unlocks after clan membership is verified.
 | Screenshot Drops | Upload a full client screenshot for drops above the threshold | Off |
 | Enable LFG | Enable Looking For Group feature | On |
 | LFG Timeout | Minutes before your LFG status expires and is removed (10–720) | 240 |
-| Party chat notifications | Chatbox messages for applicants to your party, your application being accepted/declined, and parties you're in being disbanded | On |
+| Party chat notifications | Chatbox messages for applicants to your party, your application being accepted/declined, and parties you're in forming or being disbanded | On |
 | Party desktop notifications | Also raise a RuneLite desktop notification for those events | Off |
 | Kill count lookups | Look up kill counts on the OSRS hiscores when an applicant's client didn't send one, and to prefill your own on the apply form | On |
 | Discord Webhook URL | Discord webhook for drop notifications | Empty |
@@ -108,6 +114,7 @@ for personal bests, a server-side function:
 | `lfg_entries` | Allowed | Allowed | Allowed | Allowed |
 | `lfg_parties` | Allowed | Allowed | Allowed | Allowed |
 | `lfg_applicants` | Allowed | Allowed | Allowed | Allowed |
+| `lfg_formed_parties` | Allowed | Allowed | Denied | Allowed |
 | `drop-screenshots` (storage) | Allowed | Public read | Denied | Denied |
 | `notable_items` | Denied | Allowed | Denied | Denied |
 | `welcome_message` | Denied | Allowed | Denied | Denied |
@@ -171,6 +178,14 @@ read-only views (`cl_leaderboard`, `ca_leaderboard`, top 20 each).
   crashed client can't leave a stale advertisement up. Disabling the
   plugin or closing the client disbands your party and withdraws any
   pending application immediately.
+- **Formed parties are immutable snapshots.** When a party fills, the
+  host's client copies it (host, members, roles, world) into
+  `lfg_formed_parties` and deletes the live party, so the one-party-per-
+  player rules no longer apply to anyone in it. Snapshots can be read,
+  inserted, and deleted but never updated; `formed_at` is stamped by a
+  trigger so a client can't post-date one; and a scheduled job removes
+  them after 7 days. They hold only names, roles, activity, and world —
+  the same data that was already public on the open board.
 - **Kill counts on applications** come from the applicant's own RuneLite
   config (the count the game printed to their client), sent with the
   application as a plain integer. Like everything else a member says

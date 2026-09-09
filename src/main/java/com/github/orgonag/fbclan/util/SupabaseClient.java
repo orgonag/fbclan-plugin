@@ -20,6 +20,8 @@ public class SupabaseClient
     // - lfg_entries table: INSERT, SELECT, UPDATE, DELETE (needed for LFG lifecycle)
     // - lfg_parties / lfg_applicants tables: INSERT, SELECT, UPDATE, DELETE
     //   (hosted parties and their applicants; deleting a party cascades)
+    // - lfg_formed_parties table: INSERT, SELECT, DELETE (immutable snapshots
+    //   of parties that filled up; no UPDATE)
     // - notable_items table: SELECT only (clan-curated list, written solely by
     //   the sheet-sync Apps Script's service-role key)
     // - welcome_message table: SELECT only (clan-curated text, written solely
@@ -112,6 +114,15 @@ public class SupabaseClient
 
     public static boolean insert(OkHttpClient httpClient, String table, JsonObject data) throws IOException
     {
+        int code = insertForCode(httpClient, table, data);
+        return code >= 200 && code < 300;
+    }
+
+    // Like insert(), but hands back the HTTP status so a caller can tell a
+    // constraint conflict (409, e.g. "this RSN is already in a party") from
+    // a generic failure.
+    public static int insertForCode(OkHttpClient httpClient, String table, JsonObject data) throws IOException
+    {
         String url = buildUrl(table);
         RequestBody body = RequestBody.create(JSON, data.toString());
         Request request = baseRequest(url)
@@ -125,9 +136,8 @@ public class SupabaseClient
             if (!response.isSuccessful())
             {
                 log.warn("Supabase INSERT failed: {} {}", response.code(), response.message());
-                return false;
             }
-            return true;
+            return response.code();
         }
     }
 

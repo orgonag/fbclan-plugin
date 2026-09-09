@@ -3,6 +3,7 @@ package com.github.orgonag.fbclan.panel;
 import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.lfg.LfgActivity;
 import com.github.orgonag.fbclan.lfg.LfgApplicant;
+import com.github.orgonag.fbclan.lfg.LfgFormedParty;
 import com.github.orgonag.fbclan.lfg.LfgKillcountService;
 import com.github.orgonag.fbclan.lfg.LfgLocalKillcounts;
 import com.github.orgonag.fbclan.lfg.LfgLootRule;
@@ -78,6 +79,7 @@ public class LfgPartiesPanel extends JPanel
 
     // EDT-only
     private List<LfgParty> cached = new ArrayList<>();
+    private List<LfgFormedParty> cachedFormed = new ArrayList<>();
     private boolean formVisible = false;
     private boolean editing = false;
     // rebuildDynamicForm() adjusts widgets whose listeners call it back;
@@ -86,6 +88,10 @@ public class LfgPartiesPanel extends JPanel
     private String applyingPartyId = null;
     private LfgActivity filterActivity = null;
     private boolean hideFull = false;
+    private boolean showFormed = false;
+    // Text the host has typed into the Add-member box, kept across the
+    // rebuild every poll triggers.
+    private String addMemberDraft = "";
 
     // Widgets
     private final JPanel listPanel;
@@ -108,6 +114,7 @@ public class LfgPartiesPanel extends JPanel
     private final JButton submitButton;
     private final JComboBox<Object> filterBox;
     private final JCheckBox hideFullBox;
+    private final JCheckBox showFormedBox;
 
     public LfgPartiesPanel(LfgPartyService partyService, LfgKillcountService killcounts,
                            LfgLocalKillcounts localKillcounts, LfgPartyNotifier notifier,
@@ -207,28 +214,38 @@ public class LfgPartiesPanel extends JPanel
         controls.add(Box.createRigidArea(new Dimension(0, 5)));
 
         // ---- Filters ----
-        JPanel filterRow = new JPanel(new BorderLayout(5, 0));
-        filterRow.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        filterRow.setAlignmentX(LEFT_ALIGNMENT);
         List<Object> filterItems = new ArrayList<>();
         filterItems.add("All activities");
         Collections.addAll(filterItems, LfgActivity.values());
         filterBox = new JComboBox<>(filterItems.toArray());
         filterBox.setRenderer(new PanelUi.ActivityRenderer());
+        filterBox.setAlignmentX(LEFT_ALIGNMENT);
         filterBox.addActionListener(e -> {
             Object sel = filterBox.getSelectedItem();
             filterActivity = sel instanceof LfgActivity ? (LfgActivity) sel : null;
             rebuildList();
         });
+        controls.add(pinHeight(filterBox));
+
+        JPanel toggles = new JPanel(new GridLayout(1, 2));
+        toggles.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        toggles.setAlignmentX(LEFT_ALIGNMENT);
         hideFullBox = checkbox("Hide full");
         hideFullBox.setBackground(ColorScheme.DARK_GRAY_COLOR);
         hideFullBox.addActionListener(e -> {
             hideFull = hideFullBox.isSelected();
             rebuildList();
         });
-        filterRow.add(filterBox, BorderLayout.CENTER);
-        filterRow.add(hideFullBox, BorderLayout.EAST);
-        controls.add(pinHeight(filterRow));
+        showFormedBox = checkbox("Show formed");
+        showFormedBox.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        showFormedBox.setToolTipText("Parties that filled up in the last 7 days");
+        showFormedBox.addActionListener(e -> {
+            showFormed = showFormedBox.isSelected();
+            rebuildList();
+        });
+        toggles.add(hideFullBox);
+        toggles.add(showFormedBox);
+        controls.add(pinHeight(toggles));
 
         errorLabel = new JLabel();
         errorLabel.setForeground(ColorScheme.PROGRESS_ERROR_COLOR);
@@ -291,24 +308,53 @@ public class LfgPartiesPanel extends JPanel
     {
         SwingUtilities.invokeLater(() -> {
             cached = new ArrayList<>();
+            cachedFormed = new ArrayList<>();
             applyingPartyId = null;
+            addMemberDraft = "";
             rebuildList();
         });
     }
 
-    // Fetch on the executor; diff for notifications; heartbeat if hosting;
-    // then render on the EDT.
+    // Fetch on the executor; form the hosted party if it filled; diff for
+    // notifications; heartbeat if hosting; then render on the EDT.
     public void refresh()
     {
         executor.submit(() -> {
             List<LfgParty> parties = partyService.getParties();
-            notifier.onPartiesFetched(parties);
+            if (maybeForm(parties))
+            {
+                parties = partyService.getParties();
+            }
+            List<LfgFormedParty> formed = partyService.getFormed();
+            notifier.onPartiesFetched(parties, formed);
             maybeHeartbeat(parties);
+            final List<LfgParty> partiesF = parties;
             SwingUtilities.invokeLater(() -> {
-                cached = parties;
+                cached = partiesF;
+                cachedFormed = formed;
                 rebuildList();
             });
         });
+    }
+
+    // The host's client is the one that forms the party: once every seat
+    // is taken, snapshot it to the formed list and take it off the board.
+    // Returns true when a snapshot was written (the caller re-fetches).
+    private boolean maybeForm(List<LfgParty> parties)
+    {
+        String rsn = currentRsn;
+        if (rsn == null)
+        {
+            return false;
+        }
+        for (LfgParty p : parties)
+        {
+            if (p.isHostedBy(rsn) && p.isFull())
+            {
+                return partyService.form(p);
+            }
+        }
+        return false;
     }
 
     private void maybeHeartbeat(List<LfgParty> parties)
@@ -659,9 +705,57 @@ public class LfgPartiesPanel extends JPanel
         {
             listPanel.add(buildPartyCard(p));
         }
+
+        if (showFormed)
+        {
+            List<LfgFormedParty> formed = new ArrayList<>();
+            for (LfgFormedParty f : cachedFormed)
+            {
+                if (filterActivity == null || f.getActivity() == filterActivity)
+                {
+                    formed.add(f);
+                }
+            }
+            listPanel.add(sectionHeader("Formed parties (" + formed.size() + ")"));
+            if (formed.isEmpty())
+            {
+                listPanel.add(PanelUi.emptyStateLabel("No parties have formed in the last 7 days."));
+            }
+            for (LfgFormedParty f : formed)
+            {
+                listPanel.add(buildFormedCard(f));
+            }
+        }
         listPanel.revalidate();
         listPanel.repaint();
         updateFormVisibility();
+    }
+
+    // Read-only record of a party that filled up: who went, when, where.
+    private JPanel buildFormedCard(LfgFormedParty f)
+    {
+        String rsn = currentRsn;
+        JPanel card = card();
+        card.add(titleRow(f.getActivity(), html("<b>" + esc(f.getTitle()) + "</b>"
+            + (f.getWorld() != null ? " <font color='#A0A0A0'>W" + f.getWorld() + "</font>" : "")
+            + "  " + f.getMembers().size() + "/" + f.getCapacity())));
+        card.add(small("Formed " + timeAgo(f.getFormedAt()) + " · hosted by " + f.getHostRsn(), MUTED));
+        card.add(wrapped(f.getRoster(), f.includes(rsn) ? Color.WHITE : MUTED));
+        if (f.isHostedBy(rsn))
+        {
+            JPanel actions = new JPanel(new GridLayout(1, 1));
+            actions.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+            actions.setAlignmentX(LEFT_ALIGNMENT);
+            actions.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
+            JButton remove = new JButton("Remove");
+            remove.setToolTipText("Take this off the formed list now instead of in 7 days");
+            remove.addActionListener(e -> runAction(() -> partyService.deleteFormed(f.getId()),
+                "Couldn't remove — try again."));
+            actions.add(remove);
+            card.add(pinHeight(actions));
+        }
+        finish(card);
+        return card;
     }
 
     private JPanel buildPartyCard(LfgParty p)
@@ -935,6 +1029,10 @@ public class LfgPartiesPanel extends JPanel
         {
             card.add(small("No applicants yet.", MUTED));
         }
+        if (!p.isFull())
+        {
+            card.add(buildAddMemberRow(p));
+        }
 
         JPanel buttons = new JPanel(new GridLayout(1, 2, 5, 0));
         buttons.setBackground(ColorScheme.DARKER_GRAY_COLOR);
@@ -949,6 +1047,90 @@ public class LfgPartiesPanel extends JPanel
         card.add(pinHeight(buttons));
         finish(card);
         return card;
+    }
+
+    // Seat someone who isn't on LFG (a buddy already in your team) so the
+    // spot and its role show as taken to everyone browsing. Name + role
+    // only; the row is created already accepted.
+    private JPanel buildAddMemberRow(LfgParty p)
+    {
+        JPanel row = new JPanel();
+        row.setLayout(new BoxLayout(row, BoxLayout.Y_AXIS));
+        row.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        row.setAlignmentX(LEFT_ALIGNMENT);
+        row.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
+        row.add(small("Add a member who isn't on LFG", ColorScheme.BRAND_ORANGE));
+
+        JTextField name = new JTextField(addMemberDraft);
+        name.setToolTipText("Their RSN");
+        capLength(name, 12);
+        name.getDocument().addDocumentListener(new javax.swing.event.DocumentListener()
+        {
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e)
+            {
+                addMemberDraft = name.getText();
+            }
+
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e)
+            {
+                addMemberDraft = name.getText();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e)
+            {
+                addMemberDraft = name.getText();
+            }
+        });
+        row.add(labeled("Name", name));
+
+        JComboBox<LfgRole> roleBox = null;
+        if (p.getActivity().hasRoles())
+        {
+            List<LfgRole> options = distinct(p.getOpenRoles());
+            if (options.isEmpty())
+            {
+                options = LfgRoles.playableRoles(p.getActivity(), p.isHardMode());
+            }
+            roleBox = new JComboBox<>(options.toArray(new LfgRole[0]));
+            row.add(labeled("Role", roleBox));
+        }
+
+        JPanel buttons = new JPanel(new GridLayout(1, 1));
+        buttons.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        buttons.setAlignmentX(LEFT_ALIGNMENT);
+        JButton add = new JButton("Add member");
+        final JComboBox<LfgRole> roleBoxF = roleBox;
+        Runnable submit = () -> {
+            String rsn = name.getText().trim();
+            if (rsn.isEmpty())
+            {
+                showError("Type their name first.");
+                return;
+            }
+            if (LfgNames.equal(rsn, p.getHostRsn()))
+            {
+                showError("That's you — you're already in.");
+                return;
+            }
+            LfgRole role = roleBoxF == null ? null : (LfgRole) roleBoxF.getSelectedItem();
+            addMemberDraft = "";
+            executor.submit(() -> {
+                LfgPartyService.AddResult r = partyService.addMember(p.getId(), rsn, role);
+                showError(r == LfgPartyService.AddResult.OK ? null
+                    : r == LfgPartyService.AddResult.REJECTED
+                        ? rsn + " is already in a party (or the party is full)."
+                        : "Couldn't add " + rsn + " — try again.");
+                refresh();
+            });
+        };
+        add.addActionListener(e -> submit.run());
+        name.addActionListener(e -> submit.run());
+        buttons.add(add);
+        row.add(pinHeight(buttons));
+        return pinHeight(row);
     }
 
     private JPanel buildApplicantRow(LfgParty p, LfgApplicant a, boolean pending)
@@ -972,10 +1154,17 @@ public class LfgPartiesPanel extends JPanel
         {
             detail.append(detail.length() > 0 ? " · " : "").append("learner");
         }
-        String kc = applicantKc(p, a);
-        if (kc != null)
+        if (a.isAddedByHost())
         {
-            detail.append(detail.length() > 0 ? " · " : "").append(kc);
+            detail.append(detail.length() > 0 ? " · " : "").append("added by you");
+        }
+        else
+        {
+            String kc = applicantKc(p, a);
+            if (kc != null)
+            {
+                detail.append(detail.length() > 0 ? " · " : "").append(kc);
+            }
         }
         if (detail.length() > 0)
         {
@@ -1106,10 +1295,15 @@ public class LfgPartiesPanel extends JPanel
     // Activity sprite on the left of a card's title line.
     private JPanel titleRow(LfgParty p, JLabel title)
     {
+        return titleRow(p.getActivity(), title);
+    }
+
+    private JPanel titleRow(LfgActivity activity, JLabel title)
+    {
         JPanel row = new JPanel(new BorderLayout(5, 0));
         row.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         row.setAlignmentX(LEFT_ALIGNMENT);
-        row.add(LfgIcons.label(icons, p.getActivity()), BorderLayout.WEST);
+        row.add(LfgIcons.label(icons, activity), BorderLayout.WEST);
         row.add(title, BorderLayout.CENTER);
         return pinHeight(row);
     }

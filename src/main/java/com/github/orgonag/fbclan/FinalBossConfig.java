@@ -136,7 +136,7 @@ public interface FinalBossConfig extends Config
         keyName = "lfgPartyNotifications",
         name = "Party chat notifications",
         description = "Post LFG party events to your chatbox: applicants to your party, "
-            + "your application being accepted or declined, and parties you're in being disbanded",
+            + "your application being accepted or declined, and parties you're in forming or being disbanded",
         section = lfgSection,
         position = 2
     )

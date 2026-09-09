@@ -15,11 +15,12 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 
 /**
- * Supabase access for hosted parties (lfg_parties) and their applicants
- * (lfg_applicants). Same trust model as lfg_entries: the anon key has
- * full CRUD on both tables, membership is verified before anything is
- * written, and rows are scoped by RSN client-side. All calls are
- * blocking network I/O — run them on the executor.
+ * Supabase access for hosted parties (lfg_parties), their applicants
+ * (lfg_applicants) and formed-party snapshots (lfg_formed_parties). Same
+ * trust model as lfg_entries: the anon key has full CRUD on the live
+ * tables (insert/select/delete on the snapshots), membership is verified
+ * before anything is written, and rows are scoped by RSN client-side. All
+ * calls are blocking network I/O — run them on the executor.
  */
 @Slf4j
 public class LfgPartyService
@@ -201,6 +202,113 @@ public class LfgPartyService
     public boolean removeApplicant(String partyId, String rsn)
     {
         return deleteApplicant(partyId, rsn);
+    }
+
+    public enum AddResult
+    {
+        OK,
+        // The name is already an applicant/member somewhere (unique index),
+        // or the row was otherwise rejected by a server-side rule.
+        REJECTED,
+        FAILED
+    }
+
+    // Host-side: seat a player who isn't on LFG (a buddy) directly as an
+    // accepted member. Server rules still apply: one party per name, not
+    // the host themselves, never past capacity.
+    public AddResult addMember(String partyId, String rsn, LfgRole role)
+    {
+        JsonObject data = new JsonObject();
+        data.addProperty("party_id", partyId);
+        data.addProperty("rsn", rsn.trim());
+        if (role == null)
+        {
+            data.add("role", JsonNull.INSTANCE);
+        }
+        else
+        {
+            data.addProperty("role", role.getKey());
+        }
+        data.addProperty("learner", false);
+        data.addProperty("status", LfgApplicant.Status.ACCEPTED.name());
+        data.addProperty("added_by_host", true);
+        try
+        {
+            int code = SupabaseClient.insertForCode(httpClient, "lfg_applicants", data);
+            if (code >= 200 && code < 300)
+            {
+                return AddResult.OK;
+            }
+            return code == 409 || code == 400 ? AddResult.REJECTED : AddResult.FAILED;
+        }
+        catch (IOException e)
+        {
+            log.warn("Failed to add LFG party member", e);
+            return AddResult.FAILED;
+        }
+    }
+
+    // ------------------------------------------------------------ formed
+
+    private static final String FORMED_SELECT = "select=*&order=formed_at.desc";
+
+    public List<LfgFormedParty> getFormed()
+    {
+        List<LfgFormedParty> out = new ArrayList<>();
+        try
+        {
+            JsonArray rows = SupabaseClient.get(httpClient, "lfg_formed_parties", FORMED_SELECT);
+            for (JsonElement el : rows)
+            {
+                if (!el.isJsonObject())
+                {
+                    continue;
+                }
+                LfgFormedParty f = LfgFormedParty.fromRow(el.getAsJsonObject());
+                if (f != null)
+                {
+                    out.add(f);
+                }
+            }
+        }
+        catch (IOException | RuntimeException e)
+        {
+            log.warn("Failed to fetch formed LFG parties", e);
+        }
+        return out;
+    }
+
+    // Host-side, when the party fills: snapshot it, then delete the live
+    // row (applicants cascade). Snapshot first so a failure leaves the
+    // party open rather than silently lost.
+    public boolean form(LfgParty party)
+    {
+        try
+        {
+            if (!SupabaseClient.insert(httpClient, "lfg_formed_parties", LfgFormedParty.from(party).toJson()))
+            {
+                return false;
+            }
+            return SupabaseClient.delete(httpClient, "lfg_parties", "id=eq." + enc(party.getId()));
+        }
+        catch (IOException e)
+        {
+            log.warn("Failed to form LFG party", e);
+            return false;
+        }
+    }
+
+    public boolean deleteFormed(String id)
+    {
+        try
+        {
+            return SupabaseClient.delete(httpClient, "lfg_formed_parties", "id=eq." + enc(id));
+        }
+        catch (IOException e)
+        {
+            log.warn("Failed to remove formed LFG party", e);
+            return false;
+        }
     }
 
     private boolean deleteApplicant(String partyId, String rsn)
