@@ -4,6 +4,7 @@ import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.lfg.LfgActivity;
 import com.github.orgonag.fbclan.lfg.LfgApplicant;
 import com.github.orgonag.fbclan.lfg.LfgKillcountService;
+import com.github.orgonag.fbclan.lfg.LfgLocalKillcounts;
 import com.github.orgonag.fbclan.lfg.LfgLootRule;
 import com.github.orgonag.fbclan.lfg.LfgNames;
 import com.github.orgonag.fbclan.lfg.LfgParty;
@@ -63,6 +64,7 @@ public class LfgPartiesPanel extends JPanel
 
     private final LfgPartyService partyService;
     private final LfgKillcountService killcounts;
+    private final LfgLocalKillcounts localKillcounts;
     private final LfgPartyNotifier notifier;
     private final ScheduledExecutorService executor;
     private final FinalBossConfig config;
@@ -108,11 +110,12 @@ public class LfgPartiesPanel extends JPanel
     private final JCheckBox hideFullBox;
 
     public LfgPartiesPanel(LfgPartyService partyService, LfgKillcountService killcounts,
-                           LfgPartyNotifier notifier, ScheduledExecutorService executor, FinalBossConfig config,
-                           LfgIconSource icons)
+                           LfgLocalKillcounts localKillcounts, LfgPartyNotifier notifier,
+                           ScheduledExecutorService executor, FinalBossConfig config, LfgIconSource icons)
     {
         this.partyService = partyService;
         this.killcounts = killcounts;
+        this.localKillcounts = localKillcounts;
         this.notifier = notifier;
         this.executor = executor;
         this.config = config;
@@ -454,6 +457,11 @@ public class LfgPartiesPanel extends JPanel
         if (activity.hasKillcount())
         {
             dynamicForm.add(labeled("Min KC (0=any)", minKcSpinner));
+            Integer mine = localKillcounts.read(activity, activity.hasHardMode() && hardModeBox.isSelected());
+            if (mine != null)
+            {
+                dynamicForm.add(note("Your KC: " + mine));
+            }
         }
         else
         {
@@ -764,15 +772,6 @@ public class LfgPartiesPanel extends JPanel
                 apply.setText("No open roles");
                 apply.setEnabled(false);
             }
-            else
-            {
-                String kcGate = kcGate(p, rsn);
-                if (kcGate != null)
-                {
-                    apply.setText(kcGate);
-                    apply.setEnabled(false);
-                }
-            }
             apply.addActionListener(e -> {
                 applyingPartyId = p.getId();
                 rebuildList();
@@ -782,29 +781,6 @@ public class LfgPartiesPanel extends JPanel
         }
         finish(card);
         return card;
-    }
-
-    // Null when the viewer may apply; otherwise the button label explaining
-    // why not ("Need 50 KC", "Checking KC..."). Hiscore failures never
-    // block — the host still sees the KC (or lack of it) on the applicant.
-    private String kcGate(LfgParty p, String rsn)
-    {
-        if (p.getMinKc() <= 0 || !config.lfgKcLookups() || !p.getActivity().hasKillcount())
-        {
-            return null;
-        }
-        LfgKillcountService.Result r = killcounts.cached(rsn, p.getActivity());
-        if (r == null)
-        {
-            killcounts.lookup(rsn, p.getActivity(), this::rebuildList);
-            return "Checking KC...";
-        }
-        boolean hard = p.isHardMode() || (p.getActivity().usesInvocation() && p.getInvocation() >= 300);
-        if (!r.isKnown(hard))
-        {
-            return null;
-        }
-        return r.killcount(hard) < p.getMinKc() ? "Need " + p.getMinKc() + " KC" : null;
     }
 
     private JPanel buildApplyRow(LfgParty p)
@@ -829,6 +805,50 @@ public class LfgPartiesPanel extends JPanel
             learner = checkbox("I'm a learner");
             row.add(learner);
         }
+
+        // Your kill count for this party's activity, prefilled from your
+        // own client (what the game told it), else from the hiscores, else
+        // blank to type. Editing it marks the value as self-reported. The
+        // host sees it; applying is never blocked by it.
+        JSpinner kcSpinner = null;
+        Integer prefill = null;
+        LfgApplicant.KcSource prefillSource = null;
+        if (p.getActivity().hasKillcount())
+        {
+            boolean hard = isHard(p);
+            prefill = localKillcounts.read(p.getActivity(), hard);
+            if (prefill != null)
+            {
+                prefillSource = LfgApplicant.KcSource.LOCAL;
+            }
+            else if (rsn != null && config.lfgKcLookups())
+            {
+                LfgKillcountService.Result r = killcounts.cached(rsn, p.getActivity());
+                if (r == null)
+                {
+                    killcounts.lookup(rsn, p.getActivity(), this::rebuildList);
+                }
+                else if (r.isKnown(hard))
+                {
+                    prefill = r.killcount(hard);
+                    prefillSource = LfgApplicant.KcSource.HISCORES;
+                }
+            }
+            kcSpinner = spinner(prefill == null ? 0 : prefill, 0, 100_000, 1);
+            String hint = prefillSource == LfgApplicant.KcSource.LOCAL ? "Your KC (auto)"
+                : prefillSource == LfgApplicant.KcSource.HISCORES ? "Your KC (hiscores)" : "Your KC";
+            row.add(labeled(hint, kcSpinner, ColorScheme.DARKER_GRAY_COLOR));
+            if (p.getMinKc() > 0)
+            {
+                boolean below = prefill != null && prefill < p.getMinKc();
+                JLabel ask = note("Host asks for " + p.getMinKc() + "+ KC" + (below ? " - you're below it" : ""));
+                if (below)
+                {
+                    ask.setForeground(ColorScheme.BRAND_ORANGE);
+                }
+                row.add(ask);
+            }
+        }
         JPanel buttons = new JPanel(new GridLayout(1, 2, 5, 0));
         buttons.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         buttons.setAlignmentX(LEFT_ALIGNMENT);
@@ -836,6 +856,9 @@ public class LfgPartiesPanel extends JPanel
         JButton cancel = new JButton("Cancel");
         final JComboBox<LfgRole> roleBoxF = roleBox;
         final JCheckBox learnerF = learner;
+        final JSpinner kcSpinnerF = kcSpinner;
+        final Integer prefillF = prefill;
+        final LfgApplicant.KcSource prefillSourceF = prefillSource;
         confirm.addActionListener(e -> {
             if (rsn == null)
             {
@@ -843,8 +866,26 @@ public class LfgPartiesPanel extends JPanel
             }
             LfgRole role = roleBoxF == null ? null : (LfgRole) roleBoxF.getSelectedItem();
             boolean isLearner = learnerF != null && learnerF.isSelected();
+            Integer kc = null;
+            LfgApplicant.KcSource source = null;
+            if (kcSpinnerF != null)
+            {
+                int typed = (Integer) kcSpinnerF.getValue();
+                if (prefillF != null && typed == prefillF)
+                {
+                    kc = typed;
+                    source = prefillSourceF;
+                }
+                else if (typed > 0)
+                {
+                    kc = typed;
+                    source = LfgApplicant.KcSource.MANUAL;
+                }
+            }
+            final Integer kcF = kc;
+            final LfgApplicant.KcSource sourceF = source;
             applyingPartyId = null;
-            runAction(() -> partyService.apply(p.getId(), rsn, role, isLearner), "Couldn't apply — try again.");
+            runAction(() -> partyService.apply(p.getId(), rsn, role, isLearner, kcF, sourceF), "Couldn't apply — try again.");
         });
         cancel.addActionListener(e -> {
             applyingPartyId = null;
@@ -974,26 +1015,47 @@ public class LfgPartiesPanel extends JPanel
         return row;
     }
 
-    // "KC 123" / "KC ?" / "KC ..." for the host's applicant rows; null when
-    // lookups are off or the activity has no hiscore entry.
+    // What a host sees next to an applicant, in order of trust: the KC the
+    // applicant's own client recorded ("KC 75"), else a hiscore lookup
+    // ("KC 75 (hiscores)"), else whatever they typed or prefilled
+    // themselves ("KC 75 (self)"), else unknown. Null when the activity has
+    // no kill count.
     private String applicantKc(LfgParty p, LfgApplicant a)
     {
-        if (!config.lfgKcLookups() || !p.getActivity().hasKillcount())
+        if (!p.getActivity().hasKillcount())
         {
             return null;
         }
-        LfgKillcountService.Result r = killcounts.cached(a.getRsn(), p.getActivity());
-        if (r == null)
+        if (a.getKc() != null && a.getKcSource() == LfgApplicant.KcSource.LOCAL)
         {
-            killcounts.lookup(a.getRsn(), p.getActivity(), this::rebuildList);
-            return "KC ...";
+            return "KC " + a.getKc();
         }
-        boolean hard = p.isHardMode() || (p.getActivity().usesInvocation() && p.getInvocation() >= 300);
-        if (!r.isKnown(hard))
+        boolean hard = isHard(p);
+        boolean pending = false;
+        if (config.lfgKcLookups())
         {
-            return "KC ?";
+            LfgKillcountService.Result r = killcounts.cached(a.getRsn(), p.getActivity());
+            if (r == null)
+            {
+                killcounts.lookup(a.getRsn(), p.getActivity(), this::rebuildList);
+                pending = true;
+            }
+            else if (r.isKnown(hard))
+            {
+                return "KC " + r.killcount(hard) + " (hiscores)";
+            }
         }
-        return "KC " + r.killcount(hard);
+        if (a.getKc() != null)
+        {
+            return "KC " + a.getKc() + " (self)";
+        }
+        return pending ? "KC ..." : "KC ?";
+    }
+
+    // CM / HMT, or a ToA at expert-level invocation.
+    private static boolean isHard(LfgParty p)
+    {
+        return p.isHardMode() || (p.getActivity().usesInvocation() && p.getInvocation() >= 300);
     }
 
     // ------------------------------------------------------------ helpers

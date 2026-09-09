@@ -30,8 +30,14 @@ side panel. The panel unlocks after clan membership is verified.
   each role they want, and Barbarian Assault fills one of each role.
   Members browse open parties, filter by activity, apply for a specific
   open role, and get a chatbox (and optional desktop) notification when
-  they're accepted; hosts see applicants with their hiscore kill count
-  and accept, decline, or kick from the panel. **Looking**: the original
+  they're accepted. An applicant's kill count for the activity is read
+  from their own client (as recorded by RuneLite's Chat Commands plugin)
+  and sent with the application, so the host sees it with no extra
+  input; if that's missing the host's client looks it up on the
+  hiscores, and a value the applicant typed is shown last, marked
+  "(self)". A party's minimum KC is shown to applicants but never
+  blocks applying — the host decides. Hosts accept, decline, or kick
+  from the panel. **Looking**: the original
   status board — set what you're up for, with party clustering and an
   optional note (e.g. "HMT NFRZ"). The `!lfg` chat command is read-only:
   `!lfg` prints how many members are looking per event and `!lfg parties`
@@ -75,7 +81,7 @@ side panel. The panel unlocks after clan membership is verified.
 | LFG Timeout | Minutes before your LFG status expires and is removed (10–720) | 240 |
 | Party chat notifications | Chatbox messages for applicants to your party, your application being accepted/declined, and parties you're in being disbanded | On |
 | Party desktop notifications | Also raise a RuneLite desktop notification for those events | Off |
-| Kill count lookups | Look up kill counts on the OSRS hiscores to show applicants' KC to hosts and check you meet a party's minimum KC | On |
+| Kill count lookups | Look up kill counts on the OSRS hiscores when an applicant's client didn't send one, and to prefill your own on the apply form | On |
 | Discord Webhook URL | Discord webhook for drop notifications | Empty |
 | Upload personal bests | Send your boss PB times (RSN, boss, time) to the clan leaderboard | On |
 | Upload collection log & CA | Send your collection log count and combat achievement points to the clan dashboard | On |
@@ -156,12 +162,16 @@ read-only views (`cl_leaderboard`, `ca_leaderboard`, top 20 each).
   crashed client can't leave a stale advertisement up. Disabling the
   plugin or closing the client disbands your party and withdraws any
   pending application immediately.
-- **Kill count lookups** (optional, on by default) are the LFG feature's
+- **Kill counts on applications** come from the applicant's own RuneLite
+  config (the count the game printed to their client), sent with the
+  application as a plain integer. Like everything else a member says
+  about themselves, it's self-asserted; the host's client also does an
+  optional hiscore lookup, and the panel labels which source it's
+  showing. **Kill count lookups** (on by default) are the LFG feature's
   one call outside Supabase: the plugin asks RuneLite's own hiscore
-  client for a player's public OSRS hiscore entry to show a host each
-  applicant's KC and to check you meet a party's minimum before applying.
-  Only the RSN being looked up leaves the client, the result is cached
-  locally for 30 minutes, and a failed lookup never blocks applying.
+  client for a player's public OSRS hiscore entry. Only the RSN being
+  looked up leaves the client, the result is cached locally for 30
+  minutes, and a failed lookup never blocks applying.
 - `wom_cache` is a read-only hourly Wise Old Man snapshot written solely
   by the wom-cache-sync Apps Script; `gp_week_total`/`gp_week_top` are
   read-only views aggregating the last 7 days of logged `drops`

@@ -131,8 +131,8 @@ public interface FinalBossConfig extends Config
     @ConfigItem(
         keyName = "lfgKcLookups",
         name = "Kill count lookups",
-        description = "Look up kill counts on the public OSRS hiscores to show applicants' KC to hosts "
-            + "and check you meet a party's minimum KC before applying",
+        description = "Look up kill counts on the public OSRS hiscores when an applicant's client didn't "
+            + "send one, and to prefill your own on the apply form",
         section = lfgSection,
         position = 4
     )

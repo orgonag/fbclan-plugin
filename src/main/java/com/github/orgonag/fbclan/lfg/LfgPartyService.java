@@ -118,7 +118,10 @@ public class LfgPartyService
 
     // A player is in at most one party at a time: applying elsewhere
     // withdraws every existing application first.
-    public boolean apply(String partyId, String rsn, LfgRole role, boolean learner)
+    // kc / kcSource are the applicant's own kill count for the party's
+    // activity (see LfgLocalKillcounts); both null when unknown.
+    public boolean apply(String partyId, String rsn, LfgRole role, boolean learner,
+                         Integer kc, LfgApplicant.KcSource kcSource)
     {
         if (!withdrawAll(rsn))
         {
@@ -137,6 +140,16 @@ public class LfgPartyService
         }
         data.addProperty("learner", learner);
         data.addProperty("status", LfgApplicant.Status.PENDING.name());
+        if (kc == null || kcSource == null)
+        {
+            data.add("kc", JsonNull.INSTANCE);
+            data.add("kc_source", JsonNull.INSTANCE);
+        }
+        else
+        {
+            data.addProperty("kc", Math.max(0, Math.min(100_000, kc)));
+            data.addProperty("kc_source", kcSource.name());
+        }
         try
         {
             return SupabaseClient.insert(httpClient, "lfg_applicants", data);

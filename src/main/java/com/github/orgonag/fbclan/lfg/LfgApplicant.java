@@ -35,6 +35,30 @@ public class LfgApplicant
         }
     }
 
+    // Where an applicant's kill count came from. LOCAL is read from the
+    // applicant's own RuneLite config (what the game told their client);
+    // HISCORES was prefilled from a hiscore lookup; MANUAL was typed.
+    public enum KcSource
+    {
+        LOCAL, HISCORES, MANUAL;
+
+        public static KcSource fromKey(String key)
+        {
+            if (key == null)
+            {
+                return null;
+            }
+            try
+            {
+                return valueOf(key.trim().toUpperCase());
+            }
+            catch (IllegalArgumentException e)
+            {
+                return null;
+            }
+        }
+    }
+
     String partyId;
     String rsn;
     // Null for activities without roles.
@@ -42,6 +66,9 @@ public class LfgApplicant
     boolean learner;
     Status status;
     Instant createdAt;
+    // Kill count the applicant sent with the application (null = none).
+    Integer kc;
+    KcSource kcSource;
 
     public boolean isAccepted()
     {
@@ -70,13 +97,16 @@ public class LfgApplicant
         {
             createdAt = Instant.EPOCH;
         }
+        Integer kc = row.has("kc") && !row.get("kc").isJsonNull() ? row.get("kc").getAsInt() : null;
         return new LfgApplicant(
             row.get("party_id").getAsString(),
             row.get("rsn").getAsString(),
             LfgRole.fromKey(optString(row, "role")),
             row.has("learner") && !row.get("learner").isJsonNull() && row.get("learner").getAsBoolean(),
             Status.fromKey(optString(row, "status")),
-            createdAt);
+            createdAt,
+            kc,
+            KcSource.fromKey(optString(row, "kc_source")));
     }
 
     static String optString(JsonObject row, String key)

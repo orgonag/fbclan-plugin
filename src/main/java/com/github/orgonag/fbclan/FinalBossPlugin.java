@@ -10,6 +10,7 @@ import com.github.orgonag.fbclan.drops.NotableItemsService;
 import com.github.orgonag.fbclan.drops.DropLogService;
 import com.github.orgonag.fbclan.lfg.LfgChatCommandHandler;
 import com.github.orgonag.fbclan.lfg.LfgKillcountService;
+import com.github.orgonag.fbclan.lfg.LfgLocalKillcounts;
 import com.github.orgonag.fbclan.lfg.LfgPartyBridge;
 import com.github.orgonag.fbclan.lfg.LfgPartyNotifier;
 import com.github.orgonag.fbclan.lfg.LfgPartyService;
@@ -251,7 +252,7 @@ public class FinalBossPlugin extends Plugin
         };
         lfgPanel = new LfgPanel(lfgService, executor, config, iconSource);
         lfgPartiesPanel = new LfgPartiesPanel(lfgPartyService, new LfgKillcountService(hiscoreClient),
-            lfgPartyNotifier, executor, config, iconSource);
+            new LfgLocalKillcounts(configManager), lfgPartyNotifier, executor, config, iconSource);
         LfgRootPanel lfgRootPanel = new LfgRootPanel(lfgPartiesPanel, lfgPanel);
         lfgPartyBridge = new LfgPartyBridge(client, clientThread, partyService, config, executor,
             lfgPanel, lfgPartiesPanel);
