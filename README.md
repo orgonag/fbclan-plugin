@@ -12,12 +12,18 @@ side panel. The panel unlocks after clan membership is verified.
 - **Announcements** — Clan-curated long-form announcements written by the
   clan staff (via a Google Sheet synced to the clan database), shown
   newest-first in their own tab.
-- **Drop Log** — Logs valuable drops (configurable GP threshold, on by
-  default for verified members — disable to opt out)
-  to a shared clan database, including raid chest loot (CoX/ToB/ToA —
-  requires the core Loot Tracker plugin, enabled by default), pet drops
-  (always logged regardless of threshold), and a clan-curated "notable
-  items" list (untradeables like Araxyte fang logged regardless of value).
+- **Drop Log** — Logs rare and valuable drops (on by default for verified
+  members — disable to opt out) to a shared clan database. A drop is
+  logged when it's **valuable** (GE value at or above the GP threshold),
+  **rare** (drop rate 1 in X or rarer from that source, using the OSRS
+  Wiki drop table bundled with the plugin, and worth at least a small
+  minimum so 1/128 junk stays out), on the clan-curated **notable items**
+  list (untradeables like Araxyte fang), or a **pet** (always logged).
+  Each logged drop records its drop rate, shown as "[1/512]" in the log
+  and in Discord. Covers NPC kills, raid chests (CoX/ToB/ToA), and reward
+  chests the client reports differently — the Gauntlet, the Whisperer,
+  Araxxor, the Royal Titans — which require the core Loot Tracker plugin
+  (enabled by default). Clue scrolls are never logged.
 - **Drop Screenshots** — Optional full-client screenshot per logged drop,
   annotated with party member names and viewable from the drop log.
 - **Discord Notifications** — Optional webhook for drop alerts.
@@ -74,8 +80,10 @@ side panel. The panel unlocks after clan membership is verified.
 
 | Setting | Description | Default |
 |---|---|---|
-| Enable Drop Logging | Log valuable drops to clan database | On |
-| Drop Threshold (GP) | Minimum GP value for a drop to be logged/screenshotted (1,000,000 minimum) | 1,000,000 |
+| Enable Drop Logging | Log rare and valuable drops to the clan database | On |
+| Valuable drop threshold (GP) | Any drop worth at least this much (GE price x quantity) is logged, rare or not (1,000,000 minimum) | 1,000,000 |
+| Rare drop threshold (1 in X) | Log drops with a drop rate of 1 in X or rarer even below the valuable threshold; 0 turns the rule off | 100 |
+| Rare drop min value (GP) | A rare drop must also be worth at least this much; 0 logs every rare drop regardless of value | 100,000 |
 | Screenshot Drops | Upload a full client screenshot for drops above the threshold | Off |
 | Enable LFG | Enable Looking For Group feature | On |
 | LFG Timeout | Minutes before your LFG status expires and is removed (10–720) | 240 |
@@ -184,6 +192,16 @@ config and never sent to the database.
 ```bash
 ./gradlew build
 ```
+
+## Credits
+
+Item drop rates (`npc_drops.json`) are sourced from the
+[OSRS Wiki](https://oldschool.runescape.wiki/) (licensed under
+[CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/)),
+parsed by [Flipping Utilities](https://github.com/Flipping-Utilities/parsed-osrs)
+and transformed into the bundled format by the
+[Dink](https://github.com/pajlads/DinkPlugin) plugin (BSD 2-Clause), whose
+rarity lookup this plugin mirrors.
 
 ## License
 

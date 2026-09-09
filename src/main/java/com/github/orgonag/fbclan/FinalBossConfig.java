@@ -55,8 +55,8 @@ public interface FinalBossConfig extends Config
     @Range(min = DropTrackingService.MIN_THRESHOLD_GP)
     @ConfigItem(
         keyName = "dropThresholdGp",
-        name = "Drop Threshold (GP)",
-        description = "Minimum GP value for a drop to be logged (and screenshotted, if enabled) — 1m minimum",
+        name = "Valuable drop threshold (GP)",
+        description = "Any drop worth at least this much (GE price x quantity) is logged, rare or not — 1m minimum",
         section = dropLoggingSection,
         position = 1
     )
@@ -65,12 +65,41 @@ public interface FinalBossConfig extends Config
         return 1_000_000;
     }
 
+    @Range(min = 0, max = 1_000_000)
+    @ConfigItem(
+        keyName = "rareDropThreshold",
+        name = "Rare drop threshold (1 in X)",
+        description = "Log drops whose drop rate is 1 in X or rarer, even below the valuable threshold. "
+            + "100 = 1% or rarer. 0 turns the rarity rule off. Uses the OSRS Wiki drop table; "
+            + "drops it doesn't cover only qualify by value or the clan's notable list.",
+        section = dropLoggingSection,
+        position = 2
+    )
+    default int rareDropThreshold()
+    {
+        return 100;
+    }
+
+    @Range(min = 0)
+    @ConfigItem(
+        keyName = "rareDropMinValueGp",
+        name = "Rare drop min value (GP)",
+        description = "A rare drop must also be worth at least this much to be logged, so 1/128 rune junk "
+            + "stays out. Set to 0 to log every rare drop regardless of value (untradeables included).",
+        section = dropLoggingSection,
+        position = 3
+    )
+    default int rareDropMinValueGp()
+    {
+        return 100_000;
+    }
+
     @ConfigItem(
         keyName = "enableDropScreenshots",
         name = "Screenshot Drops",
         description = "Capture a full client screenshot for drops above the threshold and store it in the clan database",
         section = dropLoggingSection,
-        position = 2
+        position = 4
     )
     default boolean enableDropScreenshots()
     {

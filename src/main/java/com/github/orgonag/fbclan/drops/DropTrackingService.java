@@ -1,7 +1,11 @@
 package com.github.orgonag.fbclan.drops;
 
 import java.text.NumberFormat;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.OptionalDouble;
 import java.util.Set;
 
 public class DropTrackingService
@@ -23,6 +27,61 @@ public class DropTrackingService
     public static boolean isValuableDrop(int gePrice, int quantity, long thresholdGp)
     {
         return (long) gePrice * quantity >= thresholdGp;
+    }
+
+    // A drop counts as rare when its drop rate is 1 in `thresholdDenominator`
+    // or rarer (e.g. 100 -> 1% or rarer). 0 disables the rule. Unknown
+    // rarity (no table data) never counts as rare.
+    public static boolean isRareDrop(OptionalDouble rarity, int thresholdDenominator)
+    {
+        if (thresholdDenominator <= 0 || rarity == null || !rarity.isPresent())
+        {
+            return false;
+        }
+        return rarity.getAsDouble() <= 1.0 / thresholdDenominator;
+    }
+
+    // Clue scrolls are ~1/128 from countless monsters; they'd flood the log
+    // under any sane rarity threshold and are never what "rare drop" means.
+    public static boolean isClueScroll(String itemName)
+    {
+        return itemName != null && itemName.toLowerCase(Locale.ROOT).startsWith("clue scroll");
+    }
+
+    // "1/512" style, rounded to the nearest whole denominator.
+    public static String formatRarity(double probability)
+    {
+        if (probability <= 0)
+        {
+            return "";
+        }
+        return "1/" + Math.round(1 / probability);
+    }
+
+    // Loot sources RuneLite's Loot Tracker reports as an NPC-type record
+    // WITHOUT a matching NPC-kill event (the loot comes from a reward chest
+    // or interface, not the corpse). They have to be picked up from the
+    // Loot Tracker's own event instead. Same list the Dink plugin keeps.
+    public static final String GAUNTLET_BOSS = "Crystalline Hunllef";
+    public static final String CORRUPTED_GAUNTLET_BOSS = "Corrupted Hunllef";
+    public static final String GAUNTLET = "The Gauntlet";
+    public static final String CORRUPTED_GAUNTLET = "The Corrupted Gauntlet";
+    public static final Set<String> SPECIAL_LOOT_NPC_NAMES = Collections.unmodifiableSet(new HashSet<>(
+        Arrays.asList(GAUNTLET_BOSS, CORRUPTED_GAUNTLET_BOSS, "The Whisperer", "Araxxor",
+            "Branda the Fire Queen", "Eldric the Ice King")));
+
+    // The Gauntlet's loot is logged under the activity name, not the boss.
+    public static String displaySourceName(String lootSourceName)
+    {
+        if (GAUNTLET_BOSS.equals(lootSourceName))
+        {
+            return GAUNTLET;
+        }
+        if (CORRUPTED_GAUNTLET_BOSS.equals(lootSourceName))
+        {
+            return CORRUPTED_GAUNTLET;
+        }
+        return lootSourceName;
     }
 
     // The config UI already bounds the value, but a hand-edited RuneLite

@@ -8,6 +8,8 @@ import com.github.orgonag.fbclan.drops.DropCaptureService;
 import com.github.orgonag.fbclan.drops.DropScreenshotService;
 import com.github.orgonag.fbclan.drops.NotableItemsService;
 import com.github.orgonag.fbclan.drops.DropLogService;
+import com.github.orgonag.fbclan.drops.DropRarityService;
+import com.github.orgonag.fbclan.drops.DropTrackingService;
 import com.github.orgonag.fbclan.lfg.LfgChatCommandHandler;
 import com.github.orgonag.fbclan.lfg.LfgKillcountService;
 import com.github.orgonag.fbclan.lfg.LfgLocalKillcounts;
@@ -211,8 +213,11 @@ public class FinalBossPlugin extends Plugin
         // One fetch per session — the curated list changes rarely. Runs on the
         // executor so startup never blocks on network.
         executor.submit(notableItemsService::refresh);
+        // ~700 KB of drop-rate JSON: parsed once, off the client thread.
+        DropRarityService rarityService = new DropRarityService(itemManager);
+        executor.submit(rarityService::load);
         dropCaptureService = new DropCaptureService(client, config, session, itemManager,
-            drawManager, partyService, executor, notableItemsService, dropService,
+            drawManager, partyService, executor, notableItemsService, rarityService, dropService,
             discordService, screenshotService);
 
         WelcomeMessageService welcomeMessageService = new WelcomeMessageService(okHttpClient);
@@ -465,14 +470,19 @@ public class FinalBossPlugin extends Plugin
     }
 
     // Loot with no NPC kill behind it — raid chests (CoX/ToB/ToA), Barrows,
-    // and similar. NPC kills already arrive via onNpcLootReceived, so only
-    // EVENT-type records are handled here to avoid double-logging. These
-    // events are posted by the core Loot Tracker plugin, so raid chest
-    // logging requires it to be enabled (it is by default).
+    // and similar. NPC kills already arrive via onNpcLootReceived, so
+    // NPC-type records are ignored here to avoid double-logging — except
+    // the handful of bosses whose loot the Loot Tracker reports as an
+    // NPC record without ever firing an NPC-kill event, because it comes
+    // from a reward chest (the Gauntlet's Hunllef, the Whisperer, Araxxor,
+    // the Royal Titans). These events are posted by the core Loot Tracker
+    // plugin, so this path requires it to be enabled (it is by default).
     @Subscribe
     public void onLootReceived(LootReceived event)
     {
-        if (event.getType() != LootRecordType.EVENT)
+        boolean specialNpc = event.getType() == LootRecordType.NPC
+            && DropTrackingService.SPECIAL_LOOT_NPC_NAMES.contains(event.getName());
+        if (event.getType() != LootRecordType.EVENT && !specialNpc)
         {
             return;
         }

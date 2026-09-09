@@ -22,6 +22,14 @@ public class DropLogService
     // stays NULL for screenshot-less drops.
     public boolean logDrop(String rsn, String npcName, String itemName, int itemId, long geValue, int quantity, String screenshotUrl)
     {
+        return logDrop(rsn, npcName, itemName, itemId, geValue, quantity, screenshotUrl, null);
+    }
+
+    // rarity is the drop's probability per kill (0..1) when the rate table
+    // knows it, else null.
+    public boolean logDrop(String rsn, String npcName, String itemName, int itemId, long geValue, int quantity,
+                           String screenshotUrl, Double rarity)
+    {
         JsonObject data = new JsonObject();
         data.addProperty("rsn", rsn);
         data.addProperty("npc_name", npcName);
@@ -32,6 +40,10 @@ public class DropLogService
         if (screenshotUrl != null)
         {
             data.addProperty("screenshot_url", screenshotUrl);
+        }
+        if (rarity != null && rarity > 0 && rarity <= 1)
+        {
+            data.addProperty("rarity", rarity);
         }
 
         try
@@ -49,7 +61,7 @@ public class DropLogService
     // drops table (e.g. a future moderation flag) doesn't silently start
     // shipping it to every viewer's client.
     private static final String DROPS_COLUMNS =
-        "rsn,npc_name,item_name,item_id,ge_value,quantity,created_at,screenshot_url";
+        "rsn,npc_name,item_name,item_id,ge_value,quantity,created_at,screenshot_url,rarity";
 
     public JsonArray getRecentDrops(int limit)
     {
