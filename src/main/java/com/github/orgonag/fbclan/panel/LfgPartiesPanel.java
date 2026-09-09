@@ -57,6 +57,8 @@ public class LfgPartiesPanel extends JPanel
     private static final Color ONLINE = new Color(0x3F, 0xBF, 0x3F);
     private static final Color OFFLINE = new Color(0xBF, 0x3F, 0x3F);
     private static final Color MUTED = ColorScheme.LIGHT_GRAY_COLOR;
+    // Sidebar (242) minus card padding and a little slack for the scrollbar.
+    private static final int WRAP_WIDTH = 200;
 
     private final LfgPartyService partyService;
     private final LfgKillcountService killcounts;
@@ -122,7 +124,7 @@ public class LfgPartiesPanel extends JPanel
 
         hostButton = new JButton("Host a party");
         hostButton.setAlignmentX(LEFT_ALIGNMENT);
-        hostButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 25));
+        pinHeight(hostButton);
         hostButton.addActionListener(e -> toggleForm());
         controls.add(hostButton);
         controls.add(Box.createRigidArea(new Dimension(0, 5)));
@@ -138,7 +140,10 @@ public class LfgPartiesPanel extends JPanel
         activityBox = new JComboBox<>(LfgActivity.values());
         activityBox.setRenderer(new PanelUi.ActivityRenderer());
         activityBox.addActionListener(e -> rebuildDynamicForm());
-        formPanel.add(labeled("Activity", activityBox));
+        activityBox.setAlignmentX(LEFT_ALIGNMENT);
+        pinHeight(activityBox);
+        formPanel.add(activityBox);
+        formPanel.add(Box.createRigidArea(new Dimension(0, 3)));
 
         dynamicForm = new JPanel();
         dynamicForm.setLayout(new BoxLayout(dynamicForm, BoxLayout.Y_AXIS));
@@ -178,8 +183,7 @@ public class LfgPartiesPanel extends JPanel
         JPanel formButtons = new JPanel(new GridLayout(1, 2, 5, 0));
         formButtons.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         formButtons.setAlignmentX(LEFT_ALIGNMENT);
-        formButtons.setMaximumSize(new Dimension(Integer.MAX_VALUE, 25));
-        submitButton = new JButton("Create party");
+        submitButton = new JButton("Create");
         submitButton.addActionListener(e -> onSubmitForm());
         JButton cancelButton = new JButton("Cancel");
         cancelButton.addActionListener(e -> {
@@ -189,6 +193,7 @@ public class LfgPartiesPanel extends JPanel
         });
         formButtons.add(submitButton);
         formButtons.add(cancelButton);
+        pinHeight(formButtons);
         formPanel.add(Box.createRigidArea(new Dimension(0, 5)));
         formPanel.add(formButtons);
         controls.add(formPanel);
@@ -198,7 +203,6 @@ public class LfgPartiesPanel extends JPanel
         JPanel filterRow = new JPanel(new BorderLayout(5, 0));
         filterRow.setBackground(ColorScheme.DARK_GRAY_COLOR);
         filterRow.setAlignmentX(LEFT_ALIGNMENT);
-        filterRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 25));
         List<Object> filterItems = new ArrayList<>();
         filterItems.add("All activities");
         Collections.addAll(filterItems, LfgActivity.values());
@@ -217,7 +221,7 @@ public class LfgPartiesPanel extends JPanel
         });
         filterRow.add(filterBox, BorderLayout.CENTER);
         filterRow.add(hideFullBox, BorderLayout.EAST);
-        controls.add(filterRow);
+        controls.add(pinHeight(filterRow));
 
         errorLabel = new JLabel();
         errorLabel.setForeground(ColorScheme.PROGRESS_ERROR_COLOR);
@@ -253,8 +257,16 @@ public class LfgPartiesPanel extends JPanel
     public void setCurrentWorld(int world)
     {
         this.currentWorld = world;
-        SwingUtilities.invokeLater(() ->
-            worldLabel.setText(world > 0 ? "World: " + world + " (your current world)" : "World: unknown"));
+        Runnable update = () ->
+            worldLabel.setText(world > 0 ? "World: " + world + " (your current world)" : "World: unknown");
+        if (SwingUtilities.isEventDispatchThread())
+        {
+            update.run();
+        }
+        else
+        {
+            SwingUtilities.invokeLater(update);
+        }
     }
 
     public void setOnlineNames(Set<String> rawNames)
@@ -337,7 +349,7 @@ public class LfgPartiesPanel extends JPanel
     private void updateFormVisibility()
     {
         formPanel.setVisible(formVisible);
-        submitButton.setText(editing ? "Save changes" : "Create party");
+        submitButton.setText(editing ? "Save" : "Create");
         hostButton.setText(myParty() != null ? "Edit your party" : (formVisible ? "Hide form" : "Host a party"));
         revalidate();
         repaint();
@@ -437,7 +449,7 @@ public class LfgPartiesPanel extends JPanel
         dynamicForm.add(labeled("Loot", lootBox));
         if (activity.hasKillcount())
         {
-            dynamicForm.add(labeled("Min KC (0 = none)", minKcSpinner));
+            dynamicForm.add(labeled("Min KC (0=any)", minKcSpinner));
         }
         else
         {
@@ -449,10 +461,9 @@ public class LfgPartiesPanel extends JPanel
             JPanel tags = new JPanel(new GridLayout(1, 2));
             tags.setBackground(ColorScheme.DARKER_GRAY_COLOR);
             tags.setAlignmentX(LEFT_ALIGNMENT);
-            tags.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
             tags.add(learnerBox);
             tags.add(teacherBox);
-            dynamicForm.add(tags);
+            dynamicForm.add(pinHeight(tags));
         }
         else
         {
@@ -483,7 +494,7 @@ public class LfgPartiesPanel extends JPanel
 
             if (activity == LfgActivity.TOB)
             {
-                dynamicForm.add(note("Team: " + LfgRoles.summarize(LfgRoles.tobComposition(current, hard))));
+                dynamicForm.add(wrapped("Team: " + LfgRoles.summarize(LfgRoles.tobComposition(current, hard)), MUTED));
             }
             else if (LfgRoles.hostChoosesCounts(activity))
             {
@@ -684,7 +695,7 @@ public class LfgPartiesPanel extends JPanel
 
         if (p.getDescription() != null)
         {
-            card.add(plain("\"" + p.getDescription() + "\"", MUTED));
+            card.add(wrapped("\"" + p.getDescription() + "\"", MUTED));
         }
 
         List<LfgApplicant> accepted = p.getAccepted();
@@ -699,7 +710,7 @@ public class LfgPartiesPanel extends JPanel
                 }
                 members.append(accepted.get(i).getRsn());
             }
-            card.add(plain(members.toString(), MUTED));
+            card.add(wrapped(members.toString(), MUTED));
         }
 
         // ---- action row ----
@@ -817,7 +828,6 @@ public class LfgPartiesPanel extends JPanel
         JPanel buttons = new JPanel(new GridLayout(1, 2, 5, 0));
         buttons.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         buttons.setAlignmentX(LEFT_ALIGNMENT);
-        buttons.setMaximumSize(new Dimension(Integer.MAX_VALUE, 25));
         JButton confirm = new JButton("Confirm");
         JButton cancel = new JButton("Cancel");
         final JComboBox<LfgRole> roleBoxF = roleBox;
@@ -838,7 +848,7 @@ public class LfgPartiesPanel extends JPanel
         });
         buttons.add(confirm);
         buttons.add(cancel);
-        row.add(buttons);
+        row.add(pinHeight(buttons));
         return row;
     }
 
@@ -855,7 +865,7 @@ public class LfgPartiesPanel extends JPanel
         }
         if (p.getDescription() != null)
         {
-            card.add(plain("\"" + p.getDescription() + "\"", MUTED));
+            card.add(wrapped("\"" + p.getDescription() + "\"", MUTED));
         }
 
         List<LfgApplicant> pending = p.getPending();
@@ -884,7 +894,6 @@ public class LfgPartiesPanel extends JPanel
         JPanel buttons = new JPanel(new GridLayout(1, 2, 5, 0));
         buttons.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         buttons.setAlignmentX(LEFT_ALIGNMENT);
-        buttons.setMaximumSize(new Dimension(Integer.MAX_VALUE, 25));
         buttons.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
         JButton edit = new JButton("Edit");
         edit.addActionListener(e -> toggleForm());
@@ -892,7 +901,7 @@ public class LfgPartiesPanel extends JPanel
         disband.addActionListener(e -> onDisband(p));
         buttons.add(edit);
         buttons.add(disband);
-        card.add(buttons);
+        card.add(pinHeight(buttons));
         finish(card);
         return card;
     }
@@ -907,23 +916,32 @@ public class LfgPartiesPanel extends JPanel
         boolean online = onlineNames.contains(LfgNames.normalize(a.getRsn()));
         StringBuilder text = new StringBuilder("<font color='" + (online ? "#3FBF3F" : "#BF3F3F") + "'>")
             .append(esc(a.getRsn())).append("</font>");
+        // Second line: role, learner tag, KC — kept off the name line so the
+        // Accept/Decline buttons never clip it.
+        StringBuilder detail = new StringBuilder();
         if (a.getRole() != null)
         {
-            text.append(" <font color='#A0A0A0'>").append(esc(a.getRole().getDisplayName())).append("</font>");
+            detail.append(esc(a.getRole().getDisplayName()));
         }
         if (a.isLearner())
         {
-            text.append(" <font color='#A0A0A0'>(learner)</font>");
+            detail.append(detail.length() > 0 ? " · " : "").append("learner");
         }
         String kc = applicantKc(p, a);
         if (kc != null)
         {
-            text.append(" <font color='#A0A0A0'>").append(kc).append("</font>");
+            detail.append(detail.length() > 0 ? " · " : "").append(kc);
+        }
+        if (detail.length() > 0)
+        {
+            text.append("<br><font color='#A0A0A0'>").append(detail).append("</font>");
         }
         JLabel label = html(text.toString());
         row.add(label, BorderLayout.CENTER);
 
-        JPanel buttons = new JPanel(new GridLayout(1, pending ? 2 : 1, 2, 0));
+        // Pending rows stack Accept over Decline so the text column keeps
+        // enough width for "Role · learner · KC 123".
+        JPanel buttons = new JPanel(new GridLayout(pending ? 2 : 1, 1, 0, 2));
         buttons.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         if (pending)
         {
@@ -971,7 +989,7 @@ public class LfgPartiesPanel extends JPanel
         {
             return "KC ?";
         }
-        return (hard ? "HM KC " : "KC ") + r.killcount(hard);
+        return "KC " + r.killcount(hard);
     }
 
     // ------------------------------------------------------------ helpers
@@ -1035,7 +1053,16 @@ public class LfgPartiesPanel extends JPanel
     // pinned to the preferred height.
     private static void finish(JPanel card)
     {
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
+        pinHeight(card);
+    }
+
+    // Full width, natural height. Never hard-code a max height smaller
+    // than the look-and-feel's preferred height: BoxLayout then clamps
+    // the parent to the sum of maximums and clips whatever's below.
+    private static <T extends JComponent> T pinHeight(T c)
+    {
+        c.setMaximumSize(new Dimension(Integer.MAX_VALUE, c.getPreferredSize().height));
+        return c;
     }
 
     private static JLabel sectionHeader(String text)
@@ -1067,18 +1094,24 @@ public class LfgPartiesPanel extends JPanel
         return l;
     }
 
-    // User-supplied text: HTML rendering disabled so it's never markup.
-    private static JLabel plain(String text, Color color)
-    {
-        JLabel l = small(text, color);
-        l.putClientProperty("html.disable", Boolean.TRUE);
-        return l;
-    }
-
     private static JLabel note(String text)
     {
         JLabel l = small(text, MUTED);
         l.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
+        return l;
+    }
+
+    // Multi-line text that wraps to the sidebar width. `text` is escaped,
+    // so user-typed descriptions can't inject markup.
+    private static JLabel wrapped(String text, Color color)
+    {
+        JLabel l = new JLabel("<html><body style='width:" + WRAP_WIDTH + "px'>" + esc(text) + "</body></html>");
+        l.setForeground(color);
+        l.setFont(FontManager.getRunescapeSmallFont());
+        l.setAlignmentX(LEFT_ALIGNMENT);
+        // The pixel font paints a little wider than it measures; the right
+        // inset keeps the last word of a wrapped line inside the card.
+        l.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 12));
         return l;
     }
 
@@ -1092,15 +1125,14 @@ public class LfgPartiesPanel extends JPanel
         JPanel row = new JPanel(new BorderLayout(5, 0));
         row.setBackground(bg);
         row.setAlignmentX(LEFT_ALIGNMENT);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 25));
         row.setBorder(BorderFactory.createEmptyBorder(1, 0, 1, 0));
         JLabel l = new JLabel(label);
         l.setFont(FontManager.getRunescapeSmallFont());
         l.setForeground(MUTED);
-        l.setPreferredSize(new Dimension(90, 22));
+        l.setPreferredSize(new Dimension(80, 22));
         row.add(l, BorderLayout.WEST);
         row.add(field, BorderLayout.CENTER);
-        return row;
+        return pinHeight(row);
     }
 
     private static JCheckBox checkbox(String text)
@@ -1115,9 +1147,7 @@ public class LfgPartiesPanel extends JPanel
 
     private static JSpinner spinner(int value, int min, int max, int step)
     {
-        JSpinner s = new JSpinner(new SpinnerNumberModel(clamp(value, min, max), min, max, step));
-        s.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
-        return s;
+        return new JSpinner(new SpinnerNumberModel(clamp(value, min, max), min, max, step));
     }
 
     private static JButton smallButton(String text)
