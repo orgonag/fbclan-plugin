@@ -68,10 +68,10 @@ side panel. The panel unlocks after clan membership is verified.
   off; it's cosmetic and reads only the clan's own uploaded stats.
 - **Welcome Message** — A clan-curated one-liner shown once per session
   in verified members' chatboxes.
-- **Clan Dashboard** — Weekly XP gained and EHB podiums plus per-boss
-  kill counts from the clan's Wise Old Man group (served from an
-  hourly-refreshed cache in the clan database — the plugin never calls
-  Wise Old Man directly), a collection-log top 20 and a combat
+- **Clan Dashboard** — Weekly XP gained and EHB podiums from the clan's
+  Wise Old Man group (served from an hourly-refreshed cache in the clan
+  database — the plugin only calls Wise Old Man for the membership
+  check), a collection-log top 20 and a combat
   achievements top 20 (with tier badges) built from member uploads,
   and a "GP This Week" board summarizing the last 7 days of logged drops
   — all as collapsible sections alongside the PB leaderboards.
@@ -200,6 +200,29 @@ config and never sent to the database.
 ```bash
 ./gradlew build
 ```
+
+`./gradlew run` launches a RuneLite dev client with the plugin loaded.
+There is no unit-test suite (the Plugin Hub doesn't require one); the
+`src/test` source set holds only that launcher.
+
+## Code layout
+
+Version 2.0 is a ground-up rewrite with the same behaviour and the same
+database contract. Each feature is one or two classes, wired together by
+RuneLite's Guice injection:
+
+| Package | Classes | Role |
+|---|---|---|
+| `core` | `Supabase`, `Clan`, `Names` | Database client, membership/session gate, text helpers |
+| `clan` | `ClanContent` | Announcements, welcome message, notable items (read-only content) |
+| `drops` | `DropRules`, `DropRates`, `DropLogger` | What to log, the bundled drop-rate table, the pipeline |
+| `pbs` | `PbParser`, `PersonalBests`, `Leaderboards` | Chat parsing, upload/seed, board reads |
+| `stats` | `MemberStats`, `Dashboard`, `CaBadges` | Stats upload, dashboard reads, chat icons |
+| `lfg` | `Activity`, `Role`, `Party`, `FormedParty`, `PartyApi`, `PartyBoard`, `Killcounts`, `LfgCommand` | The party board's model, I/O, live state, and chat command |
+| `ui` | `Sidebar`, the four tabs, `HostForm`, `Ui` | The side panel |
+
+`FinalBossPlugin` is the entry point: it subscribes to client events and
+hands them to the feature classes.
 
 ## Credits
 
