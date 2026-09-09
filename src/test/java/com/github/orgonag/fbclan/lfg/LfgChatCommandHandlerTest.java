@@ -1,43 +1,45 @@
 package com.github.orgonag.fbclan.lfg;
 
 import java.time.Instant;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class LfgChatCommandHandlerTest
 {
-    private static LfgEntry entry(String rsn, LfgActivity activity)
+    private static LfgParty party(String host, LfgActivity activity, int capacity, Integer world)
     {
-        return new LfgEntry(rsn, activity, Instant.now(), null, null, null);
+        return LfgParty.builder()
+            .id(host + "-id")
+            .hostRsn(host)
+            .activity(activity)
+            .capacity(capacity)
+            .world(world)
+            .lootRule(LfgLootRule.UNSPECIFIED)
+            .requiredRoles(Collections.emptyList())
+            .createdAt(Instant.now())
+            .updatedAt(Instant.now())
+            .applicants(Collections.emptyList())
+            .build();
     }
 
     @Test
-    public void testSummarizeEmpty()
+    public void testSummarizePartiesEmpty()
     {
-        assertEquals("No one is looking for a group right now.",
-            LfgChatCommandHandler.summarize(Collections.emptyList()));
+        assertEquals("No parties are being hosted right now.",
+            LfgChatCommandHandler.summarizeParties(Collections.emptyList()));
     }
 
     @Test
-    public void testSummarizeCountsInActivityOrder()
+    public void testSummarizePartiesOneLinePerParty()
     {
-        List<LfgEntry> entries = new ArrayList<>();
-        entries.add(entry("A", LfgActivity.TOB));
-        entries.add(entry("B", LfgActivity.SKILLING));
-        entries.add(entry("C", LfgActivity.TOB));
-        entries.add(entry("D", LfgActivity.COX));
-        // COX before TOB before SKILLING (enum declaration order), zeros skipped
-        assertEquals("LFG: COX (1), TOB (2), Skilling (1)",
-            LfgChatCommandHandler.summarize(entries));
-    }
-
-    @Test
-    public void testSummarizeNonRaidUsesDisplayName()
-    {
-        assertEquals("LFG: Group Boss (1)",
-            LfgChatCommandHandler.summarize(Collections.singletonList(entry("A", LfgActivity.GROUP_BOSS))));
+        String out = LfgChatCommandHandler.summarizeParties(Arrays.asList(
+            party("Alice", LfgActivity.NEX, 6, 420),
+            party("Bob", LfgActivity.CHILLING, 2, null)));
+        assertTrue(out.startsWith("Parties: "));
+        assertTrue(out.contains("Alice 1/6 W420"));
+        assertTrue(out.contains(" | "));
+        assertTrue(out.contains("Bob 1/2"));
     }
 }

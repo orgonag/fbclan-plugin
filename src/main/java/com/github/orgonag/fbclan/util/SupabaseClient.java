@@ -17,7 +17,6 @@ public class SupabaseClient
     // Supabase anon key — intentionally public. Row Level Security (RLS) policies
     // on the database restrict what operations are allowed. The anon key only permits:
     // - drops table: INSERT and SELECT (no UPDATE, no DELETE)
-    // - lfg_entries table: INSERT, SELECT, UPDATE, DELETE (needed for LFG lifecycle)
     // - lfg_parties / lfg_applicants tables: INSERT, SELECT, UPDATE, DELETE
     //   (hosted parties and their applicants; deleting a party cascades)
     // - lfg_formed_parties table: INSERT, SELECT, DELETE (immutable snapshots

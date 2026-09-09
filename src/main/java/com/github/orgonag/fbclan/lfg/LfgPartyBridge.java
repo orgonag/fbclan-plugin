@@ -1,11 +1,7 @@
 package com.github.orgonag.fbclan.lfg;
 
 import com.github.orgonag.fbclan.FinalBossConfig;
-import com.github.orgonag.fbclan.panel.LfgPanel;
 import com.github.orgonag.fbclan.panel.LfgPartiesPanel;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
@@ -16,44 +12,33 @@ import net.runelite.api.Client;
 import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.clan.ClanChannelMember;
 import net.runelite.client.callback.ClientThread;
-import net.runelite.client.party.PartyService;
 
 /**
- * Bridges RuneLite's Party plugin and clan-channel state into the LFG
- * panel: seeds/pushes local party state (hashed party id only — never the
- * passphrase), tracks which clan members are online and the current
- * world, and owns the 30s LFG poll for both boards.
+ * Owns the 30s LFG poll: refreshes the parties board and feeds it the
+ * clan-channel roster (who's online) and the current world.
  */
 @Slf4j
 public class LfgPartyBridge
 {
     private final Client client;
     private final ClientThread clientThread;
-    private final PartyService partyService;
     private final FinalBossConfig config;
     private final ScheduledExecutorService executor;
-    private final LfgPanel lfgPanel;
     private final LfgPartiesPanel partiesPanel;
 
     private ScheduledFuture<?> pollFuture;
 
-    public LfgPartyBridge(Client client, ClientThread clientThread, PartyService partyService,
-        FinalBossConfig config, ScheduledExecutorService executor, LfgPanel lfgPanel,
-        LfgPartiesPanel partiesPanel)
+    public LfgPartyBridge(Client client, ClientThread clientThread, FinalBossConfig config,
+        ScheduledExecutorService executor, LfgPartiesPanel partiesPanel)
     {
         this.client = client;
         this.clientThread = clientThread;
-        this.partyService = partyService;
         this.config = config;
         this.executor = executor;
-        this.lfgPanel = lfgPanel;
         this.partiesPanel = partiesPanel;
     }
 
-    // Called on verification success. Seeds the initial party state; it is
-    // afterwards driven only by the party event handlers. Pushing it on
-    // every poll tick would re-upsert the LFG row and reset its
-    // "X min ago" timer.
+    // Called on verification success.
     public void startPolling()
     {
         if (!config.enableLfg())
@@ -61,12 +46,10 @@ public class LfgPartyBridge
             return;
         }
         updateOnlineClanMembers();
-        pushLocalPartyState();
         pollFuture = executor.scheduleAtFixedRate(() -> {
             try
             {
                 updateOnlineClanMembers();
-                lfgPanel.refresh();
                 partiesPanel.refresh();
             }
             catch (Exception e)
@@ -85,43 +68,6 @@ public class LfgPartyBridge
         }
     }
 
-    // Pushes the local Party plugin state to the panel; (null, null) when
-    // the user is not in a party.
-    public void pushLocalPartyState()
-    {
-        String partyId = null;
-        Integer partySize = null;
-        if (partyService.isInParty())
-        {
-            partyId = hashPartyId(partyService.getPartyId());
-            partySize = partyService.getMembers().size();
-        }
-        lfgPanel.onLocalPartyStateChanged(partyId, partySize);
-    }
-
-    // The raw partyId is derived from the party passphrase and could let an
-    // attacker eavesdrop on the party channel, so it never leaves the client.
-    // A truncated SHA-256 preserves equality (grouping still works) without
-    // being reversible.
-    static String hashPartyId(long partyId)
-    {
-        try
-        {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(Long.toString(partyId).getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(16);
-            for (int i = 0; i < 8; i++)
-            {
-                sb.append(String.format("%02x", digest[i] & 0xFF));
-            }
-            return sb.toString();
-        }
-        catch (NoSuchAlgorithmException e)
-        {
-            throw new IllegalStateException("SHA-256 unavailable", e);
-        }
-    }
-
     private void updateOnlineClanMembers()
     {
         clientThread.invokeLater(() -> {
@@ -137,7 +83,6 @@ public class LfgPartyBridge
                     }
                 }
             }
-            lfgPanel.setOnlineNames(online);
             partiesPanel.setOnlineNames(online);
             partiesPanel.setCurrentWorld(client.getWorld());
         });

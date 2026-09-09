@@ -1,13 +1,11 @@
 package com.github.orgonag.fbclan;
 
 import com.github.orgonag.fbclan.drops.DropTrackingService;
-import com.github.orgonag.fbclan.lfg.LfgService;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
 import net.runelite.client.config.Range;
-import net.runelite.client.config.Units;
 
 @ConfigGroup("finalboss")
 public interface FinalBossConfig extends Config
@@ -21,7 +19,7 @@ public interface FinalBossConfig extends Config
 
     @ConfigSection(
         name = "Looking For Group",
-        description = "Settings for the LFG panel",
+        description = "Settings for the LFG party board",
         position = 1
     )
     String lfgSection = "lfg";
@@ -109,7 +107,7 @@ public interface FinalBossConfig extends Config
     @ConfigItem(
         keyName = "enableLfg",
         name = "Enable LFG",
-        description = "Enable the Looking For Group feature",
+        description = "Enable the Looking For Group party board and the !lfg chat command",
         section = lfgSection,
         position = 0
     )
@@ -118,27 +116,13 @@ public interface FinalBossConfig extends Config
         return true;
     }
 
-    @Range(min = LfgService.MIN_TTL_MINUTES, max = LfgService.MAX_TTL_MINUTES)
-    @ConfigItem(
-        keyName = "lfgTimeoutMinutes",
-        name = "LFG Timeout",
-        description = "How long your LFG status stays up before it expires and is removed automatically",
-        section = lfgSection,
-        position = 1
-    )
-    @Units(Units.MINUTES)
-    default int lfgTimeoutMinutes()
-    {
-        return 240;
-    }
-
     @ConfigItem(
         keyName = "lfgPartyNotifications",
         name = "Party chat notifications",
         description = "Post LFG party events to your chatbox: applicants to your party, "
             + "your application being accepted or declined, and parties you're in forming or being disbanded",
         section = lfgSection,
-        position = 2
+        position = 1
     )
     default boolean lfgPartyNotifications()
     {
@@ -150,7 +134,7 @@ public interface FinalBossConfig extends Config
         name = "Party desktop notifications",
         description = "Also send a desktop notification for LFG party events (uses RuneLite's notification settings)",
         section = lfgSection,
-        position = 3
+        position = 2
     )
     default boolean lfgDesktopNotifications()
     {
@@ -163,7 +147,7 @@ public interface FinalBossConfig extends Config
         description = "Look up kill counts on the public OSRS hiscores when an applicant's client didn't "
             + "send one, and to prefill your own on the apply form",
         section = lfgSection,
-        position = 4
+        position = 3
     )
     default boolean lfgKcLookups()
     {

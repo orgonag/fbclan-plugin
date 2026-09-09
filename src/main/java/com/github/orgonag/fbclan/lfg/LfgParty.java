@@ -151,7 +151,7 @@ public class LfgParty
         data.addProperty("hard_mode", hardMode);
         data.addProperty("invocation", invocation);
         data.addProperty("capacity", capacity);
-        String desc = LfgService.sanitize(description, LfgPartyService.MAX_DESCRIPTION_LENGTH);
+        String desc = LfgText.sanitize(description, LfgPartyService.MAX_DESCRIPTION_LENGTH);
         if (desc == null)
         {
             data.add("description", JsonNull.INSTANCE);

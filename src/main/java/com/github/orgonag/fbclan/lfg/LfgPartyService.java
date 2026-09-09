@@ -16,9 +16,9 @@ import okhttp3.OkHttpClient;
 
 /**
  * Supabase access for hosted parties (lfg_parties), their applicants
- * (lfg_applicants) and formed-party snapshots (lfg_formed_parties). Same
- * trust model as lfg_entries: the anon key has full CRUD on the live
- * tables (insert/select/delete on the snapshots), membership is verified
+ * (lfg_applicants) and formed-party snapshots (lfg_formed_parties). The
+ * anon key has full CRUD on the live tables (insert/select/delete on the
+ * snapshots), membership is verified
  * before anything is written, and rows are scoped by RSN client-side. All
  * calls are blocking network I/O — run them on the executor.
  */

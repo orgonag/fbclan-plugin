@@ -28,8 +28,8 @@ side panel. The panel unlocks after clan membership is verified.
 - **Drop Screenshots** — Optional full-client screenshot per logged drop,
   annotated with party member names and viewable from the drop log.
 - **Discord Notifications** — Optional webhook for drop alerts.
-- **Looking For Group** — Two boards in one tab, with an item sprite
-  per activity from RuneLite's item cache. **Parties**: host a
+- **Looking For Group** — A hosted-party board, with an item sprite
+  per activity from RuneLite's item cache. Host a
   party for any of 25 raids, God Wars bosses, group bosses, and minigames
   (or the general categories) with a party size, loot rule, minimum KC,
   learner/teacher tag, description, and your current world; ToB/HMT
@@ -50,12 +50,9 @@ side panel. The panel unlocks after clan membership is verified.
   it gets a "party has formed" message with the roster and world, and
   the host is free to host again. Formed parties are visible to the
   whole clan under "Show formed" for 7 days (the host can remove theirs
-  sooner). **Looking**: the original
-  status board — set what you're up for, with party clustering and an
-  optional note (e.g. "HMT NFRZ"). The `!lfg` chat command is read-only:
-  `!lfg` prints how many members are looking per event and `!lfg parties`
-  lists open parties (both visible only to you); setting a status,
-  hosting, and applying are done in the panel.
+  sooner). The `!lfg` chat command is read-only: `!lfg`
+  lists open parties (visible only to you); hosting and applying are
+  done in the panel.
 - **PB Leaderboards** — Clan-wide top-3 personal best times for every
   boss, raid (per team size), Gauntlet/Colosseum/Inferno, Wintertodt/
   Tempoross, Hallowed Sepulchre, and agility courses RuneLite tracks,
@@ -92,8 +89,7 @@ side panel. The panel unlocks after clan membership is verified.
 | Rare drop threshold (1 in X) | Log drops with a drop rate of 1 in X or rarer even below the valuable threshold; 0 turns the rule off | 100 |
 | Rare drop min value (GP) | A rare drop must also be worth at least this much; 0 logs every rare drop regardless of value | 100,000 |
 | Screenshot Drops | Upload a full client screenshot for drops above the threshold | Off |
-| Enable LFG | Enable Looking For Group feature | On |
-| LFG Timeout | Minutes before your LFG status expires and is removed (10–720) | 240 |
+| Enable LFG | Enable the Looking For Group party board and the `!lfg` chat command | On |
 | Party chat notifications | Chatbox messages for applicants to your party, your application being accepted/declined, and parties you're in forming or being disbanded | On |
 | Party desktop notifications | Also raise a RuneLite desktop notification for those events | Off |
 | Kill count lookups | Look up kill counts on the OSRS hiscores when an applicant's client didn't send one, and to prefill your own on the apply form | On |
@@ -111,7 +107,6 @@ for personal bests, a server-side function:
 | Table / Bucket | INSERT | SELECT | UPDATE | DELETE |
 |---|---|---|---|---|
 | `drops` | Allowed | Allowed | Denied | Denied |
-| `lfg_entries` | Allowed | Allowed | Allowed | Allowed |
 | `lfg_parties` | Allowed | Allowed | Allowed | Allowed |
 | `lfg_applicants` | Allowed | Allowed | Allowed | Allowed |
 | `lfg_formed_parties` | Allowed | Allowed | Denied | Allowed |
@@ -160,20 +155,15 @@ read-only views (`cl_leaderboard`, `ca_leaderboard`, top 20 each).
   can't push a party past its capacity, `created_at`/`updated_at` are
   server-owned (a client can't post a future timestamp to dodge the
   cleanup job), and names, activity keys, and role keys are well-formed.
-  As with LFG entries, membership is verified client-side before
-  anything is written and nothing sensitive is stored.
+  Membership is verified client-side before anything is written and
+  nothing sensitive is stored.
 - **PB uploads skip non-standard worlds** — Leagues, Deadman, tournament,
   beta, and speedrun worlds never feed the leaderboard
 - `notable_items`, `welcome_message`, and `announcements` are read-only
   clan-curated content, written solely by a clan-staff sync job outside
   this plugin
-- A scheduled job runs every minute and deletes LFG entries whose
-  configured timeout has elapsed since `updated_at`. Each entry's TTL is
-  the lister's "LFG Timeout" setting (10–720 minutes, default 240, bounded
-  by a database CHECK constraint) and resets whenever the player sets
-  their status again.
 - Hosted parties are kept alive by the host's client, which bumps
-  `updated_at` every 5 minutes while it's running; a second scheduled job
+  `updated_at` every 5 minutes while it's running; a scheduled job
   deletes parties 30 minutes after the last heartbeat, so a closed or
   crashed client can't leave a stale advertisement up. Disabling the
   plugin or closing the client disbands your party and withdraws any

@@ -16,8 +16,8 @@ public class SupabaseClientTest
     @Test
     public void testBuildUrlWithQuery()
     {
-        String url = SupabaseClient.buildUrl("lfg_entries", "select=*&order=updated_at.desc");
-        assertTrue(url.contains("/rest/v1/lfg_entries?select=*&order=updated_at.desc"));
+        String url = SupabaseClient.buildUrl("lfg_parties", "select=*&order=updated_at.desc");
+        assertTrue(url.contains("/rest/v1/lfg_parties?select=*&order=updated_at.desc"));
     }
 
     @Test

@@ -2,10 +2,8 @@ package com.github.orgonag.fbclan.lfg;
 
 import com.github.orgonag.fbclan.ClanSession;
 import com.github.orgonag.fbclan.FinalBossConfig;
-import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import net.runelite.api.ChatMessageType;
@@ -17,11 +15,10 @@ import net.runelite.client.util.Text;
 
 /**
  * Answers the local player's own "!lfg" chat messages with a local-only
- * summary: how many members are looking per event, or which parties are
- * open. Read-only by design — nothing is set, cleared, or joined from
- * chat. The typed message still posts to chat normally (it doubles as a
- * visible ask); this handler never consumes or modifies it, and never
- * reacts to other players' commands.
+ * summary of the open parties. Read-only by design — nothing is hosted,
+ * applied to, or changed from chat. The typed message still posts to
+ * chat normally (it doubles as a visible ask); this handler never
+ * consumes or modifies it, and never reacts to other players' commands.
  */
 public class LfgChatCommandHandler
 {
@@ -43,19 +40,16 @@ public class LfgChatCommandHandler
     private final FinalBossConfig config;
     private final ClanSession session;
     private final ScheduledExecutorService executor;
-    private final LfgService lfgService;
     private final LfgPartyService partyService;
 
     public LfgChatCommandHandler(Client client, ClientThread clientThread, FinalBossConfig config,
-        ClanSession session, ScheduledExecutorService executor, LfgService lfgService,
-        LfgPartyService partyService)
+        ClanSession session, ScheduledExecutorService executor, LfgPartyService partyService)
     {
         this.client = client;
         this.clientThread = clientThread;
         this.config = config;
         this.session = session;
         this.executor = executor;
-        this.lfgService = lfgService;
         this.partyService = partyService;
     }
 
@@ -85,11 +79,8 @@ public class LfgChatCommandHandler
 
         switch (result.getAction())
         {
-            case WHO:
-                // Network read - off the client thread; the reply hops back.
-                replyAsync(() -> summarize(lfgService.getActiveEntries()));
-                break;
             case PARTIES:
+                // Network read - off the client thread; the reply hops back.
                 replyAsync(() -> summarizeParties(partyService.getParties()));
                 break;
             case HELP:
@@ -150,54 +141,6 @@ public class LfgChatCommandHandler
             }
         }
         return sb.toString();
-    }
-
-    // Counts active entries per activity in enum declaration order (the
-    // panel's grouped-view order), skipping empty activities.
-    // Package-private for tests.
-    static String summarize(List<LfgEntry> entries)
-    {
-        Map<LfgActivity, Integer> counts = new EnumMap<>(LfgActivity.class);
-        for (LfgEntry entry : entries)
-        {
-            counts.merge(entry.getActivity(), 1, Integer::sum);
-        }
-        if (counts.isEmpty())
-        {
-            return "No one is looking for a group right now.";
-        }
-        StringBuilder sb = new StringBuilder("LFG: ");
-        boolean first = true;
-        for (LfgActivity activity : LfgActivity.values())
-        {
-            Integer count = counts.get(activity);
-            if (count == null)
-            {
-                continue;
-            }
-            if (!first)
-            {
-                sb.append(", ");
-            }
-            first = false;
-            sb.append(shortLabel(activity)).append(" (").append(count).append(')');
-        }
-        return sb.toString();
-    }
-
-    // All-caps community abbreviations for the raids (PbFormat's style);
-    // display names elsewhere.
-    private static String shortLabel(LfgActivity activity)
-    {
-        switch (activity)
-        {
-            case COX:
-            case TOB:
-            case TOA:
-                return activity.name();
-            default:
-                return activity.getDisplayName();
-        }
     }
 
     // Sender names can carry icon img tags and non-breaking spaces.

@@ -17,27 +17,20 @@ public class LfgChatCommandTest
     }
 
     @Test
-    public void testBareTriggerIsWho()
+    public void testBareTriggerListsParties()
     {
-        assertEquals(LfgChatCommand.Action.WHO, LfgChatCommand.parse("!lfg").getAction());
-        assertEquals(LfgChatCommand.Action.WHO, LfgChatCommand.parse("  !LFG   ").getAction());
+        assertEquals(LfgChatCommand.Action.PARTIES, LfgChatCommand.parse("!lfg").getAction());
+        assertEquals(LfgChatCommand.Action.PARTIES, LfgChatCommand.parse("  !LFG   ").getAction());
     }
 
     @Test
-    public void testWhoKeyword()
-    {
-        assertEquals(LfgChatCommand.Action.WHO, LfgChatCommand.parse("!lfg who").getAction());
-        assertEquals(LfgChatCommand.Action.WHO, LfgChatCommand.parse("!lfg WHO").getAction());
-        // Trailing text after who is tolerated and ignored
-        assertEquals(LfgChatCommand.Action.WHO, LfgChatCommand.parse("!lfg who is on").getAction());
-    }
-
-    @Test
-    public void testPartiesKeyword()
+    public void testPartiesKeywords()
     {
         assertEquals(LfgChatCommand.Action.PARTIES, LfgChatCommand.parse("!lfg parties").getAction());
         assertEquals(LfgChatCommand.Action.PARTIES, LfgChatCommand.parse("!lfg party").getAction());
         assertEquals(LfgChatCommand.Action.PARTIES, LfgChatCommand.parse("!lfg Parties please").getAction());
+        // The old status-board keyword still answers with the parties list.
+        assertEquals(LfgChatCommand.Action.PARTIES, LfgChatCommand.parse("!lfg who").getAction());
     }
 
     @Test
@@ -51,7 +44,7 @@ public class LfgChatCommandTest
     }
 
     @Test
-    public void testUsageMentionsBothCommands()
+    public void testUsageMentionsCommand()
     {
         assertTrue(LfgChatCommand.USAGE.contains("!lfg"));
         assertTrue(LfgChatCommand.USAGE.contains("parties"));
