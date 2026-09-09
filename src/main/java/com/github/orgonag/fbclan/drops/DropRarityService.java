@@ -78,11 +78,6 @@ public class DropRarityService
         log.info("Loaded drop rates for {} sources", table.size());
     }
 
-    public boolean isLoaded()
-    {
-        return !dropsBySource.isEmpty();
-    }
-
     // Probability (0..1) that one kill/completion of `source` yields this
     // item stack, or empty when the source or item isn't in the table.
     // Noted items resolve to the unnoted id; item variants (charged /

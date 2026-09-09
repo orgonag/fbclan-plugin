@@ -131,8 +131,8 @@ public class FinalBossPlugin extends Plugin
     @Inject
     private ScheduledExecutorService executor;
 
-    // Core RuneLite service backing the Party plugin. Only read for the
-    // member names stamped onto drop screenshots — never the passphrase.
+    // Core RuneLite service backing the Party plugin: read only for the
+    // member names stamped onto drop screenshots.
     @Inject
     private PartyService partyService;
 

@@ -108,14 +108,6 @@ public enum LfgRole
         }
     }
 
-    // Display name for a stored key, falling back to the raw key when the
-    // role is unknown to this client (e.g. added by a newer build).
-    public static String displayNameOf(String key)
-    {
-        LfgRole role = fromKey(key);
-        return role != null ? role.displayName : key;
-    }
-
     @Override
     public String toString()
     {

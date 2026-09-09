@@ -143,17 +143,13 @@ public class LfgChatCommandHandler
         return sb.toString();
     }
 
-    // Sender names can carry icon img tags and non-breaking spaces.
+    // Sender names can carry icon img tags (stripped here) and
+    // non-breaking spaces (handled by LfgNames).
     private boolean isLocalPlayer(String senderName)
     {
         String rsn = session.getRsn();
         return rsn != null && senderName != null
-            && normalize(Text.removeTags(senderName)).equalsIgnoreCase(normalize(rsn));
-    }
-
-    private static String normalize(String name)
-    {
-        return name.replace('\u00A0', ' ').trim();
+            && LfgNames.equal(Text.removeTags(senderName), rsn);
     }
 
     // Local-only feedback line; nothing is sent to the server.

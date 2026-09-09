@@ -29,9 +29,9 @@ side panel. The panel unlocks after clan membership is verified.
   annotated with party member names and viewable from the drop log.
 - **Discord Notifications** — Optional webhook for drop alerts.
 - **Looking For Group** — A hosted-party board, with an item sprite
-  per activity from RuneLite's item cache. Host a
-  party for any of 25 raids, God Wars bosses, group bosses, and minigames
-  (or the general categories) with a party size, loot rule, minimum KC,
+  per activity from RuneLite's item cache. Host a party for any of 20
+  raids, God Wars bosses, group bosses, and minigames (or one of five
+  general categories) with a party size, loot rule, minimum KC,
   learner/teacher tag, description, and your current world; ToB/HMT
   teams get a fixed role layout by size, CoX/CM hosts pick how many of
   each role they want, and Barbarian Assault fills one of each role.
@@ -62,6 +62,10 @@ side panel. The panel unlocks after clan membership is verified.
   RuneLite are seeded once per session so the board is complete from day
   one. Times from Leagues, Deadman, speedrun, and other non-standard
   worlds are never uploaded. Viewing the leaderboard requires no opt-in.
+- **CA Chat Badges** — Members who've uploaded Elite, Master, or
+  Grandmaster combat achievement tiers get the matching slayer helmet
+  (Tztok, Vampyric, Tzkal) next to their name in chat. Can be turned
+  off; it's cosmetic and reads only the clan's own uploaded stats.
 - **Welcome Message** — A clan-curated one-liner shown once per session
   in verified members' chatboxes.
 - **Clan Dashboard** — Weekly XP gained and EHB podiums plus per-boss
@@ -96,6 +100,7 @@ side panel. The panel unlocks after clan membership is verified.
 | Discord Webhook URL | Discord webhook for drop notifications | Empty |
 | Upload personal bests | Send your boss PB times (RSN, boss, time) to the clan leaderboard | On |
 | Upload collection log & CA | Send your collection log count and combat achievement points to the clan dashboard | On |
+| CA slayer helm chat icons | Show the Tztok/Vampyric/Tzkal slayer helmet next to clan members' names in chat for Elite/Master/Grandmaster CA tiers | On |
 
 ## Data & Security
 
@@ -141,10 +146,7 @@ read-only views (`cl_leaderboard`, `ca_leaderboard`, top 20 each).
 - **Screenshots are immutable** — uploaded once, never modifiable via the
   anon key; the bucket is public-read so drop log entries can link to
   their screenshot
-- **LFG entries are fully managed** — players can set, update, and remove
-  their own status; the optional free-text note is capped at 60
-  characters both client-side and by a database CHECK constraint
-- **LFG parties and applicants are fully managed the same way** — a host
+- **LFG parties and applicants are fully managed** — a host
   creates, edits, and disbands their own party (one per RSN, keyed on
   `host_rsn`) and accepts, declines, or kicks applicants; a member
   applies, withdraws, or leaves. Party size (2–100), invocation, loot

@@ -3,15 +3,14 @@ package com.github.orgonag.fbclan.lfg;
 import lombok.Getter;
 
 /**
- * Every activity a member can post an LFG status or host a party for.
- * The enum name is the stable key stored in the database, so existing
- * keys must never be renamed. Declaration order is the display order in
- * the panel and the "!lfg who" summary.
+ * Every activity a member can host a party for. The enum name is the
+ * stable key stored in the database, so existing keys must never be
+ * renamed. Declaration order is the display order in the panel's
+ * activity pickers.
  *
  * Specific bosses/raids/minigames carry party-size bounds and an optional
- * hard-mode label; the catch-all GENERAL entries at the bottom are the
- * original status-only categories and are kept for anything without a
- * dedicated entry.
+ * hard-mode label; the catch-all GENERAL entries at the bottom cover
+ * anything without a dedicated entry.
  */
 @Getter
 public enum LfgActivity
@@ -44,7 +43,7 @@ public enum LfgActivity
     GOTR("Guardians of the Rift", Category.MINIGAMES, 1, 30, null),
     WINTERTODT("Wintertodt", Category.MINIGAMES, 1, 30, null),
 
-    // Catch-alls (the original status-only categories)
+    // Catch-alls for anything without a dedicated entry
     GROUP_BOSS("Group Boss", Category.GENERAL, 1, 100, null),
     MINIGAME("Minigame", Category.GENERAL, 1, 100, null),
     PVP("PvP", Category.GENERAL, 1, 100, null),

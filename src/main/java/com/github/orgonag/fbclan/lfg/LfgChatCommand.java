@@ -11,8 +11,8 @@ import lombok.Value;
  * anything. Those are panel-only actions.
  *
  * Grammar (case-insensitive):
- *   !lfg | !lfg parties | !lfg party | !lfg who -> PARTIES (open parties)
- *   !lfg anything-else                          -> HELP
+ *   !lfg | !lfg parties | !lfg party -> PARTIES (open parties)
+ *   !lfg anything-else               -> HELP
  * Anything not starting with the whole-word trigger is not our command
  * and parses to null.
  */
@@ -63,7 +63,7 @@ public final class LfgChatCommand
             return new Result(Action.PARTIES);
         }
         String keyword = rest.split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
-        if (keyword.equals("parties") || keyword.equals("party") || keyword.equals("who"))
+        if (keyword.equals("parties") || keyword.equals("party"))
         {
             return new Result(Action.PARTIES);
         }

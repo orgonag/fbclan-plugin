@@ -16,7 +16,6 @@ import com.github.orgonag.fbclan.lfg.LfgRoles;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.time.Duration;
 import java.time.Instant;
@@ -58,7 +57,6 @@ import net.runelite.client.ui.FontManager;
 public class LfgPartiesPanel extends JPanel
 {
     private static final Color ONLINE = new Color(0x3F, 0xBF, 0x3F);
-    private static final Color OFFLINE = new Color(0xBF, 0x3F, 0x3F);
     private static final Color MUTED = ColorScheme.LIGHT_GRAY_COLOR;
     // Card inner width: sidebar (242) minus the card's 8px side padding.
     private static final int WRAP_WIDTH = 226;

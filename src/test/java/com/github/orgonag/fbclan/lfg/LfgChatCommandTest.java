@@ -29,18 +29,17 @@ public class LfgChatCommandTest
         assertEquals(LfgChatCommand.Action.PARTIES, LfgChatCommand.parse("!lfg parties").getAction());
         assertEquals(LfgChatCommand.Action.PARTIES, LfgChatCommand.parse("!lfg party").getAction());
         assertEquals(LfgChatCommand.Action.PARTIES, LfgChatCommand.parse("!lfg Parties please").getAction());
-        // The old status-board keyword still answers with the parties list.
-        assertEquals(LfgChatCommand.Action.PARTIES, LfgChatCommand.parse("!lfg who").getAction());
     }
 
     @Test
-    public void testOldSetAndClearFormsAreHelp()
+    public void testUnknownKeywordsAreHelp()
     {
-        // Setting/clearing from chat was removed: these now just print usage.
+        // The command is read-only: anything that isn't a listing request
+        // just prints usage rather than doing something.
+        assertEquals(LfgChatCommand.Action.HELP, LfgChatCommand.parse("!lfg who").getAction());
         assertEquals(LfgChatCommand.Action.HELP, LfgChatCommand.parse("!lfg tob need 2").getAction());
         assertEquals(LfgChatCommand.Action.HELP, LfgChatCommand.parse("!lfg cox").getAction());
         assertEquals(LfgChatCommand.Action.HELP, LfgChatCommand.parse("!lfg off").getAction());
-        assertEquals(LfgChatCommand.Action.HELP, LfgChatCommand.parse("!lfg raids need 2").getAction());
     }
 
     @Test
