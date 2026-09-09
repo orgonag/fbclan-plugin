@@ -1,40 +1,22 @@
 package com.github.orgonag.fbclan;
 
-import com.github.orgonag.fbclan.announcements.AnnouncementsService;
-import com.github.orgonag.fbclan.chat.CaBadgePresenter;
-import com.github.orgonag.fbclan.chat.CaBadgeService;
-import com.github.orgonag.fbclan.drops.DiscordWebhookService;
-import com.github.orgonag.fbclan.drops.DropCaptureService;
-import com.github.orgonag.fbclan.drops.DropScreenshotService;
-import com.github.orgonag.fbclan.drops.NotableItemsService;
-import com.github.orgonag.fbclan.drops.DropLogService;
-import com.github.orgonag.fbclan.drops.DropRarityService;
-import com.github.orgonag.fbclan.drops.DropTrackingService;
-import com.github.orgonag.fbclan.lfg.LfgChatCommandHandler;
-import com.github.orgonag.fbclan.lfg.LfgKillcountService;
-import com.github.orgonag.fbclan.lfg.LfgLocalKillcounts;
-import com.github.orgonag.fbclan.lfg.LfgPartyBridge;
-import com.github.orgonag.fbclan.lfg.LfgPartyNotifier;
-import com.github.orgonag.fbclan.lfg.LfgPartyService;
-import com.github.orgonag.fbclan.panel.AnnouncementsPanel;
-import com.github.orgonag.fbclan.panel.DropLogPanel;
-import com.github.orgonag.fbclan.panel.FinalBossPanel;
-import com.github.orgonag.fbclan.panel.LeaderboardPanel;
-import com.github.orgonag.fbclan.panel.LfgIconSource;
-import com.github.orgonag.fbclan.panel.LfgPartiesPanel;
-import com.github.orgonag.fbclan.panel.LockedPanel;
-import com.github.orgonag.fbclan.panel.RootPanel;
-import com.github.orgonag.fbclan.pb.LeaderboardService;
-import com.github.orgonag.fbclan.pb.PbSeedService;
-import com.github.orgonag.fbclan.pb.PbSubmitService;
-import com.github.orgonag.fbclan.pb.PbUploadCoordinator;
-import com.github.orgonag.fbclan.stats.DashboardService;
-import com.github.orgonag.fbclan.stats.MemberStatsService;
-import com.github.orgonag.fbclan.stats.StatsUploadCoordinator;
-import com.github.orgonag.fbclan.welcome.WelcomeMessagePresenter;
-import com.github.orgonag.fbclan.welcome.WelcomeMessageService;
-import com.github.orgonag.fbclan.wom.VerificationController;
-import com.github.orgonag.fbclan.wom.WomVerificationService;
+import com.github.orgonag.fbclan.clan.ClanContent;
+import com.github.orgonag.fbclan.core.Clan;
+import com.github.orgonag.fbclan.drops.DropLogger;
+import com.github.orgonag.fbclan.drops.DropRates;
+import com.github.orgonag.fbclan.drops.DropRules;
+import com.github.orgonag.fbclan.lfg.Killcounts;
+import com.github.orgonag.fbclan.lfg.LfgCommand;
+import com.github.orgonag.fbclan.lfg.PartyApi;
+import com.github.orgonag.fbclan.lfg.PartyBoard;
+import com.github.orgonag.fbclan.pbs.PersonalBests;
+import com.github.orgonag.fbclan.stats.CaBadges;
+import com.github.orgonag.fbclan.stats.MemberStats;
+import com.github.orgonag.fbclan.ui.AnnouncementsTab;
+import com.github.orgonag.fbclan.ui.DropLogTab;
+import com.github.orgonag.fbclan.ui.PartiesTab;
+import com.github.orgonag.fbclan.ui.Sidebar;
+import com.google.inject.Provides;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -48,59 +30,28 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.gameval.VarbitID;
-import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.NpcLootReceived;
-import net.runelite.client.game.ChatIconManager;
-import net.runelite.client.game.ItemManager;
-import net.runelite.client.hiscore.HiscoreClient;
-import net.runelite.client.party.PartyService;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.loottracker.LootReceived;
 import net.runelite.client.ui.ClientToolbar;
-import net.runelite.client.ui.DrawManager;
 import net.runelite.client.ui.NavigationButton;
-import net.runelite.client.util.AsyncBufferedImage;
 import net.runelite.client.util.ImageUtil;
-import javax.swing.ImageIcon;
 import net.runelite.http.api.loottracker.LootRecordType;
-import com.google.inject.Provides;
-import okhttp3.OkHttpClient;
 
 /**
  * Clan plugin for the Final Boss OSRS clan (wiseoldman.net group 1055).
  *
- * External services this plugin communicates with:
- * <ul>
- * <li>Wise Old Man API (read-only): checks whether the logged-in player is a
- *     member of the clan's WOM group. The panel stays locked for non-members.
- *     This once-per-login verification call and the optional hiscore
- *     lookups below are the plugin's only non-Supabase data sources.</li>
- * <li>Supabase (clan-owned database): stores drop log rows, hosted LFG
- *     parties, their applicants, and formed-party snapshots,
- *     (opt-in) drop screenshots, boss personal-best times, and collection
- *     log counts and combat achievement points (opt-out). Only ever sends
- *     the local player's own RSN, drop details, party details,
- *     screenshots, PB times, and collection-log/CA counts. PB submissions
- *     go through the submit_pbs function, and member stats go through the
- *     submit_stats function (improve-only); leaderboard reads come from
- *     read-only views. Also reads the clan-curated notable-items list and
- *     welcome message at startup (read-only, no player data sent).</li>
- * <li>OSRS hiscores (via RuneLite's HiscoreClient, read-only, optional):
- *     LFG kill-count lookups so a host can see applicants' KC and a
- *     member can check they meet a party's minimum. Disable with the
- *     "Kill count lookups" setting.</li>
- * <li>Discord webhook (optional, user-supplied URL): drop notifications.</li>
- * </ul>
- *
- * No player data is sent anywhere unless the player is a verified clan
- * member. Drop logging, PB tracking, and collection-log/combat-achievement
- * uploads are ON by default for verified members and can each be disabled
- * in the config; drop screenshots remain opt-in (default off). See
- * {@link FinalBossConfig}.
+ * External services: Wise Old Man (one read per login to verify
+ * membership), the clan's Supabase database (drop log, LFG parties,
+ * screenshots, personal bests, member stats, and the read-only curated
+ * content), the OSRS hiscores via RuneLite's client (optional LFG kill
+ * counts), and an optional user-supplied Discord webhook. Nothing about
+ * the player leaves the client until the WOM check passes; each upload
+ * can be switched off individually. See {@link FinalBossConfig}.
  */
 @Slf4j
 @PluginDescriptor(
@@ -110,80 +61,30 @@ import okhttp3.OkHttpClient;
 )
 public class FinalBossPlugin extends Plugin
 {
-    @Inject
-    private Client client;
-
-    @Inject
-    private ClientThread clientThread;
-
-    @Inject
-    private FinalBossConfig config;
-
-    @Inject
-    private ClientToolbar clientToolbar;
-
-    @Inject
-    private OkHttpClient okHttpClient;
-
-    @Inject
-    private ItemManager itemManager;
-
-    @Inject
-    private ScheduledExecutorService executor;
-
-    // Core RuneLite service backing the Party plugin: read only for the
-    // member names stamped onto drop screenshots.
-    @Inject
-    private PartyService partyService;
-
-    @Inject
-    private DrawManager drawManager;
-
-    @Inject
-    private ChatIconManager chatIconManager;
-
-    @Inject
-    private ConfigManager configManager;
-
-    // RuneLite's hiscore client: LFG kill-count lookups (optional, config).
-    @Inject
-    private HiscoreClient hiscoreClient;
-
-    @Inject
-    private Notifier notifier;
+    @Inject private Client client;
+    @Inject private ClientThread clientThread;
+    @Inject private ClientToolbar toolbar;
+    @Inject private ScheduledExecutorService executor;
+    @Inject private FinalBossConfig config;
+    @Inject private Clan clan;
+    @Inject private ClanContent content;
+    @Inject private DropRates dropRates;
+    @Inject private DropLogger drops;
+    @Inject private PersonalBests pbs;
+    @Inject private MemberStats stats;
+    @Inject private CaBadges badges;
+    @Inject private PartyBoard parties;
+    @Inject private PartyApi partyApi;
+    @Inject private Killcounts killcounts;
+    @Inject private LfgCommand lfgCommand;
+    @Inject private Sidebar sidebar;
+    @Inject private AnnouncementsTab announcementsTab;
+    @Inject private DropLogTab dropLogTab;
+    @Inject private PartiesTab partiesTab;
 
     private NavigationButton navButton;
-    private LockedPanel lockedPanel;
-    private FinalBossPanel mainPanel;
-    private RootPanel rootPanel;
-
-    private DropLogService dropService;
-    private DiscordWebhookService discordService;
-    private DropScreenshotService screenshotService;
-    private DropCaptureService dropCaptureService;
-    private LfgPartyService lfgPartyService;
-    private LfgPartyNotifier lfgPartyNotifier;
-    private NotableItemsService notableItemsService;
-    private WelcomeMessagePresenter welcomePresenter;
-    private AnnouncementsService announcementsService;
-    private PbUploadCoordinator pbUploadCoordinator;
-    private LeaderboardService leaderboardService;
-    private StatsUploadCoordinator statsUploadCoordinator;
-    private DashboardService dashboardService;
-    private VerificationController verificationController;
-    private CaBadgeService caBadgeService;
-    private CaBadgePresenter caBadgePresenter;
-
-    private DropLogPanel dropLogPanel;
-    private LfgPartiesPanel lfgPartiesPanel;
-    private AnnouncementsPanel announcementsPanel;
-    private LeaderboardPanel leaderboardPanel;
-    private LfgPartyBridge lfgPartyBridge;
-    private LfgChatCommandHandler lfgChatCommandHandler;
-
-    private final ClanSession session = new ClanSession();
-    private ScheduledFuture<?> dropRefreshFuture;
-    private ScheduledFuture<?> badgeRefreshFuture;
+    private ScheduledFuture<?> dropRefresh;
+    private ScheduledFuture<?> badgeRefresh;
 
     @Provides
     FinalBossConfig provideConfig(ConfigManager configManager)
@@ -194,275 +95,187 @@ public class FinalBossPlugin extends Plugin
     @Override
     protected void startUp()
     {
-        WomVerificationService womService = new WomVerificationService(okHttpClient);
-        dropService = new DropLogService(okHttpClient);
-        discordService = new DiscordWebhookService(okHttpClient);
-        screenshotService = new DropScreenshotService(okHttpClient);
-        lfgPartyService = new LfgPartyService(okHttpClient);
-        lfgPartyNotifier = new LfgPartyNotifier(client, clientThread, config, session, notifier);
-        notableItemsService = new NotableItemsService(okHttpClient);
-        // One fetch per session — the curated list changes rarely. Runs on the
-        // executor so startup never blocks on network.
-        executor.submit(notableItemsService::refresh);
-        // ~700 KB of drop-rate JSON: parsed once, off the client thread.
-        DropRarityService rarityService = new DropRarityService(itemManager);
-        executor.submit(rarityService::load);
-        dropCaptureService = new DropCaptureService(client, config, session, itemManager,
-            drawManager, partyService, executor, notableItemsService, rarityService, dropService,
-            discordService, screenshotService);
+        clan.setListener(this::onStatus);
+        content.resetSession();
+        pbs.resetSession();
 
-        WelcomeMessageService welcomeMessageService = new WelcomeMessageService(okHttpClient);
-        welcomePresenter = new WelcomeMessagePresenter(client, clientThread, session, welcomeMessageService);
-        welcomePresenter.reset();
-        // Fetch once per session, then attempt display — covers the case where
-        // verification already finished before the fetch (maybeShow is also
-        // called on verification success, whichever comes last wins).
+        // Startup fetches, all off the client thread.
+        executor.submit(dropRates::load);
+        executor.submit(content::refreshNotableItems);
         executor.submit(() -> {
-            welcomeMessageService.refresh();
-            welcomePresenter.maybeShow();
+            content.refreshWelcome();
+            content.maybeShowWelcome();
         });
+        // Warms the cache and populates the tab before it's first opened.
+        announcementsTab.refresh();
 
-        announcementsService = new AnnouncementsService(okHttpClient);
-        PbSubmitService pbSubmitService = new PbSubmitService(okHttpClient);
-        PbSeedService pbSeedService = new PbSeedService(configManager);
-        pbUploadCoordinator = new PbUploadCoordinator(client, config, session, executor,
-            pbSubmitService, pbSeedService);
-        pbUploadCoordinator.reset();
-        leaderboardService = new LeaderboardService(okHttpClient);
-        MemberStatsService memberStatsService = new MemberStatsService(okHttpClient);
-        statsUploadCoordinator = new StatsUploadCoordinator(client, config, session,
-            executor, memberStatsService);
-        dashboardService = new DashboardService(okHttpClient);
-        caBadgeService = new CaBadgeService(okHttpClient);
-        caBadgePresenter = new CaBadgePresenter(chatIconManager, caBadgeService);
-
-        dropLogPanel = new DropLogPanel(dropService, executor);
-        // Activity icons are item sprites from RuneLite's item cache
-        // (the same source the core inventory/bank UI uses).
-        LfgIconSource iconSource = (itemId, label) -> {
-            AsyncBufferedImage sprite = itemManager.getImage(itemId);
-            sprite.onLoaded(() -> SwingUtilities.invokeLater(() -> {
-                label.setIcon(new ImageIcon(ImageUtil.resizeImage(sprite, LfgIconSource.SIZE, LfgIconSource.SIZE)));
-                label.repaint();
-            }));
-        };
-        lfgPartiesPanel = new LfgPartiesPanel(lfgPartyService, new LfgKillcountService(hiscoreClient),
-            new LfgLocalKillcounts(configManager), lfgPartyNotifier, executor, config, iconSource);
-        lfgPartyBridge = new LfgPartyBridge(client, clientThread, config, executor, lfgPartiesPanel);
-        lfgChatCommandHandler = new LfgChatCommandHandler(client, clientThread, config, session,
-            executor, lfgPartyService);
-        announcementsPanel = new AnnouncementsPanel(announcementsService, executor);
-        // Warm the announcements cache and populate the tab; refresh() runs
-        // the fetch on the executor, so startup never blocks on network.
-        announcementsPanel.refresh();
-        leaderboardPanel = new LeaderboardPanel(leaderboardService, dashboardService, executor);
-
-        lockedPanel = new LockedPanel();
-        mainPanel = new FinalBossPanel(announcementsPanel, dropLogPanel, lfgPartiesPanel, leaderboardPanel);
-        rootPanel = new RootPanel(lockedPanel, mainPanel);
-
-        verificationController = new VerificationController(client, clientThread, executor,
-            womService, session, new VerificationController.Listener()
-        {
-            @Override
-            public void onRsnCaptured(String rsn)
-            {
-                SwingUtilities.invokeLater(() -> lfgPartiesPanel.setCurrentRsn(rsn));
-            }
-
-            @Override
-            public void onVerifying()
-            {
-                SwingUtilities.invokeLater(() -> lockedPanel.showVerifying());
-            }
-
-            @Override
-            public void onVerified()
-            {
-                SwingUtilities.invokeLater(() -> {
-                    rootPanel.showMain();
-                    mainPanel.refreshActiveTab();
-                });
-                startPolling();
-                welcomePresenter.maybeShow();
-                pbUploadCoordinator.maybeSeed();
-                // Varp/varbit reads assert the client thread (visible with
-                // -ea in the dev client) — hop before submitting stats. The
-                // varb-change path already arrives on the client thread.
-                clientThread.invokeLater(statsUploadCoordinator::maybeSubmit);
-            }
-
-            @Override
-            public void onNotMember()
-            {
-                SwingUtilities.invokeLater(() -> lockedPanel.showNotMember());
-            }
-
-            @Override
-            public void onError()
-            {
-                SwingUtilities.invokeLater(() -> lockedPanel.showError());
-            }
-        });
-
-        lockedPanel.setRetryAction(e -> verificationController.verify());
-
-        // One button for the plugin's lifetime; verification flips the
-        // RootPanel card, so an open sidebar stays open.
         navButton = NavigationButton.builder()
             .tooltip("Final Boss")
             .icon(ImageUtil.loadImageResource(getClass(), "icon.png"))
             .priority(10)
-            .panel(rootPanel)
+            .panel(sidebar)
             .build();
-        clientToolbar.addNavigation(navButton);
+        toolbar.addNavigation(navButton);
 
-        // When the plugin is enabled mid-session, no LOGGED_IN event will
-        // fire, so kick off verification directly.
+        // Enabled mid-session: no LOGGED_IN event will fire.
         if (client.getGameState() == GameState.LOGGED_IN)
         {
-            verificationController.kickOff(0);
+            clan.verifyAfter(0);
         }
     }
 
     @Override
     protected void shutDown()
     {
-        // Snapshot the RSN before it's nulled below — the executor task may
-        // run after this method finishes.
-        String rsnSnapshot = session.getRsn();
-        if (rsnSnapshot != null && config.enableLfg())
+        // Snapshot before reset(): the executor task may run afterwards.
+        String rsn = clan.rsn();
+        if (rsn != null && config.enableLfg())
         {
-            // Hosted party and any pending application both go: neither
-            // can be kept alive without a running client.
+            // A party and an application can't be kept alive without a
+            // running client.
             executor.submit(() -> {
-                lfgPartyService.disband(rsnSnapshot);
-                lfgPartyService.withdrawAll(rsnSnapshot);
+                partyApi.disband(rsn);
+                partyApi.withdrawAll(rsn);
             });
         }
-
         stopPolling();
-
-        clientToolbar.removeNavigation(navButton);
-        verificationController.reset();
+        toolbar.removeNavigation(navButton);
+        clan.reset();
     }
+
+    private void onStatus(Clan.Status status)
+    {
+        SwingUtilities.invokeLater(() -> {
+            sidebar.show(status);
+            if (status == Clan.Status.MEMBER)
+            {
+                sidebar.refreshActiveTab();
+            }
+        });
+        if (status != Clan.Status.MEMBER)
+        {
+            return;
+        }
+        startPolling();
+        executor.submit(content::maybeShowWelcome);
+        // World-type and varp reads belong on the client thread.
+        clientThread.invokeLater(() -> {
+            pbs.maybeSeed();
+            stats.maybeSubmit();
+        });
+    }
+
+    private void startPolling()
+    {
+        parties.start();
+        if (config.enableDropLogging() && dropRefresh == null)
+        {
+            dropRefresh = executor.scheduleAtFixedRate(() -> {
+                try
+                {
+                    dropLogTab.refresh();
+                }
+                catch (Exception e)
+                {
+                    log.warn("Drop refresh error", e);
+                }
+            }, 60, 60, TimeUnit.SECONDS);
+        }
+        // Badge tiers: fetch on verification, then every 5 minutes so
+        // newly earned tiers show without a relog.
+        if (badgeRefresh != null)
+        {
+            return;
+        }
+        badgeRefresh = executor.scheduleAtFixedRate(() -> {
+            try
+            {
+                badges.refresh();
+            }
+            catch (Exception e)
+            {
+                log.warn("CA badge refresh error", e);
+            }
+        }, 0, 300, TimeUnit.SECONDS);
+    }
+
+    private void stopPolling()
+    {
+        parties.stop();
+        partiesTab.reset();
+        killcounts.clear();
+        if (dropRefresh != null)
+        {
+            dropRefresh.cancel(true);
+            dropRefresh = null;
+        }
+        if (badgeRefresh != null)
+        {
+            badgeRefresh.cancel(true);
+            badgeRefresh = null;
+        }
+    }
+
+    // ------------------------------------------------------------ events
 
     @Subscribe
     public void onGameStateChanged(GameStateChanged event)
     {
         if (event.getGameState() == GameState.LOGGED_IN)
         {
-            if (session.isVerified())
+            if (!clan.isVerified())
             {
-                return;
+                // Let the login flow settle before reading the player name.
+                clan.verifyAfter(3);
             }
-            // 3s delay gives the login flow time to settle before we read
-            // getLocalPlayer().getName().
-            verificationController.kickOff(3);
         }
-        else if (event.getGameState() == GameState.LOGIN_SCREEN)
+        else if (event.getGameState() == GameState.LOGIN_SCREEN && (clan.isVerified() || clan.rsn() != null))
         {
-            if (!session.isVerified() && session.getRsn() == null)
-            {
-                return;
-            }
-            verificationController.reset();
+            clan.reset();
             stopPolling();
-            // A fresh login re-primes the party diff so nothing that
-            // happened while logged out is announced as new.
-            lfgPartyNotifier.reset();
-            lfgPartiesPanel.reset();
-            SwingUtilities.invokeLater(() -> {
-                rootPanel.showLocked();
-                lockedPanel.showVerifying();
-            });
+            SwingUtilities.invokeLater(() -> sidebar.show(Clan.Status.VERIFYING));
         }
     }
 
     @Subscribe
     public void onVarbitChanged(VarbitChanged event)
     {
-        // Collection log count is a varp; CA points a varbit. Either
-        // rising mid-session re-submits (deduped by shouldSubmit).
-        if (event.getVarpId() == VarPlayerID.COLLECTION_COUNT
-            || event.getVarbitId() == VarbitID.CA_POINTS)
+        // Collection log count is a varp; CA points a varbit.
+        if (event.getVarpId() == VarPlayerID.COLLECTION_COUNT || event.getVarbitId() == VarbitID.CA_POINTS)
         {
-            statsUploadCoordinator.maybeSubmit();
-        }
-    }
-
-    private void startPolling()
-    {
-        lfgPartyBridge.startPolling();
-
-        if (config.enableDropLogging())
-        {
-            dropRefreshFuture = executor.scheduleAtFixedRate(() -> {
-                try { dropLogPanel.refresh(); }
-                catch (Exception e) { log.warn("Drop refresh error", e); }
-            }, 60, 60, TimeUnit.SECONDS);
-        }
-
-        // Tier data for chat badges: fetch on verification, then refresh
-        // every 5 minutes so newly earned tiers show without a relog.
-        badgeRefreshFuture = executor.scheduleAtFixedRate(() -> {
-            try { caBadgeService.refresh(); }
-            catch (Exception e) { log.warn("CA badge refresh error", e); }
-        }, 0, 300, TimeUnit.SECONDS);
-    }
-
-    private void stopPolling()
-    {
-        lfgPartyBridge.stopPolling();
-        if (dropRefreshFuture != null)
-        {
-            dropRefreshFuture.cancel(true);
-            dropRefreshFuture = null;
-        }
-        if (badgeRefreshFuture != null)
-        {
-            badgeRefreshFuture.cancel(true);
-            badgeRefreshFuture = null;
+            stats.maybeSubmit();
         }
     }
 
     @Subscribe
     public void onNpcLootReceived(NpcLootReceived event)
     {
-        dropCaptureService.handleLoot(event.getNpc().getName(), event.getItems());
+        drops.onLoot(event.getNpc().getName(), event.getItems());
     }
 
-    // Loot with no NPC kill behind it — raid chests (CoX/ToB/ToA), Barrows,
-    // and similar. NPC kills already arrive via onNpcLootReceived, so
-    // NPC-type records are ignored here to avoid double-logging — except
-    // the handful of bosses whose loot the Loot Tracker reports as an
-    // NPC record without ever firing an NPC-kill event, because it comes
-    // from a reward chest (the Gauntlet's Hunllef, the Whisperer, Araxxor,
-    // the Royal Titans). These events are posted by the core Loot Tracker
-    // plugin, so this path requires it to be enabled (it is by default).
+    // Loot with no NPC kill behind it: raid chests, Barrows, and the few
+    // bosses whose reward-chest loot the Loot Tracker reports as an NPC
+    // record without an NPC-kill event (Gauntlet, Whisperer, Araxxor,
+    // Royal Titans). Requires the core Loot Tracker plugin (on by default).
     @Subscribe
     public void onLootReceived(LootReceived event)
     {
-        boolean specialNpc = event.getType() == LootRecordType.NPC
-            && DropTrackingService.SPECIAL_LOOT_NPC_NAMES.contains(event.getName());
-        if (event.getType() != LootRecordType.EVENT && !specialNpc)
+        boolean chestNpc = event.getType() == LootRecordType.NPC && DropRules.CHEST_LOOT_NPCS.contains(event.getName());
+        if (event.getType() == LootRecordType.EVENT || chestNpc)
         {
-            return;
+            drops.onLoot(event.getName(), event.getItems());
         }
-        dropCaptureService.handleLoot(event.getName(), event.getItems());
     }
 
     @Subscribe
     public void onChatMessage(ChatMessage event)
     {
-        pbUploadCoordinator.onChatMessage(event);
-        // Pets never appear in loot events — the game only announces them
-        // in chat, so the drop pipeline listens here too.
-        dropCaptureService.handlePetChatMessage(event);
+        pbs.onChatMessage(event);
+        drops.onChatMessage(event);
         if (config.enableChatBadges())
         {
-            caBadgePresenter.onChatMessage(event);
+            badges.onChatMessage(event);
         }
-        lfgChatCommandHandler.onChatMessage(event);
+        lfgCommand.onChatMessage(event);
     }
 }

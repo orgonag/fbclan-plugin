@@ -1,42 +1,29 @@
 package com.github.orgonag.fbclan;
 
-import com.github.orgonag.fbclan.drops.DropTrackingService;
+import com.github.orgonag.fbclan.drops.DropRules;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
 import net.runelite.client.config.Range;
 
+// Key names are stable across versions so members' settings survive.
 @ConfigGroup("finalboss")
 public interface FinalBossConfig extends Config
 {
-    @ConfigSection(
-        name = "Drop Logging",
-        description = "Settings for drop logging",
-        position = 0
-    )
+    @ConfigSection(name = "Drop Logging", description = "Settings for drop logging", position = 0)
     String dropLoggingSection = "dropLogging";
 
-    @ConfigSection(
-        name = "Looking For Group",
-        description = "Settings for the LFG party board",
-        position = 1
-    )
+    @ConfigSection(name = "Looking For Group", description = "Settings for the LFG party board", position = 1)
     String lfgSection = "lfg";
 
-    @ConfigSection(
-        name = "Discord Integration",
-        description = "Settings for Discord webhook",
-        position = 2
-    )
+    @ConfigSection(name = "Discord Integration", description = "Settings for Discord webhook", position = 2)
     String discordSection = "discord";
 
-    @ConfigSection(
-        name = "Leaderboards",
-        description = "Clan leaderboards settings",
-        position = 3
-    )
+    @ConfigSection(name = "Leaderboards", description = "Clan leaderboards settings", position = 3)
     String leaderboardsSection = "leaderboards";
+
+    // ------------------------------------------------------------ drops
 
     @ConfigItem(
         keyName = "enableDropLogging",
@@ -50,7 +37,7 @@ public interface FinalBossConfig extends Config
         return true;
     }
 
-    @Range(min = DropTrackingService.MIN_THRESHOLD_GP)
+    @Range(min = DropRules.MIN_THRESHOLD_GP)
     @ConfigItem(
         keyName = "dropThresholdGp",
         name = "Valuable drop threshold (GP)",
@@ -60,7 +47,7 @@ public interface FinalBossConfig extends Config
     )
     default int dropThresholdGp()
     {
-        return 1_000_000;
+        return DropRules.MIN_THRESHOLD_GP;
     }
 
     @Range(min = 0, max = 1_000_000)
@@ -103,6 +90,8 @@ public interface FinalBossConfig extends Config
     {
         return false;
     }
+
+    // ------------------------------------------------------------ lfg
 
     @ConfigItem(
         keyName = "enableLfg",
@@ -154,6 +143,8 @@ public interface FinalBossConfig extends Config
         return true;
     }
 
+    // ------------------------------------------------------------ discord
+
     @ConfigItem(
         keyName = "discordWebhookUrl",
         name = "Discord Webhook URL",
@@ -165,6 +156,8 @@ public interface FinalBossConfig extends Config
     {
         return "";
     }
+
+    // ------------------------------------------------------------ leaderboards
 
     @ConfigItem(
         keyName = "enablePbUpload",
