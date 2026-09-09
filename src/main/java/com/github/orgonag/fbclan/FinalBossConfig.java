@@ -1,13 +1,11 @@
 package com.github.orgonag.fbclan;
 
 import com.github.orgonag.fbclan.drops.DropTrackingService;
-import com.github.orgonag.fbclan.lfg.LfgService;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
 import net.runelite.client.config.Range;
-import net.runelite.client.config.Units;
 
 @ConfigGroup("finalboss")
 public interface FinalBossConfig extends Config
@@ -21,7 +19,7 @@ public interface FinalBossConfig extends Config
 
     @ConfigSection(
         name = "Looking For Group",
-        description = "Settings for the LFG panel",
+        description = "Settings for the LFG party board",
         position = 1
     )
     String lfgSection = "lfg";
@@ -55,8 +53,8 @@ public interface FinalBossConfig extends Config
     @Range(min = DropTrackingService.MIN_THRESHOLD_GP)
     @ConfigItem(
         keyName = "dropThresholdGp",
-        name = "Drop Threshold (GP)",
-        description = "Minimum GP value for a drop to be logged (and screenshotted, if enabled) — 1m minimum",
+        name = "Valuable drop threshold (GP)",
+        description = "Any drop worth at least this much (GE price x quantity) is logged, rare or not — 1m minimum",
         section = dropLoggingSection,
         position = 1
     )
@@ -65,12 +63,41 @@ public interface FinalBossConfig extends Config
         return 1_000_000;
     }
 
+    @Range(min = 0, max = 1_000_000)
+    @ConfigItem(
+        keyName = "rareDropThreshold",
+        name = "Rare drop threshold (1 in X)",
+        description = "Log drops whose drop rate is 1 in X or rarer, even below the valuable threshold. "
+            + "100 = 1% or rarer. 0 turns the rarity rule off. Uses the OSRS Wiki drop table; "
+            + "drops it doesn't cover only qualify by value or the clan's notable list.",
+        section = dropLoggingSection,
+        position = 2
+    )
+    default int rareDropThreshold()
+    {
+        return 100;
+    }
+
+    @Range(min = 0)
+    @ConfigItem(
+        keyName = "rareDropMinValueGp",
+        name = "Rare drop min value (GP)",
+        description = "A rare drop must also be worth at least this much to be logged, so 1/128 rune junk "
+            + "stays out. Set to 0 to log every rare drop regardless of value (untradeables included).",
+        section = dropLoggingSection,
+        position = 3
+    )
+    default int rareDropMinValueGp()
+    {
+        return 100_000;
+    }
+
     @ConfigItem(
         keyName = "enableDropScreenshots",
         name = "Screenshot Drops",
         description = "Capture a full client screenshot for drops above the threshold and store it in the clan database",
         section = dropLoggingSection,
-        position = 2
+        position = 4
     )
     default boolean enableDropScreenshots()
     {
@@ -80,7 +107,7 @@ public interface FinalBossConfig extends Config
     @ConfigItem(
         keyName = "enableLfg",
         name = "Enable LFG",
-        description = "Enable the Looking For Group feature",
+        description = "Enable the Looking For Group party board and the !lfg chat command",
         section = lfgSection,
         position = 0
     )
@@ -89,18 +116,42 @@ public interface FinalBossConfig extends Config
         return true;
     }
 
-    @Range(min = LfgService.MIN_TTL_MINUTES, max = LfgService.MAX_TTL_MINUTES)
     @ConfigItem(
-        keyName = "lfgTimeoutMinutes",
-        name = "LFG Timeout",
-        description = "How long your LFG status stays up before it expires and is removed automatically",
+        keyName = "lfgPartyNotifications",
+        name = "Party chat notifications",
+        description = "Post LFG party events to your chatbox: applicants to your party, "
+            + "your application being accepted or declined, and parties you're in forming or being disbanded",
         section = lfgSection,
         position = 1
     )
-    @Units(Units.MINUTES)
-    default int lfgTimeoutMinutes()
+    default boolean lfgPartyNotifications()
     {
-        return 240;
+        return true;
+    }
+
+    @ConfigItem(
+        keyName = "lfgDesktopNotifications",
+        name = "Party desktop notifications",
+        description = "Also send a desktop notification for LFG party events (uses RuneLite's notification settings)",
+        section = lfgSection,
+        position = 2
+    )
+    default boolean lfgDesktopNotifications()
+    {
+        return false;
+    }
+
+    @ConfigItem(
+        keyName = "lfgKcLookups",
+        name = "Kill count lookups",
+        description = "Look up kill counts on the public OSRS hiscores when an applicant's client didn't "
+            + "send one, and to prefill your own on the apply form",
+        section = lfgSection,
+        position = 3
+    )
+    default boolean lfgKcLookups()
+    {
+        return true;
     }
 
     @ConfigItem(
@@ -129,19 +180,6 @@ public interface FinalBossConfig extends Config
     }
 
     @ConfigItem(
-        keyName = "enableChatBadges",
-        name = "CA slayer helm chat icons",
-        description = "Show the Tztok/Vampyric/Tzkal slayer helmet next to clan members' names in chat "
-            + "for Elite/Master/Grandmaster combat achievement tiers",
-        section = leaderboardsSection,
-        position = 2
-    )
-    default boolean enableChatBadges()
-    {
-        return true;
-    }
-
-    @ConfigItem(
         keyName = "enableStatsUpload",
         name = "Upload collection log & CA",
         description = "Send your collection log count and combat achievement points (with your RSN) "
@@ -151,6 +189,19 @@ public interface FinalBossConfig extends Config
         position = 1
     )
     default boolean enableStatsUpload()
+    {
+        return true;
+    }
+
+    @ConfigItem(
+        keyName = "enableChatBadges",
+        name = "CA slayer helm chat icons",
+        description = "Show the Tztok/Vampyric/Tzkal slayer helmet next to clan members' names in chat "
+            + "for Elite/Master/Grandmaster combat achievement tiers",
+        section = leaderboardsSection,
+        position = 2
+    )
+    default boolean enableChatBadges()
     {
         return true;
     }

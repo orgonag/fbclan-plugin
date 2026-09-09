@@ -127,9 +127,9 @@ public class SupabaseClientHttpTest
         server.enqueue(new MockResponse().setResponseCode(201));
         JsonObject data = new JsonObject();
         data.addProperty("rsn", "Alice");
-        assertTrue(SupabaseClient.upsert(client, "lfg_entries", data, "rsn"));
+        assertTrue(SupabaseClient.upsert(client, "lfg_parties", data, "host_rsn"));
         RecordedRequest req = server.takeRequest();
-        assertEquals("/rest/v1/lfg_entries?on_conflict=rsn", req.getPath());
+        assertEquals("/rest/v1/lfg_parties?on_conflict=host_rsn", req.getPath());
         assertEquals("resolution=merge-duplicates,return=minimal", req.getHeader("Prefer"));
     }
 
@@ -139,20 +139,20 @@ public class SupabaseClientHttpTest
         server.enqueue(new MockResponse().setResponseCode(204));
         JsonObject data = new JsonObject();
         data.addProperty("party_id", "abc");
-        assertTrue(SupabaseClient.update(client, "lfg_entries", "rsn=eq.Alice", data));
+        assertTrue(SupabaseClient.update(client, "lfg_parties", "host_rsn=eq.Alice", data));
         RecordedRequest req = server.takeRequest();
         assertEquals("PATCH", req.getMethod());
-        assertEquals("/rest/v1/lfg_entries?rsn=eq.Alice", req.getPath());
+        assertEquals("/rest/v1/lfg_parties?host_rsn=eq.Alice", req.getPath());
     }
 
     @Test
     public void deleteUsesFilter() throws Exception
     {
         server.enqueue(new MockResponse().setResponseCode(204));
-        assertTrue(SupabaseClient.delete(client, "lfg_entries", "rsn=eq.Alice"));
+        assertTrue(SupabaseClient.delete(client, "lfg_parties", "host_rsn=eq.Alice"));
         RecordedRequest req = server.takeRequest();
         assertEquals("DELETE", req.getMethod());
-        assertEquals("/rest/v1/lfg_entries?rsn=eq.Alice", req.getPath());
+        assertEquals("/rest/v1/lfg_parties?host_rsn=eq.Alice", req.getPath());
     }
 
     @Test

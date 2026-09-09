@@ -7,6 +7,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import net.runelite.api.ChatMessageType;
@@ -21,10 +22,21 @@ import net.runelite.client.party.PartyService;
 import net.runelite.client.ui.DrawManager;
 
 /**
- * The drop pipeline: filters loot events against the GP threshold and the
- * clan-curated notable list, detects pet chat messages, optionally grabs
- * an annotated screenshot, then fans out to the Supabase drop log and the
- * user's Discord webhook.
+ * The drop pipeline. A loot item is logged when ANY of these hold:
+ * <ul>
+ * <li><b>Valuable</b>: GE price x quantity is at or above the GP threshold.</li>
+ * <li><b>Rare</b>: its drop rate from this source is 1 in X or rarer (X from
+ *     config, 0 = off) AND it's worth at least the rare-drop minimum value
+ *     (so 1/128 rune junk stays out; set the minimum to 0 to log every
+ *     rare drop regardless of value). Rates come from the bundled OSRS
+ *     Wiki drop table; drops without table data can't qualify this way.</li>
+ * <li><b>Notable</b>: on the clan-curated notable-items list.</li>
+ * <li><b>Pet</b>: announced in chat (pets never appear in loot events).</li>
+ * </ul>
+ * Clue scrolls, long/curved bones, champion scrolls, and keys are never
+ * logged by the automatic rules. It then optionally grabs an annotated
+ * screenshot and fans out to the Supabase drop log and the user's Discord
+ * webhook.
  */
 public class DropCaptureService
 {
@@ -36,6 +48,7 @@ public class DropCaptureService
     private final PartyService partyService;
     private final ScheduledExecutorService executor;
     private final NotableItemsService notableItemsService;
+    private final DropRarityService rarityService;
     private final DropLogService dropService;
     private final DiscordWebhookService discordService;
     private final DropScreenshotService screenshotService;
@@ -43,8 +56,8 @@ public class DropCaptureService
     public DropCaptureService(Client client, FinalBossConfig config, ClanSession session,
         ItemManager itemManager, DrawManager drawManager, PartyService partyService,
         ScheduledExecutorService executor, NotableItemsService notableItemsService,
-        DropLogService dropService, DiscordWebhookService discordService,
-        DropScreenshotService screenshotService)
+        DropRarityService rarityService, DropLogService dropService,
+        DiscordWebhookService discordService, DropScreenshotService screenshotService)
     {
         this.client = client;
         this.config = config;
@@ -54,6 +67,7 @@ public class DropCaptureService
         this.partyService = partyService;
         this.executor = executor;
         this.notableItemsService = notableItemsService;
+        this.rarityService = rarityService;
         this.dropService = dropService;
         this.discordService = discordService;
         this.screenshotService = screenshotService;
@@ -94,9 +108,11 @@ public class DropCaptureService
         }
 
         dispatchDrops(rsn, "Pet drop",
-            Collections.singletonList(new PendingDrop(itemName, 0, 0, 1)));
+            Collections.singletonList(new PendingDrop(itemName, 0, 0, 1, null)));
     }
 
+    // `sourceName` is what the Loot Tracker / loot manager reported (an NPC
+    // name, raid, chest, ...). It doubles as the key into the rarity table.
     public void handleLoot(String sourceName, Collection<ItemStack> items)
     {
         String rsn = session.getRsn();
@@ -106,28 +122,47 @@ public class DropCaptureService
         }
 
         long threshold = DropTrackingService.effectiveThreshold(config.dropThresholdGp());
+        int rareDenominator = config.rareDropThreshold();
+        long rareMinValue = Math.max(0, config.rareDropMinValueGp());
         Set<String> notableNames = notableItemsService.getNotableNames();
+        String displaySource = DropTrackingService.displaySourceName(sourceName);
+
         List<PendingDrop> drops = new ArrayList<>();
         for (ItemStack itemStack : items)
         {
             int itemId = itemStack.getId();
             int quantity = itemStack.getQuantity();
             int gePrice = itemManager.getItemPrice(itemId);
-            // Name is needed up front now: notable matching is by name, and
+            long totalValue = (long) gePrice * quantity;
+            // Name is needed up front: notable matching is by name, and
             // notable items (GE price 0) would never survive a value-first gate.
             ItemComposition itemComp = itemManager.getItemComposition(itemId);
             String itemName = itemComp.getName();
 
-            if (DropTrackingService.isValuableDrop(gePrice, quantity, threshold)
-                || DropTrackingService.isNotableDrop(itemName, notableNames))
+            // Looked up for every item so a valuable drop's rarity is still
+            // recorded; the display-name mapping (Hunllef -> Gauntlet) is
+            // also how the supplement table is keyed.
+            OptionalDouble rarity = rarityService.getRarity(sourceName, itemId, quantity);
+            if (!rarity.isPresent() && !displaySource.equals(sourceName))
             {
-                drops.add(new PendingDrop(itemName, itemId, (long) gePrice * quantity, quantity));
+                rarity = rarityService.getRarity(displaySource, itemId, quantity);
+            }
+
+            boolean blocked = DropTrackingService.isNeverLogged(itemName);
+            boolean valuable = !blocked && DropTrackingService.isValuableDrop(gePrice, quantity, threshold);
+            boolean rare = !blocked && DropTrackingService.isRareDrop(rarity, rareDenominator)
+                && totalValue >= rareMinValue;
+            boolean notable = DropTrackingService.isNotableDrop(itemName, notableNames);
+            if (valuable || rare || notable)
+            {
+                drops.add(new PendingDrop(itemName, itemId, totalValue, quantity,
+                    rarity.isPresent() ? rarity.getAsDouble() : null));
             }
         }
 
         if (!drops.isEmpty())
         {
-            dispatchDrops(rsn, sourceName, drops);
+            dispatchDrops(rsn, displaySource, drops);
         }
     }
 
@@ -159,8 +194,9 @@ public class DropCaptureService
         String webhookUrl = config.discordWebhookUrl();
         for (PendingDrop drop : drops)
         {
-            dropService.logDrop(rsn, npcName, drop.itemName, drop.itemId, drop.totalValue, drop.quantity, screenshotUrl);
-            discordService.sendDropNotification(webhookUrl, rsn, drop.itemName, drop.totalValue, npcName);
+            dropService.logDrop(rsn, npcName, drop.itemName, drop.itemId, drop.totalValue, drop.quantity,
+                screenshotUrl, drop.rarity);
+            discordService.sendDropNotification(webhookUrl, rsn, drop.itemName, drop.totalValue, npcName, drop.rarity);
         }
     }
 
@@ -191,13 +227,16 @@ public class DropCaptureService
         final int itemId;
         final long totalValue;
         final int quantity;
+        // Drop probability per kill when known, else null.
+        final Double rarity;
 
-        PendingDrop(String itemName, int itemId, long totalValue, int quantity)
+        PendingDrop(String itemName, int itemId, long totalValue, int quantity, Double rarity)
         {
             this.itemName = itemName;
             this.itemId = itemId;
             this.totalValue = totalValue;
             this.quantity = quantity;
+            this.rarity = rarity;
         }
     }
 }

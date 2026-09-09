@@ -91,6 +91,11 @@ public class DropLogPanel extends JPanel
 
         // Untradeables (pets) have no GE value — suppress the "(0 GP)".
         String valueSuffix = geValue > 0 ? " (" + DropTrackingService.formatGp(geValue) + " GP)" : "";
+        JsonElement rarityElement = drop.get("rarity");
+        if (rarityElement != null && !rarityElement.isJsonNull() && rarityElement.getAsDouble() > 0)
+        {
+            valueSuffix += " [" + DropTrackingService.formatRarity(rarityElement.getAsDouble()) + "]";
+        }
         // Plain label, not HTML: an HTML label wraps when the panel is
         // narrow (growing the row) where a plain label truncates with "...",
         // and plain text needs no escaping.

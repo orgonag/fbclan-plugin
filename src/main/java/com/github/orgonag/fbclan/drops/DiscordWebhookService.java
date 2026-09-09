@@ -25,6 +25,12 @@ public class DiscordWebhookService
 
     public void sendDropNotification(String webhookUrl, String rsn, String itemName, long geValue, String npcName)
     {
+        sendDropNotification(webhookUrl, rsn, itemName, geValue, npcName, null);
+    }
+
+    public void sendDropNotification(String webhookUrl, String rsn, String itemName, long geValue, String npcName,
+                                     Double rarity)
+    {
         if (webhookUrl == null || webhookUrl.isEmpty())
         {
             return;
@@ -40,7 +46,8 @@ public class DiscordWebhookService
         embed.addProperty("title", rsn + " received a drop!");
         // Untradeables (pets) have no GE value — omit the "(0 GP)".
         String value = geValue > 0 ? " (" + DropTrackingService.formatGp(geValue) + " GP)" : "";
-        embed.addProperty("description", itemName + value + " from " + npcName);
+        String rate = rarity != null && rarity > 0 ? " [" + DropTrackingService.formatRarity(rarity) + "]" : "";
+        embed.addProperty("description", itemName + value + rate + " from " + npcName);
         embed.addProperty("color", GOLD_COLOR);
 
         JsonArray embeds = new JsonArray();

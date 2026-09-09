@@ -12,17 +12,47 @@ side panel. The panel unlocks after clan membership is verified.
 - **Announcements** — Clan-curated long-form announcements written by the
   clan staff (via a Google Sheet synced to the clan database), shown
   newest-first in their own tab.
-- **Drop Log** — Logs valuable drops (configurable GP threshold, on by
-  default for verified members — disable to opt out)
-  to a shared clan database, including raid chest loot (CoX/ToB/ToA —
-  requires the core Loot Tracker plugin, enabled by default), pet drops
-  (always logged regardless of threshold), and a clan-curated "notable
-  items" list (untradeables like Araxyte fang logged regardless of value).
+- **Drop Log** — Logs rare and valuable drops (on by default for verified
+  members — disable to opt out) to a shared clan database. A drop is
+  logged when it's **valuable** (GE value at or above the GP threshold),
+  **rare** (drop rate 1 in X or rarer from that source, using the OSRS
+  Wiki drop table bundled with the plugin, and worth at least a small
+  minimum so 1/128 junk stays out), on the clan-curated **notable items**
+  list (untradeables like Araxyte fang), or a **pet** (always logged).
+  Each logged drop records its drop rate, shown as "[1/512]" in the log
+  and in Discord. Covers NPC kills, raid chests (CoX/ToB/ToA), and reward
+  chests the client reports differently — the Gauntlet, the Whisperer,
+  Araxxor, the Royal Titans — which require the core Loot Tracker plugin
+  (enabled by default). Clue scrolls, long and curved bones, champion
+  scrolls, and keys are never logged by the automatic rules.
 - **Drop Screenshots** — Optional full-client screenshot per logged drop,
   annotated with party member names and viewable from the drop log.
 - **Discord Notifications** — Optional webhook for drop alerts.
-- **Looking For Group** — Find clan members to group up with, including
-  party clustering and an optional note per request (e.g. "HMT NFRZ").
+- **Looking For Group** — A hosted-party board, with an item sprite
+  per activity from RuneLite's item cache. Host a party for any of 20
+  raids, God Wars bosses, group bosses, and minigames (or one of five
+  general categories) with a party size, loot rule, minimum KC,
+  learner/teacher tag, description, and your current world; ToB/HMT
+  teams get a fixed role layout by size, CoX/CM hosts pick how many of
+  each role they want, and Barbarian Assault fills one of each role.
+  Members browse open parties, filter by activity, apply for a specific
+  open role, and get a chatbox (and optional desktop) notification when
+  they're accepted. An applicant's kill count for the activity is read
+  from their own client (as recorded by RuneLite's Chat Commands plugin)
+  and sent with the application, so the host sees it with no extra
+  input; if that's missing the host's client looks it up on the
+  hiscores, and a value the applicant typed is shown last, marked
+  "(self)". A party's minimum KC is shown to applicants but never
+  blocks applying — the host decides. Hosts accept, decline, or kick
+  from the panel, and can seat a buddy who isn't on LFG by name and
+  role so the spot shows as taken to everyone browsing. When the last
+  seat fills the party **forms**: it leaves the open list, everyone in
+  it gets a "party has formed" message with the roster and world, and
+  the host is free to host again. Formed parties are visible to the
+  whole clan under "Show formed" for 7 days (the host can remove theirs
+  sooner). The `!lfg` chat command is read-only: `!lfg`
+  lists open parties (visible only to you); hosting and applying are
+  done in the panel.
 - **PB Leaderboards** — Clan-wide top-3 personal best times for every
   boss, raid (per team size), Gauntlet/Colosseum/Inferno, Wintertodt/
   Tempoross, Hallowed Sepulchre, and agility courses RuneLite tracks,
@@ -32,6 +62,10 @@ side panel. The panel unlocks after clan membership is verified.
   RuneLite are seeded once per session so the board is complete from day
   one. Times from Leagues, Deadman, speedrun, and other non-standard
   worlds are never uploaded. Viewing the leaderboard requires no opt-in.
+- **CA Chat Badges** — Members who've uploaded Elite, Master, or
+  Grandmaster combat achievement tiers get the matching slayer helmet
+  (Tztok, Vampyric, Tzkal) next to their name in chat. Can be turned
+  off; it's cosmetic and reads only the clan's own uploaded stats.
 - **Welcome Message** — A clan-curated one-liner shown once per session
   in verified members' chatboxes.
 - **Clan Dashboard** — Weekly XP gained and EHB podiums plus per-boss
@@ -54,14 +88,19 @@ side panel. The panel unlocks after clan membership is verified.
 
 | Setting | Description | Default |
 |---|---|---|
-| Enable Drop Logging | Log valuable drops to clan database | On |
-| Drop Threshold (GP) | Minimum GP value for a drop to be logged/screenshotted (1,000,000 minimum) | 1,000,000 |
+| Enable Drop Logging | Log rare and valuable drops to the clan database | On |
+| Valuable drop threshold (GP) | Any drop worth at least this much (GE price x quantity) is logged, rare or not (1,000,000 minimum) | 1,000,000 |
+| Rare drop threshold (1 in X) | Log drops with a drop rate of 1 in X or rarer even below the valuable threshold; 0 turns the rule off | 100 |
+| Rare drop min value (GP) | A rare drop must also be worth at least this much; 0 logs every rare drop regardless of value | 100,000 |
 | Screenshot Drops | Upload a full client screenshot for drops above the threshold | Off |
-| Enable LFG | Enable Looking For Group feature | On |
-| LFG Timeout | Minutes before your LFG status expires and is removed (10–720) | 60 |
+| Enable LFG | Enable the Looking For Group party board and the `!lfg` chat command | On |
+| Party chat notifications | Chatbox messages for applicants to your party, your application being accepted/declined, and parties you're in forming or being disbanded | On |
+| Party desktop notifications | Also raise a RuneLite desktop notification for those events | Off |
+| Kill count lookups | Look up kill counts on the OSRS hiscores when an applicant's client didn't send one, and to prefill your own on the apply form | On |
 | Discord Webhook URL | Discord webhook for drop notifications | Empty |
 | Upload personal bests | Send your boss PB times (RSN, boss, time) to the clan leaderboard | On |
 | Upload collection log & CA | Send your collection log count and combat achievement points to the clan dashboard | On |
+| CA slayer helm chat icons | Show the Tztok/Vampyric/Tzkal slayer helmet next to clan members' names in chat for Elite/Master/Grandmaster CA tiers | On |
 
 ## Data & Security
 
@@ -73,7 +112,9 @@ for personal bests, a server-side function:
 | Table / Bucket | INSERT | SELECT | UPDATE | DELETE |
 |---|---|---|---|---|
 | `drops` | Allowed | Allowed | Denied | Denied |
-| `lfg_entries` | Allowed | Allowed | Allowed | Allowed |
+| `lfg_parties` | Allowed | Allowed | Allowed | Allowed |
+| `lfg_applicants` | Allowed | Allowed | Allowed | Allowed |
+| `lfg_formed_parties` | Allowed | Allowed | Denied | Allowed |
 | `drop-screenshots` (storage) | Allowed | Public read | Denied | Denied |
 | `notable_items` | Denied | Allowed | Denied | Denied |
 | `welcome_message` | Denied | Allowed | Denied | Denied |
@@ -105,19 +146,48 @@ read-only views (`cl_leaderboard`, `ca_leaderboard`, top 20 each).
 - **Screenshots are immutable** — uploaded once, never modifiable via the
   anon key; the bucket is public-read so drop log entries can link to
   their screenshot
-- **LFG entries are fully managed** — players can set, update, and remove
-  their own status; the optional free-text note is capped at 60
-  characters both client-side and by a database CHECK constraint
+- **LFG parties and applicants are fully managed** — a host
+  creates, edits, and disbands their own party (one per RSN, keyed on
+  `host_rsn`) and accepts, declines, or kicks applicants; a member
+  applies, withdraws, or leaves. Party size (2–100), invocation, loot
+  rule, applicant status, and the 120-character description are all
+  bounded by CHECK constraints. Deleting a party cascades to its
+  applicants. Database triggers additionally guarantee that a player is
+  in at most one party, a host can't apply to their own party, accepting
+  can't push a party past its capacity, `created_at`/`updated_at` are
+  server-owned (a client can't post a future timestamp to dodge the
+  cleanup job), and names, activity keys, and role keys are well-formed.
+  Membership is verified client-side before anything is written and
+  nothing sensitive is stored.
 - **PB uploads skip non-standard worlds** — Leagues, Deadman, tournament,
   beta, and speedrun worlds never feed the leaderboard
 - `notable_items`, `welcome_message`, and `announcements` are read-only
   clan-curated content, written solely by a clan-staff sync job outside
   this plugin
-- A scheduled job runs every minute and deletes LFG entries whose
-  configured timeout has elapsed since `updated_at`. Each entry's TTL is
-  the lister's "LFG Timeout" setting (10–720 minutes, default 60, bounded
-  by a database CHECK constraint) and resets whenever the player sets
-  their status again.
+- Hosted parties are kept alive by the host's client, which bumps
+  `updated_at` every 5 minutes while it's running; a scheduled job
+  deletes parties 30 minutes after the last heartbeat, so a closed or
+  crashed client can't leave a stale advertisement up. Disabling the
+  plugin or closing the client disbands your party and withdraws any
+  pending application immediately.
+- **Formed parties are immutable snapshots.** When a party fills, the
+  host's client copies it (host, members, roles, world) into
+  `lfg_formed_parties` and deletes the live party, so the one-party-per-
+  player rules no longer apply to anyone in it. Snapshots can be read,
+  inserted, and deleted but never updated; `formed_at` is stamped by a
+  trigger so a client can't post-date one; and a scheduled job removes
+  them after 7 days. They hold only names, roles, activity, and world —
+  the same data that was already public on the open board.
+- **Kill counts on applications** come from the applicant's own RuneLite
+  config (the count the game printed to their client), sent with the
+  application as a plain integer. Like everything else a member says
+  about themselves, it's self-asserted; the host's client also does an
+  optional hiscore lookup, and the panel labels which source it's
+  showing. **Kill count lookups** (on by default) are the LFG feature's
+  one call outside Supabase: the plugin asks RuneLite's own hiscore
+  client for a player's public OSRS hiscore entry. Only the RSN being
+  looked up leaves the client, the result is cached locally for 30
+  minutes, and a failed lookup never blocks applying.
 - `wom_cache` is a read-only hourly Wise Old Man snapshot written solely
   by the wom-cache-sync Apps Script; `gp_week_total`/`gp_week_top` are
   read-only views aggregating the last 7 days of logged `drops`
@@ -130,6 +200,16 @@ config and never sent to the database.
 ```bash
 ./gradlew build
 ```
+
+## Credits
+
+Item drop rates (`npc_drops.json`) are sourced from the
+[OSRS Wiki](https://oldschool.runescape.wiki/) (licensed under
+[CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/)),
+parsed by [Flipping Utilities](https://github.com/Flipping-Utilities/parsed-osrs)
+and transformed into the bundled format by the
+[Dink](https://github.com/pajlads/DinkPlugin) plugin (BSD 2-Clause), whose
+rarity lookup this plugin mirrors.
 
 ## License
 

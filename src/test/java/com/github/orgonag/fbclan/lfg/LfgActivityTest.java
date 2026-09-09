@@ -30,6 +30,6 @@ public class LfgActivityTest
     @Test
     public void testAllActivitiesPresent()
     {
-        assertEquals(8, LfgActivity.values().length);
+        assertEquals(25, LfgActivity.values().length);
     }
 }
