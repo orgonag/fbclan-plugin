@@ -45,6 +45,7 @@ public class LfgPanel extends JPanel
     private final LfgService lfgService;
     private final ScheduledExecutorService executor;
     private final FinalBossConfig config;
+    private final LfgIconSource icons;
     private final JPanel listPanel;
     private final JComboBox<LfgActivity> activityDropdown;
     private final JTextField noteField;
@@ -69,11 +70,13 @@ public class LfgPanel extends JPanel
 
     private List<LfgEntry> cachedEntries = new ArrayList<>();
 
-    public LfgPanel(LfgService lfgService, ScheduledExecutorService executor, FinalBossConfig config)
+    public LfgPanel(LfgService lfgService, ScheduledExecutorService executor, FinalBossConfig config,
+                    LfgIconSource icons)
     {
         this.lfgService = lfgService;
         this.executor = executor;
         this.config = config;
+        this.icons = icons;
 
         setLayout(new BorderLayout());
         setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -406,6 +409,7 @@ public class LfgPanel extends JPanel
         label.setForeground(Color.WHITE);
         label.setFont(FontManager.getRunescapeSmallFont());
 
+        row.add(LfgIcons.label(icons, entry.getActivity()), BorderLayout.WEST);
         row.add(label, BorderLayout.CENTER);
 
         if (entry.getNote() != null)

@@ -36,6 +36,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
@@ -57,14 +58,15 @@ public class LfgPartiesPanel extends JPanel
     private static final Color ONLINE = new Color(0x3F, 0xBF, 0x3F);
     private static final Color OFFLINE = new Color(0xBF, 0x3F, 0x3F);
     private static final Color MUTED = ColorScheme.LIGHT_GRAY_COLOR;
-    // Sidebar (242) minus card padding and a little slack for the scrollbar.
-    private static final int WRAP_WIDTH = 200;
+    // Card inner width: sidebar (242) minus the card's 8px side padding.
+    private static final int WRAP_WIDTH = 226;
 
     private final LfgPartyService partyService;
     private final LfgKillcountService killcounts;
     private final LfgPartyNotifier notifier;
     private final ScheduledExecutorService executor;
     private final FinalBossConfig config;
+    private final LfgIconSource icons;
 
     // Session state
     private volatile String currentRsn;
@@ -106,13 +108,15 @@ public class LfgPartiesPanel extends JPanel
     private final JCheckBox hideFullBox;
 
     public LfgPartiesPanel(LfgPartyService partyService, LfgKillcountService killcounts,
-                           LfgPartyNotifier notifier, ScheduledExecutorService executor, FinalBossConfig config)
+                           LfgPartyNotifier notifier, ScheduledExecutorService executor, FinalBossConfig config,
+                           LfgIconSource icons)
     {
         this.partyService = partyService;
         this.killcounts = killcounts;
         this.notifier = notifier;
         this.executor = executor;
         this.config = config;
+        this.icons = icons;
 
         setLayout(new BorderLayout());
         setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -658,9 +662,9 @@ public class LfgPartiesPanel extends JPanel
         JPanel card = card();
 
         boolean hostOnline = onlineNames.contains(LfgNames.normalize(p.getHostRsn()));
-        card.add(html("<b>" + esc(p.getTitle()) + "</b>"
+        card.add(titleRow(p, html("<b>" + esc(p.getTitle()) + "</b>"
             + (p.getWorld() != null ? " <font color='#A0A0A0'>W" + p.getWorld() + "</font>" : "")
-            + "  <font color='" + (hostOnline ? "#3FBF3F" : "#BF3F3F") + "'>" + esc(p.getHostRsn()) + "</font>"));
+            + "  <font color='" + (hostOnline ? "#3FBF3F" : "#BF3F3F") + "'>" + esc(p.getHostRsn()) + "</font>")));
 
         StringBuilder meta = new StringBuilder();
         meta.append(p.getMemberCount()).append('/').append(p.getCapacity());
@@ -686,7 +690,7 @@ public class LfgPartiesPanel extends JPanel
         if (p.getActivity().hasRoles())
         {
             String needs = p.isFull() ? "" : LfgRoles.summarize(p.getOpenRoles());
-            card.add(small(p.isFull() ? "Full" : (needs.isEmpty() ? "Roles: any" : "Needs: " + needs), MUTED));
+            card.add(wrapped(p.isFull() ? "Full" : (needs.isEmpty() ? "Roles: any" : "Needs: " + needs), MUTED));
         }
         else if (p.isFull())
         {
@@ -855,13 +859,13 @@ public class LfgPartiesPanel extends JPanel
     private JPanel buildHostCard(LfgParty p)
     {
         JPanel card = card();
-        card.add(html("<b>" + esc(p.getTitle()) + "</b>"
+        card.add(titleRow(p, html("<b>" + esc(p.getTitle()) + "</b>"
             + (p.getWorld() != null ? " <font color='#A0A0A0'>W" + p.getWorld() + "</font>" : "")
-            + "  " + p.getMemberCount() + "/" + p.getCapacity()));
+            + "  " + p.getMemberCount() + "/" + p.getCapacity())));
         if (p.getActivity().hasRoles())
         {
             String needs = LfgRoles.summarize(p.getOpenRoles());
-            card.add(small(p.isFull() ? "Full" : (needs.isEmpty() ? "Roles: any" : "Needs: " + needs), MUTED));
+            card.add(wrapped(p.isFull() ? "Full" : (needs.isEmpty() ? "Roles: any" : "Needs: " + needs), MUTED));
         }
         if (p.getDescription() != null)
         {
@@ -1037,6 +1041,17 @@ public class LfgPartiesPanel extends JPanel
         });
     }
 
+    // Activity sprite on the left of a card's title line.
+    private JPanel titleRow(LfgParty p, JLabel title)
+    {
+        JPanel row = new JPanel(new BorderLayout(5, 0));
+        row.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        row.setAlignmentX(LEFT_ALIGNMENT);
+        row.add(LfgIcons.label(icons, p.getActivity()), BorderLayout.WEST);
+        row.add(title, BorderLayout.CENTER);
+        return pinHeight(row);
+    }
+
     private static JPanel card()
     {
         JPanel card = new JPanel();
@@ -1101,18 +1116,27 @@ public class LfgPartiesPanel extends JPanel
         return l;
     }
 
-    // Multi-line text that wraps to the sidebar width. `text` is escaped,
-    // so user-typed descriptions can't inject markup.
-    private static JLabel wrapped(String text, Color color)
+    // Multi-line text that wraps to the sidebar width. A JTextArea rather
+    // than an HTML label: Swing's HTML layout under-measures the RuneScape
+    // pixel font and clips the end of every wrapped line. Sizing the area
+    // to the wrap width up front makes its preferred height reflect the
+    // wrapped line count, so the card's pinned height is right.
+    private static JTextArea wrapped(String text, Color color)
     {
-        JLabel l = new JLabel("<html><body style='width:" + WRAP_WIDTH + "px'>" + esc(text) + "</body></html>");
-        l.setForeground(color);
-        l.setFont(FontManager.getRunescapeSmallFont());
-        l.setAlignmentX(LEFT_ALIGNMENT);
-        // The pixel font paints a little wider than it measures; the right
-        // inset keeps the last word of a wrapped line inside the card.
-        l.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 12));
-        return l;
+        JTextArea t = new JTextArea(text);
+        t.setLineWrap(true);
+        t.setWrapStyleWord(true);
+        t.setEditable(false);
+        t.setFocusable(false);
+        t.setHighlighter(null);
+        t.setOpaque(false);
+        t.setForeground(color);
+        t.setFont(FontManager.getRunescapeSmallFont());
+        t.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        t.setAlignmentX(LEFT_ALIGNMENT);
+        t.setSize(new Dimension(WRAP_WIDTH, Short.MAX_VALUE));
+        t.setMaximumSize(new Dimension(Integer.MAX_VALUE, t.getPreferredSize().height));
+        return t;
     }
 
     private JPanel labeled(String label, JComponent field)

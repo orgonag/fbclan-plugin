@@ -18,6 +18,7 @@ import com.github.orgonag.fbclan.panel.AnnouncementsPanel;
 import com.github.orgonag.fbclan.panel.DropLogPanel;
 import com.github.orgonag.fbclan.panel.FinalBossPanel;
 import com.github.orgonag.fbclan.panel.LeaderboardPanel;
+import com.github.orgonag.fbclan.panel.LfgIconSource;
 import com.github.orgonag.fbclan.panel.LfgPanel;
 import com.github.orgonag.fbclan.panel.LfgPartiesPanel;
 import com.github.orgonag.fbclan.panel.LfgRootPanel;
@@ -65,7 +66,9 @@ import net.runelite.client.plugins.loottracker.LootReceived;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.DrawManager;
 import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.util.AsyncBufferedImage;
 import net.runelite.client.util.ImageUtil;
+import javax.swing.ImageIcon;
 import net.runelite.http.api.loottracker.LootRecordType;
 import com.google.inject.Provides;
 import okhttp3.OkHttpClient;
@@ -237,9 +240,18 @@ public class FinalBossPlugin extends Plugin
         caBadgePresenter = new CaBadgePresenter(chatIconManager, caBadgeService);
 
         dropLogPanel = new DropLogPanel(dropService, executor);
-        lfgPanel = new LfgPanel(lfgService, executor, config);
+        // Activity icons are item sprites from RuneLite's item cache
+        // (the same source the core inventory/bank UI uses).
+        LfgIconSource iconSource = (itemId, label) -> {
+            AsyncBufferedImage sprite = itemManager.getImage(itemId);
+            sprite.onLoaded(() -> SwingUtilities.invokeLater(() -> {
+                label.setIcon(new ImageIcon(ImageUtil.resizeImage(sprite, LfgIconSource.SIZE, LfgIconSource.SIZE)));
+                label.repaint();
+            }));
+        };
+        lfgPanel = new LfgPanel(lfgService, executor, config, iconSource);
         lfgPartiesPanel = new LfgPartiesPanel(lfgPartyService, new LfgKillcountService(hiscoreClient),
-            lfgPartyNotifier, executor, config);
+            lfgPartyNotifier, executor, config, iconSource);
         LfgRootPanel lfgRootPanel = new LfgRootPanel(lfgPartiesPanel, lfgPanel);
         lfgPartyBridge = new LfgPartyBridge(client, clientThread, partyService, config, executor,
             lfgPanel, lfgPartiesPanel);

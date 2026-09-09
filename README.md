@@ -21,7 +21,8 @@ side panel. The panel unlocks after clan membership is verified.
 - **Drop Screenshots** — Optional full-client screenshot per logged drop,
   annotated with party member names and viewable from the drop log.
 - **Discord Notifications** — Optional webhook for drop alerts.
-- **Looking For Group** — Two boards in one tab. **Parties**: host a
+- **Looking For Group** — Two boards in one tab, with an item sprite
+  per activity from RuneLite's item cache. **Parties**: host a
   party for any of 25 raids, God Wars bosses, group bosses, and minigames
   (or the general categories) with a party size, loot rule, minimum KC,
   learner/teacher tag, description, and your current world; ToB/HMT
@@ -130,8 +131,13 @@ read-only views (`cl_leaderboard`, `ca_leaderboard`, top 20 each).
   applies, withdraws, or leaves. Party size (2–100), invocation, loot
   rule, applicant status, and the 120-character description are all
   bounded by CHECK constraints. Deleting a party cascades to its
-  applicants. As with LFG entries, membership is verified client-side
-  before anything is written and nothing sensitive is stored.
+  applicants. Database triggers additionally guarantee that a player is
+  in at most one party, a host can't apply to their own party, accepting
+  can't push a party past its capacity, `created_at`/`updated_at` are
+  server-owned (a client can't post a future timestamp to dodge the
+  cleanup job), and names, activity keys, and role keys are well-formed.
+  As with LFG entries, membership is verified client-side before
+  anything is written and nothing sensitive is stored.
 - **PB uploads skip non-standard worlds** — Leagues, Deadman, tournament,
   beta, and speedrun worlds never feed the leaderboard
 - `notable_items`, `welcome_message`, and `announcements` are read-only
