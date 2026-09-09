@@ -85,6 +85,7 @@ public class LfgPanel extends JPanel
 
         // Activity dropdown - full width
         activityDropdown = new JComboBox<>(LfgActivity.values());
+        activityDropdown.setRenderer(new PanelUi.ActivityRenderer());
         activityDropdown.setMaximumSize(new Dimension(Integer.MAX_VALUE, 25));
         activityDropdown.setAlignmentX(LEFT_ALIGNMENT);
         controlsPanel.add(activityDropdown);

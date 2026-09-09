@@ -169,18 +169,26 @@ public class LfgService
     // for empty/blank input so callers can distinguish "no note".
     static String sanitizeNote(String note)
     {
-        if (note == null)
+        return sanitize(note, MAX_NOTE_LENGTH);
+    }
+
+    // Shared free-text sanitizer for anything user-typed that reaches the
+    // database (LFG notes, party descriptions): strips control characters,
+    // trims, caps at `maxLength`, and returns null for blank input.
+    public static String sanitize(String text, int maxLength)
+    {
+        if (text == null)
         {
             return null;
         }
-        String cleaned = note.replaceAll("\\p{Cntrl}", " ").trim();
+        String cleaned = text.replaceAll("\\p{Cntrl}", " ").trim();
         if (cleaned.isEmpty())
         {
             return null;
         }
-        if (cleaned.length() > MAX_NOTE_LENGTH)
+        if (cleaned.length() > maxLength)
         {
-            cleaned = cleaned.substring(0, MAX_NOTE_LENGTH).trim();
+            cleaned = cleaned.substring(0, maxLength).trim();
         }
         return cleaned;
     }

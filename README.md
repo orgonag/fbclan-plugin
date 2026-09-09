@@ -21,8 +21,19 @@ side panel. The panel unlocks after clan membership is verified.
 - **Drop Screenshots** — Optional full-client screenshot per logged drop,
   annotated with party member names and viewable from the drop log.
 - **Discord Notifications** — Optional webhook for drop alerts.
-- **Looking For Group** — Find clan members to group up with, including
-  party clustering and an optional note per request (e.g. "HMT NFRZ").
+- **Looking For Group** — Two boards in one tab. **Parties**: host a
+  party for any of 25 raids, God Wars bosses, group bosses, and minigames
+  (or the general categories) with a party size, loot rule, minimum KC,
+  learner/teacher tag, description, and your current world; ToB/HMT
+  teams get a fixed role layout by size, CoX/CM hosts pick how many of
+  each role they want, and Barbarian Assault fills one of each role.
+  Members browse open parties, filter by activity, apply for a specific
+  open role, and get a chatbox (and optional desktop) notification when
+  they're accepted; hosts see applicants with their hiscore kill count
+  and accept, decline, or kick from the panel. **Looking**: the original
+  status board — set what you're up for, with party clustering and an
+  optional note (e.g. "HMT NFRZ") — plus the `!lfg` chat command
+  (`!lfg tob need 2`, `!lfg who`, `!lfg parties`, `!lfg off`).
 - **PB Leaderboards** — Clan-wide top-3 personal best times for every
   boss, raid (per team size), Gauntlet/Colosseum/Inferno, Wintertodt/
   Tempoross, Hallowed Sepulchre, and agility courses RuneLite tracks,
@@ -58,7 +69,10 @@ side panel. The panel unlocks after clan membership is verified.
 | Drop Threshold (GP) | Minimum GP value for a drop to be logged/screenshotted (1,000,000 minimum) | 1,000,000 |
 | Screenshot Drops | Upload a full client screenshot for drops above the threshold | Off |
 | Enable LFG | Enable Looking For Group feature | On |
-| LFG Timeout | Minutes before your LFG status expires and is removed (10–720) | 60 |
+| LFG Timeout | Minutes before your LFG status expires and is removed (10–720) | 240 |
+| Party chat notifications | Chatbox messages for applicants to your party, your application being accepted/declined, and parties you're in being disbanded | On |
+| Party desktop notifications | Also raise a RuneLite desktop notification for those events | Off |
+| Kill count lookups | Look up kill counts on the OSRS hiscores to show applicants' KC to hosts and check you meet a party's minimum KC | On |
 | Discord Webhook URL | Discord webhook for drop notifications | Empty |
 | Upload personal bests | Send your boss PB times (RSN, boss, time) to the clan leaderboard | On |
 | Upload collection log & CA | Send your collection log count and combat achievement points to the clan dashboard | On |
@@ -74,6 +88,8 @@ for personal bests, a server-side function:
 |---|---|---|---|---|
 | `drops` | Allowed | Allowed | Denied | Denied |
 | `lfg_entries` | Allowed | Allowed | Allowed | Allowed |
+| `lfg_parties` | Allowed | Allowed | Allowed | Allowed |
+| `lfg_applicants` | Allowed | Allowed | Allowed | Allowed |
 | `drop-screenshots` (storage) | Allowed | Public read | Denied | Denied |
 | `notable_items` | Denied | Allowed | Denied | Denied |
 | `welcome_message` | Denied | Allowed | Denied | Denied |
@@ -108,6 +124,14 @@ read-only views (`cl_leaderboard`, `ca_leaderboard`, top 20 each).
 - **LFG entries are fully managed** — players can set, update, and remove
   their own status; the optional free-text note is capped at 60
   characters both client-side and by a database CHECK constraint
+- **LFG parties and applicants are fully managed the same way** — a host
+  creates, edits, and disbands their own party (one per RSN, keyed on
+  `host_rsn`) and accepts, declines, or kicks applicants; a member
+  applies, withdraws, or leaves. Party size (2–100), invocation, loot
+  rule, applicant status, and the 120-character description are all
+  bounded by CHECK constraints. Deleting a party cascades to its
+  applicants. As with LFG entries, membership is verified client-side
+  before anything is written and nothing sensitive is stored.
 - **PB uploads skip non-standard worlds** — Leagues, Deadman, tournament,
   beta, and speedrun worlds never feed the leaderboard
 - `notable_items`, `welcome_message`, and `announcements` are read-only
@@ -115,9 +139,21 @@ read-only views (`cl_leaderboard`, `ca_leaderboard`, top 20 each).
   this plugin
 - A scheduled job runs every minute and deletes LFG entries whose
   configured timeout has elapsed since `updated_at`. Each entry's TTL is
-  the lister's "LFG Timeout" setting (10–720 minutes, default 60, bounded
+  the lister's "LFG Timeout" setting (10–720 minutes, default 240, bounded
   by a database CHECK constraint) and resets whenever the player sets
   their status again.
+- Hosted parties are kept alive by the host's client, which bumps
+  `updated_at` every 5 minutes while it's running; a second scheduled job
+  deletes parties 30 minutes after the last heartbeat, so a closed or
+  crashed client can't leave a stale advertisement up. Disabling the
+  plugin or closing the client disbands your party and withdraws any
+  pending application immediately.
+- **Kill count lookups** (optional, on by default) are the LFG feature's
+  one call outside Supabase: the plugin asks RuneLite's own hiscore
+  client for a player's public OSRS hiscore entry to show a host each
+  applicant's KC and to check you meet a party's minimum before applying.
+  Only the RSN being looked up leaves the client, the result is cached
+  locally for 30 minutes, and a failed lookup never blocks applying.
 - `wom_cache` is a read-only hourly Wise Old Man snapshot written solely
   by the wom-cache-sync Apps Script; `gp_week_total`/`gp_week_top` are
   read-only views aggregating the last 7 days of logged `drops`

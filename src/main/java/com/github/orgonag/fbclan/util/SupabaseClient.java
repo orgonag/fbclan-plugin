@@ -18,6 +18,8 @@ public class SupabaseClient
     // on the database restrict what operations are allowed. The anon key only permits:
     // - drops table: INSERT and SELECT (no UPDATE, no DELETE)
     // - lfg_entries table: INSERT, SELECT, UPDATE, DELETE (needed for LFG lifecycle)
+    // - lfg_parties / lfg_applicants tables: INSERT, SELECT, UPDATE, DELETE
+    //   (hosted parties and their applicants; deleting a party cascades)
     // - notable_items table: SELECT only (clan-curated list, written solely by
     //   the sheet-sync Apps Script's service-role key)
     // - welcome_message table: SELECT only (clan-curated text, written solely

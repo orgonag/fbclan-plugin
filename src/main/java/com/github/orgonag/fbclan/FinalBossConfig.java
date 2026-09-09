@@ -104,6 +104,44 @@ public interface FinalBossConfig extends Config
     }
 
     @ConfigItem(
+        keyName = "lfgPartyNotifications",
+        name = "Party chat notifications",
+        description = "Post LFG party events to your chatbox: applicants to your party, "
+            + "your application being accepted or declined, and parties you're in being disbanded",
+        section = lfgSection,
+        position = 2
+    )
+    default boolean lfgPartyNotifications()
+    {
+        return true;
+    }
+
+    @ConfigItem(
+        keyName = "lfgDesktopNotifications",
+        name = "Party desktop notifications",
+        description = "Also send a desktop notification for LFG party events (uses RuneLite's notification settings)",
+        section = lfgSection,
+        position = 3
+    )
+    default boolean lfgDesktopNotifications()
+    {
+        return false;
+    }
+
+    @ConfigItem(
+        keyName = "lfgKcLookups",
+        name = "Kill count lookups",
+        description = "Look up kill counts on the public OSRS hiscores to show applicants' KC to hosts "
+            + "and check you meet a party's minimum KC before applying",
+        section = lfgSection,
+        position = 4
+    )
+    default boolean lfgKcLookups()
+    {
+        return true;
+    }
+
+    @ConfigItem(
         keyName = "discordWebhookUrl",
         name = "Discord Webhook URL",
         description = "Discord webhook URL for drop notifications (leave empty to disable)",

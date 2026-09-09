@@ -1,11 +1,15 @@
 package com.github.orgonag.fbclan.panel;
 
+import com.github.orgonag.fbclan.lfg.LfgActivity;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.swing.BorderFactory;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import net.runelite.client.ui.ColorScheme;
@@ -45,5 +49,25 @@ final class PanelUi
             T result = fetch.get();
             SwingUtilities.invokeLater(() -> applyOnEdt.accept(result));
         });
+    }
+
+    // Activities render as "Category: Name" so the long dropdown scans
+    // easily; the filter's "All activities" string passes through.
+    static final class ActivityRenderer extends DefaultListCellRenderer
+    {
+        @Override
+        public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                      boolean isSelected, boolean cellHasFocus)
+        {
+            Object display = value;
+            if (value instanceof LfgActivity)
+            {
+                LfgActivity a = (LfgActivity) value;
+                display = a.getCategory() == LfgActivity.Category.GENERAL
+                    ? a.getDisplayName()
+                    : a.getCategory().getDisplayName() + ": " + a.getDisplayName();
+            }
+            return super.getListCellRendererComponent(list, display, index, isSelected, cellHasFocus);
+        }
     }
 }

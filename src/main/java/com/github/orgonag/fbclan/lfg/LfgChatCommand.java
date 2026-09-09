@@ -1,17 +1,17 @@
 package com.github.orgonag.fbclan.lfg;
 
-import java.util.HashMap;
 import java.util.Locale;
-import java.util.Map;
 import lombok.Value;
 
 /**
  * Pure parser for the "!lfg" chat command. No I/O and no client types so
  * it can be unit tested directly; dispatch lives in LfgChatCommandHandler.
  *
- * Grammar (case-insensitive, strict keywords - no aliases):
+ * Grammar (case-insensitive; event keywords and aliases live on LfgActivity):
  *   !lfg <event> [note]   -> SET, note capped at LfgService.MAX_NOTE_LENGTH
  *   !lfg off|clear|remove -> CLEAR
+ *   !lfg who              -> WHO (who's looking, per event)
+ *   !lfg parties|party    -> PARTIES (open hosted parties)
  *   !lfg / unknown event  -> HELP
  * Anything not starting with the whole-word trigger is not our command
  * and parses to null.
@@ -20,7 +20,7 @@ public final class LfgChatCommand
 {
     public enum Action
     {
-        SET, CLEAR, WHO, HELP
+        SET, CLEAR, WHO, PARTIES, HELP
     }
 
     @Value
@@ -37,26 +37,14 @@ public final class LfgChatCommand
         String note;
     }
 
-    // ASCII punctuation only - this string renders in the in-game chat font.
-    // Square brackets, not angle brackets: the chat renderer treats <...>
-    // as a formatting tag and swallows it.
+    // ASCII punctuation only - these strings render in the in-game chat
+    // font. Square brackets, not angle brackets: the chat renderer treats
+    // <...> as a formatting tag and swallows it.
     public static final String USAGE =
-        "Usage: !lfg [Event] [Note], !lfg who, or !lfg off. Events: cox, tob, toa, groupboss, minigame, pvp, skilling, chilling";
+        "Usage: !lfg [Event] [Note], !lfg who, !lfg parties, or !lfg off.";
+    public static final String EVENTS = "Events: " + eventKeywords();
 
     private static final String TRIGGER = "!lfg";
-
-    private static final Map<String, LfgActivity> EVENT_KEYWORDS = new HashMap<>();
-    static
-    {
-        EVENT_KEYWORDS.put("cox", LfgActivity.COX);
-        EVENT_KEYWORDS.put("tob", LfgActivity.TOB);
-        EVENT_KEYWORDS.put("toa", LfgActivity.TOA);
-        EVENT_KEYWORDS.put("groupboss", LfgActivity.GROUP_BOSS);
-        EVENT_KEYWORDS.put("minigame", LfgActivity.MINIGAME);
-        EVENT_KEYWORDS.put("pvp", LfgActivity.PVP);
-        EVENT_KEYWORDS.put("skilling", LfgActivity.SKILLING);
-        EVENT_KEYWORDS.put("chilling", LfgActivity.CHILLING);
-    }
 
     private LfgChatCommand()
     {
@@ -109,8 +97,12 @@ public final class LfgChatCommand
         {
             return new Result(Action.WHO, null, null);
         }
+        if (keyword.equals("parties") || keyword.equals("party"))
+        {
+            return new Result(Action.PARTIES, null, null);
+        }
 
-        LfgActivity activity = EVENT_KEYWORDS.get(keyword);
+        LfgActivity activity = LfgActivity.fromKeyword(keyword);
         if (activity == null)
         {
             return new Result(Action.HELP, null, null);
@@ -128,6 +120,20 @@ public final class LfgChatCommand
             }
         }
         return new Result(Action.SET, activity, note);
+    }
+
+    private static String eventKeywords()
+    {
+        StringBuilder sb = new StringBuilder();
+        for (LfgActivity activity : LfgActivity.values())
+        {
+            if (sb.length() > 0)
+            {
+                sb.append(", ");
+            }
+            sb.append(activity.getKeyword());
+        }
+        return sb.toString();
     }
 
     private static int indexOfWhitespace(String s)

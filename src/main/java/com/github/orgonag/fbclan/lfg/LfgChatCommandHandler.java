@@ -44,10 +44,12 @@ public class LfgChatCommandHandler
     private final ClanSession session;
     private final ScheduledExecutorService executor;
     private final LfgService lfgService;
+    private final LfgPartyService partyService;
     private final LfgPanel lfgPanel;
 
     public LfgChatCommandHandler(Client client, ClientThread clientThread, FinalBossConfig config,
-        ClanSession session, ScheduledExecutorService executor, LfgService lfgService, LfgPanel lfgPanel)
+        ClanSession session, ScheduledExecutorService executor, LfgService lfgService,
+        LfgPartyService partyService, LfgPanel lfgPanel)
     {
         this.client = client;
         this.clientThread = clientThread;
@@ -55,6 +57,7 @@ public class LfgChatCommandHandler
         this.session = session;
         this.executor = executor;
         this.lfgService = lfgService;
+        this.partyService = partyService;
         this.lfgPanel = lfgPanel;
     }
 
@@ -95,22 +98,70 @@ public class LfgChatCommandHandler
                 break;
             case WHO:
                 // Network read - off the client thread; the reply hops back.
-                executor.submit(() -> {
-                    String summary = summarize(lfgService.getActiveEntries());
-                    clientThread.invokeLater(() -> {
-                        // The fetch may outlive the session (shared executor); don't
-                        // print into a client that is no longer logged in.
-                        if (client.getGameState() == GameState.LOGGED_IN)
-                        {
-                            sendGameMessage(summary);
-                        }
-                    });
-                });
+                replyAsync(() -> summarize(lfgService.getActiveEntries()));
+                break;
+            case PARTIES:
+                replyAsync(() -> summarizeParties(partyService.getParties()));
                 break;
             case HELP:
                 sendGameMessage(LfgChatCommand.USAGE);
+                sendGameMessage(LfgChatCommand.EVENTS);
                 break;
         }
+    }
+
+    private void replyAsync(java.util.function.Supplier<String> fetch)
+    {
+        executor.submit(() -> {
+            String reply = fetch.get();
+            clientThread.invokeLater(() -> {
+                // The fetch may outlive the session (shared executor); don't
+                // print into a client that is no longer logged in.
+                if (client.getGameState() == GameState.LOGGED_IN)
+                {
+                    sendGameMessage(reply);
+                }
+            });
+        });
+    }
+
+    // One line per open party, newest first: "HMT - Host 3/5 W420 - needs
+    // Melee, N freeze". Package-private for tests.
+    static String summarizeParties(List<LfgParty> parties)
+    {
+        if (parties.isEmpty())
+        {
+            return "No parties are being hosted right now.";
+        }
+        StringBuilder sb = new StringBuilder("Parties: ");
+        boolean first = true;
+        for (LfgParty p : parties)
+        {
+            if (!first)
+            {
+                sb.append(" | ");
+            }
+            first = false;
+            sb.append(p.getTitle()).append(" - ").append(p.getHostRsn())
+                .append(' ').append(p.getMemberCount()).append('/').append(p.getCapacity());
+            if (p.getWorld() != null)
+            {
+                sb.append(" W").append(p.getWorld());
+            }
+            if (p.isFull())
+            {
+                sb.append(" (full)");
+            }
+            else
+            {
+                String needs = LfgRoles.summarize(p.getOpenRoles());
+                if (!needs.isEmpty())
+                {
+                    sb.append(" - needs ").append(needs);
+                }
+            }
+        }
+        return sb.toString();
     }
 
     // Counts active entries per activity in enum declaration order (the

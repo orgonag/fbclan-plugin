@@ -25,12 +25,12 @@ public class FinalBossPanel extends PluginPanel
     private final JButton leaderboardsButton;
     private final AnnouncementsPanel announcementsPanel;
     private final DropLogPanel dropLogPanel;
-    private final LfgPanel lfgPanel;
+    private final LfgRootPanel lfgPanel;
     private final LeaderboardPanel leaderboardPanel;
 
     private String activeTab = DROP_LOG_TAB;
 
-    public FinalBossPanel(AnnouncementsPanel announcementsPanel, DropLogPanel dropLogPanel, LfgPanel lfgPanel, LeaderboardPanel leaderboardPanel)
+    public FinalBossPanel(AnnouncementsPanel announcementsPanel, DropLogPanel dropLogPanel, LfgRootPanel lfgPanel, LeaderboardPanel leaderboardPanel)
     {
         super(false);
 

@@ -9,13 +9,18 @@ import com.github.orgonag.fbclan.drops.DropScreenshotService;
 import com.github.orgonag.fbclan.drops.NotableItemsService;
 import com.github.orgonag.fbclan.drops.DropLogService;
 import com.github.orgonag.fbclan.lfg.LfgChatCommandHandler;
+import com.github.orgonag.fbclan.lfg.LfgKillcountService;
 import com.github.orgonag.fbclan.lfg.LfgPartyBridge;
+import com.github.orgonag.fbclan.lfg.LfgPartyNotifier;
+import com.github.orgonag.fbclan.lfg.LfgPartyService;
 import com.github.orgonag.fbclan.lfg.LfgService;
 import com.github.orgonag.fbclan.panel.AnnouncementsPanel;
 import com.github.orgonag.fbclan.panel.DropLogPanel;
 import com.github.orgonag.fbclan.panel.FinalBossPanel;
 import com.github.orgonag.fbclan.panel.LeaderboardPanel;
 import com.github.orgonag.fbclan.panel.LfgPanel;
+import com.github.orgonag.fbclan.panel.LfgPartiesPanel;
+import com.github.orgonag.fbclan.panel.LfgRootPanel;
 import com.github.orgonag.fbclan.panel.LockedPanel;
 import com.github.orgonag.fbclan.panel.RootPanel;
 import com.github.orgonag.fbclan.pb.LeaderboardService;
@@ -42,6 +47,7 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.gameval.VarbitID;
+import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -49,6 +55,7 @@ import net.runelite.client.events.NpcLootReceived;
 import net.runelite.client.events.PartyChanged;
 import net.runelite.client.game.ChatIconManager;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.hiscore.HiscoreClient;
 import net.runelite.client.party.PartyService;
 import net.runelite.client.party.events.UserJoin;
 import net.runelite.client.party.events.UserPart;
@@ -70,9 +77,10 @@ import okhttp3.OkHttpClient;
  * <ul>
  * <li>Wise Old Man API (read-only): checks whether the logged-in player is a
  *     member of the clan's WOM group. The panel stays locked for non-members.
- *     This once-per-login verification call is the plugin's single
- *     deliberate non-Supabase data source.</li>
+ *     This once-per-login verification call and the optional hiscore
+ *     lookups below are the plugin's only non-Supabase data sources.</li>
  * <li>Supabase (clan-owned database): stores drop log rows, LFG statuses,
+ *     hosted LFG parties and their applicants,
  *     (opt-in) drop screenshots, boss personal-best times, and collection
  *     log counts and combat achievement points (opt-out). Only ever sends
  *     the local player's own RSN, drop details, LFG activity/note,
@@ -81,6 +89,10 @@ import okhttp3.OkHttpClient;
  *     submit_stats function (improve-only); leaderboard reads come from
  *     read-only views. Also reads the clan-curated notable-items list and
  *     welcome message at startup (read-only, no player data sent).</li>
+ * <li>OSRS hiscores (via RuneLite's HiscoreClient, read-only, optional):
+ *     LFG kill-count lookups so a host can see applicants' KC and a
+ *     member can check they meet a party's minimum. Disable with the
+ *     "Kill count lookups" setting.</li>
  * <li>Discord webhook (optional, user-supplied URL): drop notifications.</li>
  * </ul>
  *
@@ -133,6 +145,13 @@ public class FinalBossPlugin extends Plugin
     @Inject
     private ConfigManager configManager;
 
+    // RuneLite's hiscore client: LFG kill-count lookups (optional, config).
+    @Inject
+    private HiscoreClient hiscoreClient;
+
+    @Inject
+    private Notifier notifier;
+
     private NavigationButton navButton;
     private LockedPanel lockedPanel;
     private FinalBossPanel mainPanel;
@@ -143,6 +162,8 @@ public class FinalBossPlugin extends Plugin
     private DropScreenshotService screenshotService;
     private DropCaptureService dropCaptureService;
     private LfgService lfgService;
+    private LfgPartyService lfgPartyService;
+    private LfgPartyNotifier lfgPartyNotifier;
     private NotableItemsService notableItemsService;
     private WelcomeMessagePresenter welcomePresenter;
     private AnnouncementsService announcementsService;
@@ -156,6 +177,7 @@ public class FinalBossPlugin extends Plugin
 
     private DropLogPanel dropLogPanel;
     private LfgPanel lfgPanel;
+    private LfgPartiesPanel lfgPartiesPanel;
     private AnnouncementsPanel announcementsPanel;
     private LeaderboardPanel leaderboardPanel;
     private LfgPartyBridge lfgPartyBridge;
@@ -179,6 +201,8 @@ public class FinalBossPlugin extends Plugin
         discordService = new DiscordWebhookService(okHttpClient);
         screenshotService = new DropScreenshotService(okHttpClient);
         lfgService = new LfgService(okHttpClient);
+        lfgPartyService = new LfgPartyService(okHttpClient);
+        lfgPartyNotifier = new LfgPartyNotifier(client, clientThread, config, session, notifier);
         notableItemsService = new NotableItemsService(okHttpClient);
         // One fetch per session — the curated list changes rarely. Runs on the
         // executor so startup never blocks on network.
@@ -214,9 +238,13 @@ public class FinalBossPlugin extends Plugin
 
         dropLogPanel = new DropLogPanel(dropService, executor);
         lfgPanel = new LfgPanel(lfgService, executor, config);
-        lfgPartyBridge = new LfgPartyBridge(client, clientThread, partyService, config, executor, lfgPanel);
+        lfgPartiesPanel = new LfgPartiesPanel(lfgPartyService, new LfgKillcountService(hiscoreClient),
+            lfgPartyNotifier, executor, config);
+        LfgRootPanel lfgRootPanel = new LfgRootPanel(lfgPartiesPanel, lfgPanel);
+        lfgPartyBridge = new LfgPartyBridge(client, clientThread, partyService, config, executor,
+            lfgPanel, lfgPartiesPanel);
         lfgChatCommandHandler = new LfgChatCommandHandler(client, clientThread, config, session,
-            executor, lfgService, lfgPanel);
+            executor, lfgService, lfgPartyService, lfgPanel);
         announcementsPanel = new AnnouncementsPanel(announcementsService, executor);
         // Warm the announcements cache and populate the tab; refresh() runs
         // the fetch on the executor, so startup never blocks on network.
@@ -224,7 +252,7 @@ public class FinalBossPlugin extends Plugin
         leaderboardPanel = new LeaderboardPanel(leaderboardService, dashboardService, executor);
 
         lockedPanel = new LockedPanel();
-        mainPanel = new FinalBossPanel(announcementsPanel, dropLogPanel, lfgPanel, leaderboardPanel);
+        mainPanel = new FinalBossPanel(announcementsPanel, dropLogPanel, lfgRootPanel, leaderboardPanel);
         rootPanel = new RootPanel(lockedPanel, mainPanel);
 
         verificationController = new VerificationController(client, clientThread, executor,
@@ -233,7 +261,10 @@ public class FinalBossPlugin extends Plugin
             @Override
             public void onRsnCaptured(String rsn)
             {
-                SwingUtilities.invokeLater(() -> lfgPanel.setCurrentRsn(rsn));
+                SwingUtilities.invokeLater(() -> {
+                    lfgPanel.setCurrentRsn(rsn);
+                    lfgPartiesPanel.setCurrentRsn(rsn);
+                });
             }
 
             @Override
@@ -299,7 +330,13 @@ public class FinalBossPlugin extends Plugin
         String rsnSnapshot = session.getRsn();
         if (rsnSnapshot != null && config.enableLfg())
         {
-            executor.submit(() -> lfgService.removeStatus(rsnSnapshot));
+            // Status, hosted party, and any pending application all go:
+            // none of them can be kept alive without a running client.
+            executor.submit(() -> {
+                lfgService.removeStatus(rsnSnapshot);
+                lfgPartyService.disband(rsnSnapshot);
+                lfgPartyService.withdrawAll(rsnSnapshot);
+            });
         }
 
         stopPolling();
@@ -329,6 +366,10 @@ public class FinalBossPlugin extends Plugin
             }
             verificationController.reset();
             stopPolling();
+            // A fresh login re-primes the party diff so nothing that
+            // happened while logged out is announced as new.
+            lfgPartyNotifier.reset();
+            lfgPartiesPanel.reset();
             SwingUtilities.invokeLater(() -> {
                 rootPanel.showLocked();
                 lockedPanel.showVerifying();

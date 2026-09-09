@@ -2,6 +2,7 @@ package com.github.orgonag.fbclan.lfg;
 
 import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.panel.LfgPanel;
+import com.github.orgonag.fbclan.panel.LfgPartiesPanel;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -20,8 +21,8 @@ import net.runelite.client.party.PartyService;
 /**
  * Bridges RuneLite's Party plugin and clan-channel state into the LFG
  * panel: seeds/pushes local party state (hashed party id only — never the
- * passphrase), tracks which clan members are online, and owns the 30s
- * LFG poll.
+ * passphrase), tracks which clan members are online and the current
+ * world, and owns the 30s LFG poll for both boards.
  */
 @Slf4j
 public class LfgPartyBridge
@@ -32,11 +33,13 @@ public class LfgPartyBridge
     private final FinalBossConfig config;
     private final ScheduledExecutorService executor;
     private final LfgPanel lfgPanel;
+    private final LfgPartiesPanel partiesPanel;
 
     private ScheduledFuture<?> pollFuture;
 
     public LfgPartyBridge(Client client, ClientThread clientThread, PartyService partyService,
-        FinalBossConfig config, ScheduledExecutorService executor, LfgPanel lfgPanel)
+        FinalBossConfig config, ScheduledExecutorService executor, LfgPanel lfgPanel,
+        LfgPartiesPanel partiesPanel)
     {
         this.client = client;
         this.clientThread = clientThread;
@@ -44,6 +47,7 @@ public class LfgPartyBridge
         this.config = config;
         this.executor = executor;
         this.lfgPanel = lfgPanel;
+        this.partiesPanel = partiesPanel;
     }
 
     // Called on verification success. Seeds the initial party state; it is
@@ -63,6 +67,7 @@ public class LfgPartyBridge
             {
                 updateOnlineClanMembers();
                 lfgPanel.refresh();
+                partiesPanel.refresh();
             }
             catch (Exception e)
             {
@@ -133,6 +138,8 @@ public class LfgPartyBridge
                 }
             }
             lfgPanel.setOnlineNames(online);
+            partiesPanel.setOnlineNames(online);
+            partiesPanel.setCurrentWorld(client.getWorld());
         });
     }
 }
