@@ -2,6 +2,7 @@ package com.github.orgonag.fbclan.pbs;
 
 import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.core.Clan;
+import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.github.orgonag.fbclan.pbs.PbParser.Duration;
 import com.github.orgonag.fbclan.pbs.PbParser.Submission;
@@ -43,13 +44,9 @@ public class PersonalBests
     private final ConfigManager configManager;
     private final ScheduledExecutorService executor;
 
-    // Pairing state; client thread only.
-    private String lastBossKey;
-    private int lastBossTick = -1;
-    private double lastPbSeconds = -1;
-    private boolean lastPbNew;
-    private String lastPbTeamSize;
-    private volatile boolean seeded;
+    private final PbCorrelator correlator = new PbCorrelator();
+    private volatile long seededGeneration = -1;
+    private final java.util.concurrent.atomic.AtomicBoolean seeding = new java.util.concurrent.atomic.AtomicBoolean();
 
     @Inject
     public PersonalBests(Client client, FinalBossConfig config, Clan clan, Supabase db,
@@ -65,10 +62,8 @@ public class PersonalBests
 
     public void resetSession()
     {
-        seeded = false;
-        lastBossKey = null;
-        lastBossTick = -1;
-        lastPbSeconds = -1;
+        seededGeneration = -1;
+        correlator.reset();
     }
 
     // Client thread (chat dispatch).
@@ -80,15 +75,15 @@ public class PersonalBests
         {
             return;
         }
-        String rsn = clan.rsn();
+        Session session = clan.snapshot();
         if (!clan.canUpload() || !config.enablePbUpload() || !clan.onStandardWorld())
         {
             return;
         }
-        List<Submission> subs = process(event.getMessage(), client.getTickCount());
+        List<Submission> subs = correlator.accept(event.getMessage(), client.getTickCount(), this::raidTeam);
         if (!subs.isEmpty())
         {
-            executor.submit(() -> submit(rsn, subs));
+            executor.submit(() -> { if (!submit(session, subs) && clan.current(session)) seededGeneration = -1; });
         }
     }
 
@@ -96,109 +91,41 @@ public class PersonalBests
     // the board is complete from day one.
     public void maybeSeed()
     {
-        String rsn = clan.rsn();
-        if (!clan.canUpload() || seeded || !config.enablePbUpload() || !clan.onStandardWorld())
+        Session session = clan.snapshot();
+        if (!clan.current(session) || seededGeneration == session.getGeneration() || !config.enablePbUpload()
+            || !clan.onStandardWorld() || !seeding.compareAndSet(false, true)) return;
+        // Capture all profile-dependent reads on the client thread, before queuing I/O.
+        List<Submission> seeds = new ArrayList<>();
+        try
         {
-            return;
-        }
-        seeded = true;
-        executor.submit(() -> {
-            String profile = configManager.getRSProfileKey();
-            if (profile == null)
+            if (!session.getProfile().equals(configManager.getRSProfileKey())) return;
+            for (String key : configManager.getRSProfileConfigurationKeys("personalbest", session.getProfile(), ""))
             {
-                return;
-            }
-            List<Submission> seeds = new ArrayList<>();
-            for (String key : configManager.getRSProfileConfigurationKeys("personalbest", profile, ""))
-            {
-                Double seconds = configManager.getRSProfileConfiguration("personalbest", key, double.class);
-                if (key != null && !key.isEmpty() && seconds != null && seconds > 0)
+                try
                 {
-                    seeds.add(new Submission(key, seconds, "seed"));
+                    Double seconds = configManager.getRSProfileConfiguration("personalbest", key, double.class);
+                    if (key != null && !key.isEmpty() && seconds != null && Double.isFinite(seconds) && seconds > 0 && seconds < 86400)
+                        seeds.add(new Submission(key, seconds, "seed"));
                 }
+                catch (RuntimeException e) { log.debug("Ignoring invalid stored PB"); }
             }
-            submit(rsn, seeds);
+        }
+        finally { seeding.set(false); }
+        if (!seeding.compareAndSet(false, true)) return;
+        executor.submit(() -> {
+            try { if (submit(session, seeds) && clan.current(session)) seededGeneration = session.getGeneration(); }
+            finally { seeding.set(false); }
         });
     }
 
-    // ------------------------------------------------------------ pairing
-
-    private List<Submission> process(String message, int tick)
+    private String raidTeam(String boss)
     {
-        List<Submission> result = handle(message, tick);
-        // Core forgets the remembered KC at the end of any message on a
-        // later tick: the KC/PB pair always lands within one tick.
-        if (lastBossKey != null && lastBossTick != tick)
-        {
-            lastBossKey = null;
-            lastBossTick = -1;
-        }
-        return result;
-    }
-
-    private List<Submission> handle(String message, int tick)
-    {
-        Optional<String> kc = PbParser.killCount(message);
-        if (kc.isPresent())
-        {
-            return onKillCount(kc.get(), tick);
-        }
-        List<Submission> sepulchre = PbParser.sepulchre(message);
-        if (!sepulchre.isEmpty())
-        {
-            return sepulchre;
-        }
-        Optional<Duration> duration = PbParser.duration(message);
-        return duration.isPresent() ? onDuration(duration.get()) : Collections.emptyList();
-    }
-
-    private List<Submission> onKillCount(String bossKey, int tick)
-    {
-        if (lastPbSeconds > -1)
-        {
-            // PB line arrived first (raids do this); attach it now.
-            String teamSize = lastPbTeamSize;
-            if (bossKey.contains("theatre of blood"))
-            {
-                teamSize = teamLabel(teamSize(VarbitID.TOB_CLIENT_P0, VarbitID.TOB_CLIENT_P1, VarbitID.TOB_CLIENT_P2,
-                    VarbitID.TOB_CLIENT_P3, VarbitID.TOB_CLIENT_P4));
-            }
-            else if (bossKey.contains("tombs of amascut"))
-            {
-                teamSize = teamLabel(teamSize(VarbitID.TOA_CLIENT_P0, VarbitID.TOA_CLIENT_P1, VarbitID.TOA_CLIENT_P2,
-                    VarbitID.TOA_CLIENT_P3, VarbitID.TOA_CLIENT_P4, VarbitID.TOA_CLIENT_P5, VarbitID.TOA_CLIENT_P6,
-                    VarbitID.TOA_CLIENT_P7));
-            }
-            String source = lastPbNew ? "live" : "seed";
-            List<Submission> out = new ArrayList<>();
-            out.add(new Submission(bossKey, lastPbSeconds, source));
-            if (teamSize != null)
-            {
-                out.add(new Submission(bossKey + " " + teamSize.toLowerCase(Locale.ROOT), lastPbSeconds, source));
-            }
-            lastPbSeconds = -1;
-            lastPbTeamSize = null;
-            return out;
-        }
-        lastBossKey = bossKey;
-        lastBossTick = tick;
-        return Collections.emptyList();
-    }
-
-    private List<Submission> onDuration(Duration d)
-    {
-        if (lastBossKey != null)
-        {
-            // KC line arrived first (most bosses).
-            Submission sub = new Submission(lastBossKey, d.getSeconds(), d.isNewPb() ? "live" : "seed");
-            lastPbSeconds = -1;
-            lastPbTeamSize = null;
-            return Collections.singletonList(sub);
-        }
-        lastPbSeconds = d.getSeconds();
-        lastPbNew = d.isNewPb();
-        lastPbTeamSize = d.getTeamSize();
-        return Collections.emptyList();
+        if (boss.contains("theatre of blood")) return teamLabel(teamSize(VarbitID.TOB_CLIENT_P0, VarbitID.TOB_CLIENT_P1,
+            VarbitID.TOB_CLIENT_P2, VarbitID.TOB_CLIENT_P3, VarbitID.TOB_CLIENT_P4));
+        if (boss.contains("tombs of amascut")) return teamLabel(teamSize(VarbitID.TOA_CLIENT_P0, VarbitID.TOA_CLIENT_P1,
+            VarbitID.TOA_CLIENT_P2, VarbitID.TOA_CLIENT_P3, VarbitID.TOA_CLIENT_P4, VarbitID.TOA_CLIENT_P5,
+            VarbitID.TOA_CLIENT_P6, VarbitID.TOA_CLIENT_P7));
+        return null;
     }
 
     private int teamSize(int... varbits)
@@ -213,15 +140,16 @@ public class PersonalBests
 
     private static String teamLabel(int size)
     {
-        return size == 1 ? "Solo" : size + " players";
+        return size == 0 ? null : size == 1 ? "Solo" : size + " players";
     }
 
     // ------------------------------------------------------------ submit
 
-    private void submit(String rsn, List<Submission> subs)
+    private boolean submit(Session session, List<Submission> subs)
     {
         for (int start = 0; start < subs.size(); start += MAX_BATCH)
         {
+            if (!clan.current(session) || !config.enablePbUpload()) return false;
             List<Submission> chunk = subs.subList(start, Math.min(start + MAX_BATCH, subs.size()));
             JsonArray entries = new JsonArray();
             for (Submission s : chunk)
@@ -233,12 +161,10 @@ public class PersonalBests
                 entries.add(e);
             }
             JsonObject payload = new JsonObject();
-            payload.addProperty("p_rsn", rsn);
+            payload.addProperty("p_rsn", session.getRsn());
             payload.add("p_entries", entries);
-            if (db.rpc("submit_pbs", payload))
-            {
-                log.debug("Submitted {} PB(s) for {}", chunk.size(), rsn);
-            }
+            if (!db.rpc("fb_submit_pbs", payload)) return false;
         }
+        return true;
     }
 }

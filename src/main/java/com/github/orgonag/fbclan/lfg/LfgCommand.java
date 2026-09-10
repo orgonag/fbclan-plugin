@@ -77,11 +77,14 @@ public class LfgCommand
         String keyword = rest.trim().split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
         if (keyword.isEmpty() || keyword.equals("parties") || keyword.equals("party"))
         {
+            com.github.orgonag.fbclan.core.Session session = clan.snapshot();
             executor.submit(() -> {
-                List<Party> parties = api.parties();
+                if (!clan.current(session) || !config.enableLfg()) return;
+                PartyApi.Snapshot snapshot = api.fetch();
+                List<Party> parties = snapshot == null ? null : snapshot.getParties();
                 String reply = parties == null ? "Couldn't reach the party board — try again." : summarize(parties);
                 clientThread.invokeLater(() -> {
-                    if (client.getGameState() == GameState.LOGGED_IN)
+                    if (clan.current(session) && config.enableLfg() && client.getGameState() == GameState.LOGGED_IN)
                     {
                         print(reply);
                     }
@@ -105,6 +108,7 @@ public class LfgCommand
         boolean first = true;
         for (Party p : parties)
         {
+            if (sb.length() > 600) { sb.append(" | More in the panel."); break; }
             sb.append(first ? "" : " | ").append(p.title()).append(" - ").append(p.getHostRsn())
                 .append(' ').append(p.memberCount()).append('/').append(p.getCapacity());
             first = false;

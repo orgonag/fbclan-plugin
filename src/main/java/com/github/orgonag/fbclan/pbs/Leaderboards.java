@@ -50,18 +50,22 @@ public class Leaderboards
     }
 
     // Executor. A failed fetch keeps the previous board.
-    public void refresh()
+    public boolean refresh()
     {
-        JsonArray rows = db.getOrNull("pb_leaderboard", "select=rsn,boss_key,seconds,achieved_at,rank&order=boss_key.asc,rank.asc");
+        boolean complete = true;
+        JsonArray rows = db.getOrNull("pb_leaderboard", "select=rsn,boss_key,seconds,achieved_at,rank&order=boss_key.asc,rank.asc,rsn.asc");
         if (rows != null)
         {
             board = parse(rows);
         }
+        else complete = false;
         rows = db.getOrNull("recent_clan_bests", "select=rsn,boss_key,seconds,achieved_at&order=achieved_at.desc");
         if (rows != null)
         {
             recent = parse(rows);
         }
+        else complete = false;
+        return complete;
     }
 
     private static List<Entry> parse(JsonArray rows)
@@ -69,6 +73,7 @@ public class Leaderboards
         List<Entry> out = new ArrayList<>();
         for (JsonElement el : rows)
         {
+            if (!el.isJsonObject()) continue;
             JsonObject row = el.getAsJsonObject();
             String rsn = Supabase.str(row, "rsn");
             String boss = Supabase.str(row, "boss_key");
@@ -76,7 +81,9 @@ public class Leaderboards
             {
                 continue;
             }
-            out.add(new Entry(rsn, boss, row.get("seconds").getAsDouble(),
+            double seconds = Supabase.doubleOr(row, "seconds", -1);
+            if (seconds <= 0 || seconds >= 86400) continue;
+            out.add(new Entry(rsn, boss, seconds,
                 Supabase.str(row, "achieved_at"), Supabase.intOr(row, "rank", 1)));
         }
         return Collections.unmodifiableList(out);

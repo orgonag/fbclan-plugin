@@ -24,6 +24,8 @@ public class AnnouncementsTab extends JPanel
     private final ClanContent content;
     private final ScheduledExecutorService executor;
     private final JPanel list;
+    private final javax.swing.JTextArea refreshError = Ui.plain("");
+    private final java.util.concurrent.atomic.AtomicBoolean refreshing = new java.util.concurrent.atomic.AtomicBoolean();
 
     @Inject
     public AnnouncementsTab(ClanContent content, ScheduledExecutorService executor)
@@ -31,6 +33,7 @@ public class AnnouncementsTab extends JPanel
         this.content = content;
         this.executor = executor;
         setLayout(new BorderLayout());
+        add(refreshError, BorderLayout.NORTH);
         setBackground(ColorScheme.DARK_GRAY_COLOR);
         list = Ui.scrollList(this);
         list.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
@@ -39,10 +42,11 @@ public class AnnouncementsTab extends JPanel
 
     public void refresh()
     {
+        if (!refreshing.compareAndSet(false, true)) return;
         Ui.async(executor, () -> {
-            content.refreshAnnouncements();
+            if (!content.refreshAnnouncements()) throw new IllegalStateException("Refresh unavailable");
             return content.announcements();
-        }, this::render);
+        }, rows -> { refreshing.set(false); render(rows); }, message -> { if (message != null) refreshing.set(false); refreshError.setText(message == null ? "" : message); });
     }
 
     private void render(List<Announcement> items)

@@ -30,6 +30,8 @@ public class DropLogTab extends JPanel
     private final DropLogger drops;
     private final ScheduledExecutorService executor;
     private final JPanel list;
+    private final javax.swing.JTextArea refreshError = Ui.plain("");
+    private final java.util.concurrent.atomic.AtomicBoolean refreshing = new java.util.concurrent.atomic.AtomicBoolean();
 
     @Inject
     public DropLogTab(DropLogger drops, ScheduledExecutorService executor)
@@ -37,13 +39,15 @@ public class DropLogTab extends JPanel
         this.drops = drops;
         this.executor = executor;
         setLayout(new BorderLayout());
+        add(refreshError, BorderLayout.NORTH);
         setBackground(ColorScheme.DARK_GRAY_COLOR);
         list = Ui.scrollList(this);
     }
 
     public void refresh()
     {
-        Ui.async(executor, () -> drops.recent(50), this::render);
+        if (!refreshing.compareAndSet(false, true)) return;
+        Ui.async(executor, () -> drops.recent(50), rows -> { refreshing.set(false); render(rows); }, message -> { if (message != null) refreshing.set(false); refreshError.setText(message == null ? "" : message); });
     }
 
     private void render(JsonArray rows)
@@ -71,12 +75,14 @@ public class DropLogTab extends JPanel
 
         long value = Supabase.longOr(drop, "ge_value", 0);
         String suffix = value > 0 ? " (" + DropRules.formatGp(value) + " GP)" : "";
-        if (Supabase.has(drop, "rarity") && drop.get("rarity").getAsDouble() > 0)
+        if (Supabase.has(drop, "rarity") && Supabase.doubleOr(drop,"rarity",0) > 0)
         {
-            suffix += " [" + DropRules.formatRarity(drop.get("rarity").getAsDouble()) + "]";
+            suffix += " [" + DropRules.formatRarity(Supabase.doubleOr(drop,"rarity",0)) + "]";
         }
         // Plain labels truncate with "..." where HTML would wrap and grow.
         JLabel main = new JLabel(Supabase.str(drop, "item_name") + suffix);
+        main.putClientProperty("html.disable", Boolean.TRUE);
+        main.setToolTipText(main.getText());
         main.setForeground(Color.WHITE);
         main.setFont(FontManager.getRunescapeSmallFont().deriveFont(Font.BOLD));
         JLabel detail = Ui.small(Supabase.str(drop, "rsn") + " — " + Supabase.str(drop, "npc_name")

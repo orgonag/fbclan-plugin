@@ -13,7 +13,7 @@ repositories {
     mavenCentral()
 }
 
-def runeLiteVersion = 'latest.release'
+def runeLiteVersion = '1.12.38'
 
 dependencies {
     compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
@@ -21,14 +21,12 @@ dependencies {
     compileOnly 'org.projectlombok:lombok:1.18.30'
     annotationProcessor 'org.projectlombok:lombok:1.18.30'
 
-    // No unit tests (Plugin Hub doesn't require them); the test source
-    // set only holds the dev-client launcher behind `./gradlew run`.
     testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
     testImplementation group: 'net.runelite', name: 'jshell', version: runeLiteVersion
 }
 
 group = 'com.github.orgonag.fbclan'
-version = '2.0.0'
+version = '3.0.0'
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
@@ -38,6 +36,9 @@ tasks.withType(JavaCompile).configureEach {
 tasks.register('run', JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'com.github.orgonag.fbclan.FinalBossPluginTest'
+    ['finalboss.apiUrl', 'finalboss.anonKey'].each { key ->
+        if (System.getProperty(key) != null) systemProperty key, System.getProperty(key)
+    }
     jvmArgs = [
         '-ea',
         '--add-opens', 'java.desktop/com.apple.eawt=ALL-UNNAMED',

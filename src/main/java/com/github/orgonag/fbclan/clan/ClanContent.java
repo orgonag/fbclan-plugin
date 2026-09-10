@@ -80,12 +80,12 @@ public class ClanContent
     // ------------------------------------------------------------ fetches
 
     // Fetch failures keep the previous value; an empty table clears it.
-    public void refreshAnnouncements()
+    public boolean refreshAnnouncements()
     {
         JsonArray rows = db.getOrNull("announcements", "select=posted_at,title,body&order=posted_at.desc,sort_order.asc");
         if (rows == null)
         {
-            return;
+            return false;
         }
         List<Announcement> out = new ArrayList<>();
         for (JsonElement el : rows)
@@ -99,6 +99,7 @@ public class ClanContent
             }
         }
         announcements = Collections.unmodifiableList(out);
+        return true;
     }
 
     // Once per session: the list changes rarely.
@@ -143,6 +144,7 @@ public class ClanContent
     // threads.
     public synchronized void maybeShowWelcome()
     {
+        com.github.orgonag.fbclan.core.Session session = clan.snapshot();
         String message = welcome;
         if (!clan.isVerified() || welcomeShown || message.isEmpty())
         {
@@ -150,6 +152,7 @@ public class ClanContent
         }
         welcomeShown = true;
         clientThread.invokeLater(() -> {
+            if (!clan.current(session)) return true;
             GameState gs = client.getGameState();
             if (gs == GameState.LOADING || gs == GameState.HOPPING || gs == GameState.CONNECTION_LOST)
             {

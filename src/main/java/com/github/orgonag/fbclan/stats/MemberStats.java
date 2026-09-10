@@ -2,6 +2,7 @@ package com.github.orgonag.fbclan.stats;
 
 import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.core.Clan;
+import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.google.gson.JsonObject;
 import java.util.Map;
@@ -29,8 +30,8 @@ public class MemberStats
     private final Supabase db;
     private final ScheduledExecutorService executor;
 
-    private volatile int lastCl = -1;
-    private volatile int lastCa = -1;
+    private volatile String acknowledged;
+    private final java.util.concurrent.atomic.AtomicBoolean sending = new java.util.concurrent.atomic.AtomicBoolean();
 
     @Inject
     public MemberStats(Client client, FinalBossConfig config, Clan clan, Supabase db, ScheduledExecutorService executor)
@@ -45,7 +46,7 @@ public class MemberStats
     // Client thread (varp reads assert it under -ea).
     public void maybeSubmit()
     {
-        String rsn = clan.rsn();
+        Session session = clan.snapshot();
         if (!clan.canUpload() || !config.enableStatsUpload() || !clan.onStandardWorld())
         {
             return;
@@ -53,21 +54,30 @@ public class MemberStats
         int clObtained = client.getVarpValue(VarPlayerID.COLLECTION_COUNT);
         int clTotal = client.getVarpValue(VarPlayerID.COLLECTION_COUNT_MAX);
         int caPoints = client.getVarbitValue(VarbitID.CA_POINTS);
-        if ((clObtained <= 0 && caPoints <= 0) || (clObtained <= lastCl && caPoints <= lastCa))
+        if ((clObtained <= 0 && caPoints <= 0))
         {
             return;
         }
         String tier = tierFor(caPoints, thresholds());
-        executor.submit(() -> submit(rsn, clObtained, clTotal, caPoints, tier));
+        String signature = session.getGeneration() + ":" + clObtained + ":" + clTotal + ":" + caPoints + ":" + tier;
+        if (signature.equals(acknowledged) || !sending.compareAndSet(false, true)) return;
+        executor.submit(() -> {
+            try
+            {
+                if (clan.current(session) && config.enableStatsUpload() && submit(session.getRsn(), clObtained, clTotal, caPoints, tier)
+                    && clan.current(session)) acknowledged = signature;
+            }
+            finally { sending.set(false); }
+        });
     }
 
-    private void submit(String rsn, int clObtained, int clTotal, int caPoints, String tier)
+    private boolean submit(String rsn, int clObtained, int clTotal, int caPoints, String tier)
     {
         // Fields the client can't read yet are omitted; the RPC treats an
         // absent field as "no update".
         JsonObject p = new JsonObject();
         p.addProperty("p_rsn", rsn);
-        boolean hasCl = clObtained > 0 && clTotal > 0;
+        boolean hasCl = clObtained > 0 && clTotal >= clObtained;
         boolean hasCa = caPoints > 0;
         if (hasCl)
         {
@@ -82,20 +92,7 @@ public class MemberStats
                 p.addProperty("p_ca_tier", tier);
             }
         }
-        if ((!hasCl && !hasCa) || !db.rpc("submit_stats", p))
-        {
-            return;
-        }
-        // Record only what was actually sent, so an omitted pair retries
-        // once it becomes readable.
-        if (hasCl)
-        {
-            lastCl = Math.max(lastCl, clObtained);
-        }
-        if (hasCa)
-        {
-            lastCa = Math.max(lastCa, caPoints);
-        }
+        return (hasCl || hasCa) && db.rpc("fb_submit_stats", p);
     }
 
     // Tier cutoffs read live from the game (Dink pattern) so new tasks

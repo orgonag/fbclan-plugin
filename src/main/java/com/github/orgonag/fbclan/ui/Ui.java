@@ -64,9 +64,22 @@ public final class Ui
     // Fetch on the executor, apply on the EDT. Never block the EDT on network.
     public static <T> void async(ScheduledExecutorService executor, Supplier<T> fetch, Consumer<T> applyOnEdt)
     {
+        async(executor, fetch, applyOnEdt, message -> {});
+    }
+
+    public static <T> void async(ScheduledExecutorService executor, Supplier<T> fetch, Consumer<T> applyOnEdt,
+                                Consumer<String> errorOnEdt)
+    {
         executor.submit(() -> {
-            T result = fetch.get();
-            SwingUtilities.invokeLater(() -> applyOnEdt.accept(result));
+            try
+            {
+                T result = fetch.get();
+                SwingUtilities.invokeLater(() -> { errorOnEdt.accept(null); applyOnEdt.accept(result); });
+            }
+            catch (RuntimeException e)
+            {
+                SwingUtilities.invokeLater(() -> errorOnEdt.accept("Refresh failed. Previous data may be out of date."));
+            }
         });
     }
 
@@ -137,6 +150,7 @@ public final class Ui
     public static JLabel small(String text, Color color)
     {
         JLabel l = new JLabel(text);
+        l.putClientProperty("html.disable", Boolean.TRUE);
         l.setForeground(color);
         l.setFont(FontManager.getRunescapeSmallFont());
         l.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -163,6 +177,7 @@ public final class Ui
     public static JLabel empty(String text)
     {
         JLabel l = new JLabel(text);
+        l.putClientProperty("html.disable", Boolean.TRUE);
         l.setForeground(MUTED);
         l.setFont(FontManager.getRunescapeSmallFont());
         l.setHorizontalAlignment(SwingConstants.CENTER);

@@ -96,6 +96,7 @@ public class Party
     }
 
     String id;          // null until created server-side
+    long version;
     String hostRsn;
     Activity activity;
     boolean hardMode;
@@ -236,6 +237,7 @@ public class Party
         }
         return Party.builder()
             .id(Supabase.str(row, "id"))
+            .version(Supabase.intOr(row, "version", 1))
             .hostRsn(Supabase.str(row, "host_rsn"))
             .activity(activity)
             .hardMode(Supabase.bool(row, "hard_mode"))

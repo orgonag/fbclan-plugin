@@ -1,163 +1,142 @@
 package com.github.orgonag.fbclan.lfg;
 
+import com.github.orgonag.fbclan.core.ApiResult;
+import com.github.orgonag.fbclan.core.Clan;
+import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.core.Supabase;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import lombok.Value;
 
-/**
- * Supabase I/O for parties: lfg_parties (+ embedded lfg_applicants) and
- * the lfg_formed_parties snapshots. Membership is verified before any
- * write; rows are scoped by RSN client-side and the database enforces
- * the invariants (one party per player, capacity, well-formed rows).
- * Executor only.
- */
+/** Version 3 transactional API. Each logical write has one retry identity. */
 @Singleton
 public class PartyApi
 {
-    public enum AddResult
-    {
-        OK, REJECTED, FAILED
-    }
-
+    public enum AddResult { OK, REJECTED, FAILED }
+    @Value public static class Snapshot { List<Party> parties; List<FormedParty> formed; }
     private final Supabase db;
+    private final Clan clan;
+    private final ThreadLocal<Session> actor = new ThreadLocal<>();
+    private volatile Snapshot snapshot = new Snapshot(Collections.emptyList(), Collections.emptyList());
+    @Inject public PartyApi(Supabase db, Clan clan) { this.db = db; this.clan = clan; }
 
-    @Inject
-    public PartyApi(Supabase db)
+    public boolean inSession(Session session, java.util.function.BooleanSupplier action)
     {
-        this.db = db;
+        actor.set(session);
+        try { return clan.current(session) && action.getAsBoolean(); }
+        finally { actor.remove(); }
     }
 
-    // Null when the fetch failed, so the board can keep its snapshot
-    // rather than announce every party as disbanded.
-    public List<Party> parties()
+    public Snapshot fetch()
     {
-        JsonArray rows = db.getOrNull("lfg_parties", "select=*,lfg_applicants(*)&order=created_at.desc");
-        if (rows == null)
+        ApiResult response = db.rpcResult("fb_board", new JsonObject());
+        if (!response.successful() || response.getBody() == null || !response.getBody().isJsonObject()) return null;
+        JsonObject body = response.getBody().getAsJsonObject();
+        if (Supabase.intOr(body, "protocol", 0) != 3) return null;
+        List<Party> parties = new ArrayList<>();
+        List<FormedParty> formed = new ArrayList<>();
+        try
         {
-            return null;
-        }
-        List<Party> out = new ArrayList<>();
-        for (JsonElement el : rows)
-        {
-            Party p = el.isJsonObject() ? Party.fromRow(el.getAsJsonObject()) : null;
-            if (p != null)
+            for (JsonElement el : body.getAsJsonArray("parties"))
             {
-                out.add(p);
+                Party p = Party.fromRow(el.getAsJsonObject());
+                if (p == null) return null;
+                parties.add(p);
+            }
+            for (JsonElement el : body.getAsJsonArray("formed"))
+            {
+                FormedParty f = FormedParty.fromRow(el.getAsJsonObject());
+                if (f == null) return null;
+                formed.add(f);
             }
         }
-        return out;
+        catch (RuntimeException e) { return null; }
+        return new Snapshot(Collections.unmodifiableList(parties), Collections.unmodifiableList(formed));
     }
 
-    public List<FormedParty> formed()
+    public void publish(Snapshot value) { snapshot = value; }
+    private Party find(String id)
     {
-        JsonArray rows = db.getOrNull("lfg_formed_parties", "select=*&order=formed_at.desc");
-        if (rows == null)
-        {
-            return null;
-        }
-        List<FormedParty> out = new ArrayList<>();
-        for (JsonElement el : rows)
-        {
-            FormedParty f = el.isJsonObject() ? FormedParty.fromRow(el.getAsJsonObject()) : null;
-            if (f != null)
-            {
-                out.add(f);
-            }
-        }
-        return out;
+        for (Party p : snapshot.parties) if (p.getId().equals(id)) return p;
+        return null;
     }
-
-    // Create or edit: one party per host, keyed on host_rsn. Hosting and
-    // applying are exclusive, so any application goes first.
+    private Party hosted(String rsn)
+    {
+        for (Party p : snapshot.parties) if (p.isHostedBy(rsn)) return p;
+        return null;
+    }
+    private boolean command(String action, JsonObject data, Long expected)
+    {
+        Session session = actor.get() == null ? clan.snapshot() : actor.get();
+        if (!clan.current(session)) return false;
+        JsonObject args = new JsonObject();
+        args.addProperty("p_action", action);
+        args.addProperty("p_actor", session.getRsn());
+        args.add("p_data", data);
+        args.addProperty("p_operation", UUID.randomUUID().toString());
+        if (expected != null) args.addProperty("p_expected", expected);
+        for (int attempt = 0; attempt < 2 && clan.current(session); attempt++)
+        {
+            ApiResult result = db.rpcResult("fb_lfg", args);
+            if (result.successful()) return true;
+            if (!result.retryable()) return false;
+        }
+        return false;
+    }
+    private JsonObject data(String id) { JsonObject d = new JsonObject(); d.addProperty("id", id); return d; }
+    private boolean command(String action, JsonObject d)
+    {
+        Party p = find(Supabase.str(d, "id"));
+        return command(action, d, p == null ? null : p.getVersion());
+    }
     public boolean save(Party party)
     {
-        return withdrawAll(party.getHostRsn()) && db.upsert("lfg_parties", party.toJson(), "host_rsn");
+        JsonObject d = party.toJson();
+        if (party.getId() != null) d.addProperty("id", party.getId());
+        return command(party.getId() == null ? "create" : "edit", d,
+            party.getId() == null ? null : party.getVersion());
     }
-
-    public boolean heartbeat(String hostRsn)
+    public boolean heartbeat(String rsn)
     {
-        JsonObject d = new JsonObject();
-        d.addProperty("updated_at", Instant.now().toString());
-        return db.patch("lfg_parties", "host_rsn=eq." + Supabase.enc(hostRsn), d);
+        Party p = hosted(rsn);
+        return p != null && command("heartbeat", data(p.getId()), null);
     }
-
-    // Applicants cascade.
-    public boolean disband(String hostRsn)
+    public boolean disband(String id)
     {
-        return db.delete("lfg_parties", "host_rsn=eq." + Supabase.enc(hostRsn));
+        return command("disband", data(id));
     }
-
-    // A player is in at most one party: applying withdraws everywhere first.
-    public boolean apply(String partyId, String rsn, Role role, boolean learner, Integer kc, Party.KcSource source)
+    public boolean apply(String id, String rsn, Role role, boolean learner, Integer kc, Party.KcSource source)
     {
-        if (!withdrawAll(rsn))
-        {
-            return false;
-        }
-        JsonObject d = new JsonObject();
-        d.addProperty("party_id", partyId);
-        d.addProperty("rsn", rsn);
+        JsonObject d = data(id);
         Supabase.put(d, "role", role == null ? null : role.key());
         d.addProperty("learner", learner);
-        d.addProperty("status", Party.Status.PENDING.name());
-        Supabase.put(d, "kc", kc == null || source == null ? null : Math.max(0, Math.min(100_000, kc)));
-        Supabase.put(d, "kc_source", kc == null || source == null ? null : source.name());
-        return db.insert("lfg_applicants", d);
+        Supabase.put(d, "kc", kc);
+        Supabase.put(d, "kc_source", source == null ? null : source.name());
+        return command("apply", d);
     }
-
-    public boolean withdraw(String partyId, String rsn)
+    public boolean withdraw(String id, String rsn)
     {
-        return db.delete("lfg_applicants", "party_id=eq." + Supabase.enc(partyId) + "&rsn=eq." + Supabase.enc(rsn));
+        Party p = find(id);
+        Session s = actor.get() == null ? clan.snapshot() : actor.get();
+        JsonObject d = data(id); d.addProperty("rsn", rsn);
+        return command(p != null && p.isHostedBy(s.getRsn()) ? "kick" : "leave", d);
     }
-
-    public boolean withdrawAll(String rsn)
+    public boolean setStatus(String id, String rsn, Party.Status status)
     {
-        return db.delete("lfg_applicants", "rsn=eq." + Supabase.enc(rsn));
+        JsonObject d = data(id); d.addProperty("rsn", rsn);
+        return command(status == Party.Status.ACCEPTED ? "accept" : "decline", d);
     }
-
-    public boolean setStatus(String partyId, String rsn, Party.Status status)
+    public AddResult addMember(String id, String rsn, Role role)
     {
-        JsonObject d = new JsonObject();
-        d.addProperty("status", status.name());
-        d.addProperty("updated_at", Instant.now().toString());
-        return db.patch("lfg_applicants", "party_id=eq." + Supabase.enc(partyId) + "&rsn=eq." + Supabase.enc(rsn), d);
-    }
-
-    // Host seats a buddy who isn't on LFG: created already accepted.
-    // Server rules still apply (one party per name, capacity, not self).
-    public AddResult addMember(String partyId, String rsn, Role role)
-    {
-        JsonObject d = new JsonObject();
-        d.addProperty("party_id", partyId);
-        d.addProperty("rsn", rsn.trim());
+        JsonObject d = data(id); d.addProperty("rsn", rsn);
         Supabase.put(d, "role", role == null ? null : role.key());
-        d.addProperty("learner", false);
-        d.addProperty("status", Party.Status.ACCEPTED.name());
-        d.addProperty("added_by_host", true);
-        int code = db.insertStatus("lfg_applicants", d);
-        if (code >= 200 && code < 300)
-        {
-            return AddResult.OK;
-        }
-        return code == 409 || code == 400 ? AddResult.REJECTED : AddResult.FAILED;
+        return command("add", d) ? AddResult.OK : AddResult.REJECTED;
     }
-
-    // When a party fills: snapshot first (a failure leaves it open rather
-    // than lost), then delete the live row.
-    public boolean form(Party party)
-    {
-        return db.insert("lfg_formed_parties", FormedParty.from(party).toJson())
-            && db.delete("lfg_parties", "id=eq." + Supabase.enc(party.getId()));
-    }
-
-    public boolean deleteFormed(String id)
-    {
-        return db.delete("lfg_formed_parties", "id=eq." + Supabase.enc(id));
-    }
+    public boolean deleteFormed(String id) { return command("remove_formed", data(id), null); }
 }

@@ -62,12 +62,21 @@ public enum Role
         {
             return false;
         }
+        if (!family().equals(needed.family())) return false;
         if (this == needed || isFill() || needed.isFill())
         {
             return true;
         }
-        return (TOB_FREEZE.contains(this) && TOB_FREEZE.contains(needed))
-            || (TOB_HM_FREEZE.contains(this) && TOB_HM_FREEZE.contains(needed));
+        return (this == TOB_FRZ && TOB_FREEZE.contains(needed))
+            || (this == TOB_HM_FRZ && TOB_HM_FREEZE.contains(needed));
+    }
+
+    private String family()
+    {
+        String key = name();
+        if (key.startsWith("TOB_HM_")) return "TOB_HM";
+        if (key.startsWith("COX_CM_")) return "COX_CM";
+        return key.substring(0, key.indexOf('_'));
     }
 
     public static Role fromKey(String key)
@@ -167,7 +176,8 @@ public enum Role
         for (Role role : playable(activity, hard))
         {
             int n = role.isFill() || coxCounts == null ? 0 : Math.max(0, coxCounts.getOrDefault(role, 0));
-            for (int i = 0; i < n && roles.size() < capacity; i++)
+            if (roles.size() + n > capacity) throw new IllegalArgumentException("Role counts exceed party capacity");
+            for (int i = 0; i < n; i++)
             {
                 roles.add(role);
             }
@@ -200,7 +210,8 @@ public enum Role
             {
                 break;
             }
-            int idx = t == null ? open.size() - 1 : open.indexOf(t);
+            if (t == null) return Collections.emptyList();
+            int idx = open.indexOf(t);
             if (idx < 0)
             {
                 idx = fillable(open, t, false);
@@ -209,7 +220,8 @@ public enum Role
             {
                 idx = fillable(open, t, true);
             }
-            open.remove(idx < 0 ? open.size() - 1 : idx);
+            if (idx < 0) return Collections.emptyList();
+            open.remove(idx);
         }
         return open;
     }

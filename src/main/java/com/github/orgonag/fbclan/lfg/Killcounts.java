@@ -60,7 +60,7 @@ public class Killcounts
     private final ConfigManager configManager;
     private final HiscoreClient hiscores;
     // One entry per (player, activity) a host has browsed; bounded LRU.
-    private final Map<String, CompletableFuture<Hiscore>> cache = new LinkedHashMap<String, CompletableFuture<Hiscore>>()
+    private final Map<String, CompletableFuture<Hiscore>> cache = new LinkedHashMap<String, CompletableFuture<Hiscore>>(32, 0.75f, true)
     {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, CompletableFuture<Hiscore>> eldest)
@@ -140,7 +140,8 @@ public class Killcounts
         CompletableFuture<Hiscore> f = cache.get(key);
         if (f != null && (!f.isDone() || !f.getNow(null).stale()))
         {
-            f.thenRun(onDone);
+            // The existing lookup already has a completion callback. Repeated renders must not register hundreds more.
+            if (f.isDone()) onDone.run();
             return;
         }
         List<HiscoreSkill> skills = activity.hiscoreSkills();

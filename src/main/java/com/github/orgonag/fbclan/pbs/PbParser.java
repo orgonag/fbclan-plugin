@@ -35,6 +35,12 @@ public final class PbParser
         {"tombs of amascut", "TOA"},
     };
 
+    private static String colors(String message)
+    {
+        // RuneLite preserves unresolved Jagex color tokens in newer game messages.
+        return message.replaceAll("@[A-Za-z0-9_]+@", "<col=ff0000>");
+    }
+
     private PbParser()
     {
     }
@@ -61,7 +67,7 @@ public final class PbParser
     // is: ...") have neither pre nor post and are not boss KCs.
     public static Optional<String> killCount(String message)
     {
-        Matcher m = KILLCOUNT.matcher(message);
+        Matcher m = KILLCOUNT.matcher(colors(message));
         if (!m.find())
         {
             return Optional.empty();
@@ -77,22 +83,22 @@ public final class PbParser
 
     public static Optional<Duration> duration(String message)
     {
-        Matcher m = NEW_PB.matcher(message);
+        Matcher m = NEW_PB.matcher(colors(message));
         if (m.find())
         {
             return Optional.of(new Duration(seconds(m.group("pb")), true, null));
         }
-        m = KILL_DURATION.matcher(message);
+        m = KILL_DURATION.matcher(colors(message));
         if (m.find())
         {
             return Optional.of(new Duration(seconds(m.group("pb")), false, null));
         }
-        m = RAID_NEW_PB.matcher(message);
+        m = RAID_NEW_PB.matcher(colors(message));
         if (m.find())
         {
             return Optional.of(new Duration(seconds(m.group("pb")), true, m.group("teamsize")));
         }
-        m = RAID_DURATION.matcher(message);
+        m = RAID_DURATION.matcher(colors(message));
         if (m.find())
         {
             return Optional.of(new Duration(seconds(m.group("pb")), false, m.group("teamsize")));
@@ -106,7 +112,7 @@ public final class PbParser
     public static List<Submission> sepulchre(String message)
     {
         List<Submission> out = new ArrayList<>();
-        Matcher m = SEPULCHRE.matcher(message);
+        Matcher m = SEPULCHRE.matcher(colors(message));
         if (!m.find())
         {
             return out;
@@ -124,6 +130,7 @@ public final class PbParser
                 ? new Submission("hallowed sepulchre", seconds(oPb), "seed")
                 : new Submission("hallowed sepulchre", seconds(oTime), "live"));
         }
+        out.removeIf(sub -> !Double.isFinite(sub.getSeconds()));
         return out;
     }
 
@@ -136,16 +143,20 @@ public final class PbParser
     // Verbatim port of core's timeStringToSeconds.
     public static double seconds(String time)
     {
-        String[] s = time.split(":");
-        if (s.length == 2)
+        try
         {
-            return Integer.parseInt(s[0]) * 60 + Double.parseDouble(s[1]);
+            if (!time.matches("[0-9]+(?::[0-9]{1,2}){0,2}(?:\\.[0-9]{1,2})?")) return Double.NaN;
+            String[] parts = time.split(":");
+            double value = 0;
+            for (int i = 0; i < parts.length; i++)
+            {
+                double part = Double.parseDouble(parts[i]);
+                if (i > 0 && part >= 60) return Double.NaN;
+                value = value * 60 + part;
+            }
+            return value > 0 && value < 86400 ? value : Double.NaN;
         }
-        if (s.length == 3)
-        {
-            return Integer.parseInt(s[0]) * 3600 + Integer.parseInt(s[1]) * 60 + Double.parseDouble(s[2]);
-        }
-        return Double.parseDouble(time);
+        catch (RuntimeException e) { return Double.NaN; }
     }
 
     // Port of core's secondsToTimeString: whole seconds without ".00".
@@ -154,10 +165,10 @@ public final class PbParser
         int hours = (int) (Math.floor(seconds) / 3600);
         int minutes = (int) (Math.floor(seconds / 60) % 60);
         seconds = seconds % 60;
-        String prefix = hours > 0 ? String.format("%d:%02d:", hours, minutes) : String.format("%d:", minutes);
+        String prefix = hours > 0 ? String.format(Locale.ROOT, "%d:%02d:", hours, minutes) : String.format(Locale.ROOT, "%d:", minutes);
         return prefix + (Math.floor(seconds) == seconds
-            ? String.format("%02d", (int) seconds)
-            : String.format("%05.2f", seconds));
+            ? String.format(Locale.ROOT, "%02d", (int) seconds)
+            : String.format(Locale.ROOT, "%05.2f", seconds));
     }
 
     // "theatre of blood 4 players" -> "TOB (4 players)". Cosmetic only.
