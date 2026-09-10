@@ -55,12 +55,13 @@ DROP VIEW public.gp_week_total;
 ALTER TABLE public.drops ALTER COLUMN ge_value TYPE bigint;
 ALTER TABLE public.drops ADD COLUMN event_id uuid, ADD COLUMN world_type text NOT NULL DEFAULT 'legacy', ADD COLUMN occurred_at timestamptz;
 CREATE UNIQUE INDEX drops_event_unique ON public.drops(event_id) WHERE event_id IS NOT NULL;
+CREATE INDEX drops_occurred_at_idx ON public.drops(coalesce(occurred_at,created_at));
 CREATE INDEX drops_created_at_idx ON public.drops(created_at DESC,id);
 CREATE INDEX lfg_updated_at_idx ON public.lfg_parties(updated_at);
 CREATE VIEW public.gp_week_total AS SELECT coalesce(sum(ge_value),0)::numeric total_gp,count(*)::bigint drop_count FROM public.drops
- WHERE created_at>now()-interval '7 days' AND world_type IN('standard','legacy');
+ WHERE coalesce(occurred_at,created_at)>now()-interval '7 days' AND world_type IN('standard','legacy');
 CREATE VIEW public.gp_week_top AS SELECT public.fb_name(rsn) rsn,sum(ge_value)::numeric gp FROM public.drops
- WHERE created_at>now()-interval '7 days' AND world_type IN('standard','legacy') GROUP BY 1 ORDER BY gp DESC,rsn LIMIT 3;
+ WHERE coalesce(occurred_at,created_at)>now()-interval '7 days' AND world_type IN('standard','legacy') GROUP BY 1 ORDER BY gp DESC,rsn LIMIT 3;
 CREATE VIEW public.member_badges AS SELECT rsn,ca_tier tier FROM public.member_stats WHERE ca_tier IN('Elite','Master','Grandmaster');
 CREATE TABLE fb_private.operations(id uuid PRIMARY KEY,actor text NOT NULL,request jsonb NOT NULL,result jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
 

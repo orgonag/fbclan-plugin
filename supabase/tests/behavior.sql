@@ -47,6 +47,7 @@ BEGIN
  PERFORM public.fb_submit_drop(jsonb_build_object('event_id',event,'rsn','Alice','npc_name','Nex','item_name','Torva','item_id',1,'quantity',10,'ge_value',5000000000,'world_type','standard','occurred_at',now()));
  IF (SELECT count(*) FROM public.drops WHERE event_id=event)<>1 THEN RAISE EXCEPTION 'duplicate drop'; END IF;
  PERFORM public.fb_submit_drop(jsonb_build_object('event_id',gen_random_uuid(),'rsn','Alice','npc_name','Nex','item_name','Torva','item_id',1,'quantity',1,'ge_value',100,'world_type','special','occurred_at',now()));
+ PERFORM public.fb_submit_drop(jsonb_build_object('event_id',gen_random_uuid(),'rsn','Alice','npc_name','Nex','item_name','Old queued loot','item_id',1,'quantity',1,'ge_value',100,'world_type','standard','occurred_at',now()-interval '8 days'));
  IF (SELECT total_gp FROM public.gp_week_total)<>5000000000 THEN RAISE EXCEPTION 'special world in GP total'; END IF;
  FOR count_rows IN 1..25 LOOP PERFORM public.fb_submit_stats('member'||count_rows,NULL,NULL,2000,'Elite'); END LOOP;
  IF (SELECT count(*) FROM public.member_badges)<26 THEN RAISE EXCEPTION 'badges limited to twenty'; END IF;
