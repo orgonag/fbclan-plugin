@@ -43,12 +43,14 @@ public class DropRates
     private static final String RESOURCE = "/com/github/orgonag/fbclan/npc_drops.json";
 
     private final ItemManager itemManager;
+    private final Gson gson;
     private volatile Map<String, Collection<Drop>> bySource = Collections.emptyMap();
 
     @Inject
-    public DropRates(ItemManager itemManager)
+    public DropRates(ItemManager itemManager, Gson gson)
     {
         this.itemManager = itemManager;
+        this.gson = gson; // Plugin Hub forbids fresh Gson instances; use the client's
     }
 
     public void load()
@@ -62,7 +64,7 @@ public class DropRates
              Reader reader = new BufferedReader(new InputStreamReader(
                  Objects.requireNonNull(is, "missing " + RESOURCE), StandardCharsets.UTF_8)))
         {
-            raw = new Gson().fromJson(reader, new TypeToken<Map<String, List<RawDrop>>>() {}.getType());
+            raw = gson.fromJson(reader, new TypeToken<Map<String, List<RawDrop>>>() {}.getType());
         }
         catch (Exception e)
         {
