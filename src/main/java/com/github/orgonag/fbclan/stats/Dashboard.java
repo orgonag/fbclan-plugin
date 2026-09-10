@@ -100,9 +100,9 @@ public class Dashboard
 
     // Executor. Each source fails soft independently, keeping its
     // previous value; an empty result is real and clears it.
-    public void refresh()
+    public boolean refresh()
     {
-        JsonArray cl = db.getOrNull("cl_leaderboard", "select=rsn,cl_obtained,cl_total");
+        JsonArray cl = db.getOrNull("cl_leaderboard", "select=rsn,cl_obtained,cl_total&order=cl_obtained.desc,rsn.asc");
         if (cl != null)
         {
             List<ClEntry> out = new ArrayList<>();
@@ -111,12 +111,12 @@ public class Dashboard
                 JsonObject r = el.getAsJsonObject();
                 if (!Supabase.str(r, "rsn").isEmpty() && Supabase.has(r, "cl_obtained") && Supabase.has(r, "cl_total"))
                 {
-                    out.add(new ClEntry(Supabase.str(r, "rsn"), r.get("cl_obtained").getAsInt(), r.get("cl_total").getAsInt()));
+                    out.add(new ClEntry(Supabase.str(r, "rsn"), Supabase.intOr(r,"cl_obtained",0), Supabase.intOr(r,"cl_total",0)));
                 }
             }
             clBoard = Collections.unmodifiableList(out);
         }
-        JsonArray ca = db.getOrNull("ca_leaderboard", "select=rsn,ca_points,tier");
+        JsonArray ca = db.getOrNull("ca_leaderboard", "select=rsn,ca_points,tier&order=ca_points.desc,rsn.asc");
         if (ca != null)
         {
             List<CaEntry> out = new ArrayList<>();
@@ -125,13 +125,13 @@ public class Dashboard
                 JsonObject r = el.getAsJsonObject();
                 if (!Supabase.str(r, "rsn").isEmpty() && Supabase.has(r, "ca_points"))
                 {
-                    out.add(new CaEntry(Supabase.str(r, "rsn"), r.get("ca_points").getAsInt(), Supabase.str(r, "tier")));
+                    out.add(new CaEntry(Supabase.str(r, "rsn"), Supabase.intOr(r,"ca_points",0), Supabase.str(r, "tier")));
                 }
             }
             caBoard = Collections.unmodifiableList(out);
         }
         JsonArray total = db.getOrNull("gp_week_total", "select=total_gp,drop_count");
-        JsonArray top = db.getOrNull("gp_week_top", "select=rsn,gp");
+        JsonArray top = db.getOrNull("gp_week_top", "select=rsn,gp&order=gp.desc,rsn.asc");
         if (total != null && top != null)
         {
             JsonObject t = total.size() > 0 ? total.get(0).getAsJsonObject() : new JsonObject();
@@ -141,7 +141,7 @@ public class Dashboard
                 JsonObject r = el.getAsJsonObject();
                 if (!Supabase.str(r, "rsn").isEmpty() && Supabase.has(r, "gp"))
                 {
-                    names.add(new Named(Supabase.str(r, "rsn"), r.get("gp").getAsDouble()));
+                    names.add(new Named(Supabase.str(r, "rsn"), Supabase.doubleOr(r,"gp",0)));
                 }
             }
             gpWeek = new GpWeek(Supabase.longOr(t, "total_gp", 0), Supabase.intOr(t, "drop_count", 0),
@@ -152,14 +152,19 @@ public class Dashboard
         {
             applyWomCache(wom);
         }
+        return cl != null && ca != null && total != null && top != null && wom != null;
     }
 
     // Each row's payload is the raw WOM response array for one metric.
     private void applyWomCache(JsonArray rows)
     {
+        xpWeek = Collections.emptyList();
+        ehbWeek = Collections.emptyList();
+        womSyncedAt = "";
         String newest = "";
         for (JsonElement el : rows)
         {
+            if (!el.isJsonObject()) continue;
             JsonObject row = el.getAsJsonObject();
             String metric = Supabase.str(row, "metric");
             if (metric.isEmpty() || !Supabase.has(row, "payload") || !row.get("payload").isJsonArray())
@@ -191,8 +196,9 @@ public class Dashboard
         List<Named> out = new ArrayList<>();
         for (JsonElement el : rows)
         {
+            if (!el.isJsonObject()) continue;
             JsonObject row = el.getAsJsonObject();
-            if (!Supabase.has(row, "player") || !Supabase.has(row, "data"))
+            if (!Supabase.has(row, "player") || !Supabase.has(row, "data") || !row.get("player").isJsonObject() || !row.get("data").isJsonObject())
             {
                 continue;
             }
@@ -200,7 +206,7 @@ public class Dashboard
             JsonObject data = row.getAsJsonObject("data");
             if (Supabase.has(player, "displayName") && Supabase.has(data, valueKey))
             {
-                out.add(new Named(player.get("displayName").getAsString(), data.get(valueKey).getAsDouble()));
+                out.add(new Named(Supabase.str(player,"displayName"), Supabase.doubleOr(data,valueKey,0)));
             }
         }
         return Collections.unmodifiableList(out);

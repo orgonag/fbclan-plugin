@@ -56,6 +56,8 @@ public class LeaderboardsTab extends JPanel
     private final Dashboard dashboard;
     private final ScheduledExecutorService executor;
     private final JPanel list;
+    private final javax.swing.JTextArea refreshError = Ui.plain("");
+    private final java.util.concurrent.atomic.AtomicBoolean refreshing = new java.util.concurrent.atomic.AtomicBoolean();
     private final boolean[] expanded = {true, true, true, true, false, false, false};
     private final Set<String> openBosses = new HashSet<>();
 
@@ -66,6 +68,7 @@ public class LeaderboardsTab extends JPanel
         this.dashboard = dashboard;
         this.executor = executor;
         setLayout(new BorderLayout());
+        add(refreshError, BorderLayout.NORTH);
         setBackground(ColorScheme.DARK_GRAY_COLOR);
         list = Ui.scrollList(this);
         list.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
@@ -74,11 +77,13 @@ public class LeaderboardsTab extends JPanel
 
     public void refresh()
     {
+        if (!refreshing.compareAndSet(false, true)) return;
         Ui.async(executor, () -> {
-            pbs.refresh();
-            dashboard.refresh();
+            boolean ok = pbs.refresh();
+            ok = dashboard.refresh() && ok;
+            if (!ok) throw new IllegalStateException("Some sources could not refresh");
             return null;
-        }, v -> render());
+        }, v -> { refreshing.set(false); render(); }, message -> { if (message != null) refreshing.set(false); refreshError.setText(message == null ? "" : message); });
     }
 
     private void render()

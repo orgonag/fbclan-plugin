@@ -2,6 +2,8 @@ package com.github.orgonag.fbclan.lfg;
 
 import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.core.Clan;
+import com.github.orgonag.fbclan.core.Session;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -55,7 +57,14 @@ public class PartyBoard
     private volatile int world;
     private volatile Listener listener = () -> {};
     private ScheduledFuture<?> poll;
-    private long lastHeartbeat;
+    private volatile long lastHeartbeat;
+    private volatile boolean enabled;
+    private volatile long epoch;
+    private volatile String refreshError;
+    public String refreshError() { return refreshError; }
+    private final AtomicBoolean refreshing = new AtomicBoolean();
+    private final AtomicBoolean writing = new AtomicBoolean();
+    public boolean isBusy() { return writing.get(); }
 
     // Diff state; guarded by `this`.
     private Map<String, Party> previous = Collections.emptyMap();
@@ -117,12 +126,13 @@ public class PartyBoard
 
     // ------------------------------------------------------------ lifecycle
 
-    public void start()
+    public synchronized void start()
     {
         if (!config.enableLfg() || poll != null)
         {
             return;
         }
+        enabled = true;
         poll = executor.scheduleAtFixedRate(() -> {
             try
             {
@@ -135,8 +145,14 @@ public class PartyBoard
         }, 0, 30, TimeUnit.SECONDS);
     }
 
-    public void stop()
+    public synchronized void stop()
     {
+        enabled = false;
+        epoch++;
+        lastHeartbeat = 0;
+        online = Collections.emptySet();
+        world = 0;
+        api.publish(new PartyApi.Snapshot(Collections.emptyList(), Collections.emptyList()));
         if (poll != null)
         {
             poll.cancel(true);
@@ -168,62 +184,56 @@ public class PartyBoard
     // as "every party was disbanded".
     public void refresh()
     {
-        clientThread.invokeLater(this::readClient);
-        List<Party> fetched = api.parties();
-        if (fetched == null)
+        Session session = clan.snapshot();
+        long capturedEpoch = epoch;
+        if (!enabled || !config.enableLfg() || !clan.current(session) || !refreshing.compareAndSet(false, true)) return;
+        try
         {
-            return;
-        }
-        String rsn = clan.rsn();
-        Party mine = null;
-        for (Party p : fetched)
-        {
-            if (p.isHostedBy(rsn))
+            clientThread.invokeLater(() -> { if (enabled && capturedEpoch == epoch && clan.current(session)) readClient(); });
+            PartyApi.Snapshot fetched = api.fetch();
+            if (fetched == null)
             {
-                mine = p;
-            }
-        }
-        if (mine != null && mine.isFull() && api.form(mine))
-        {
-            List<Party> again = api.parties();
-            if (again == null)
-            {
+                if (enabled && capturedEpoch == epoch && clan.current(session))
+                { refreshError = "Board unavailable. Showing the last loaded parties."; listener.onChanged(); }
                 return;
             }
-            fetched = again;
-            mine = null;
+            synchronized (this)
+            {
+                if (!enabled || capturedEpoch != epoch || !clan.current(session)) return;
+                refreshError = null;
+                api.publish(fetched);
+                parties = fetched.getParties();
+                formed = fetched.getFormed();
+                notify(parties, formed, session.getRsn());
+            }
+            if (enabled && capturedEpoch == epoch && config.enableLfg() && mine() != null && System.currentTimeMillis() - lastHeartbeat >= HEARTBEAT_MINUTES * 60_000L
+                && api.inSession(session, () -> api.heartbeat(session.getRsn()))) lastHeartbeat = System.currentTimeMillis();
+            if (enabled && capturedEpoch == epoch && clan.current(session)) listener.onChanged();
         }
-        if (mine != null && System.currentTimeMillis() - lastHeartbeat >= HEARTBEAT_MINUTES * 60_000L)
-        {
-            lastHeartbeat = System.currentTimeMillis();
-            api.heartbeat(rsn);
-        }
-        List<FormedParty> formedNow = api.formed();
-        if (formedNow == null)
-        {
-            formedNow = formed;
-        }
-        parties = fetched;
-        formed = formedNow;
-        notify(fetched, formedNow, rsn);
-        listener.onChanged();
+        finally { refreshing.set(false); }
     }
 
-    // Runs a write on the executor, reports failure to `onError`, refreshes.
     public void run(java.util.function.BooleanSupplier action, String failure, java.util.function.Consumer<String> onError)
     {
+        Session session = clan.snapshot();
+        long capturedEpoch = epoch;
+        if (!enabled || !config.enableLfg() || !clan.current(session) || !writing.compareAndSet(false, true))
+        {
+            onError.accept("Wait for the current action, or reconnect and refresh.");
+            return;
+        }
+        listener.onChanged();
         executor.submit(() -> {
-            boolean ok;
-            try
+            boolean ok = false;
+            try { if (enabled && capturedEpoch == epoch && config.enableLfg()) ok = api.inSession(session, action); }
+            catch (RuntimeException e) { log.warn("LFG action failed", e); }
+            finally { writing.set(false); }
+            if (enabled && capturedEpoch == epoch && clan.current(session))
             {
-                ok = action.getAsBoolean();
+                onError.accept(ok ? null : failure);
+                refresh();
+                listener.onChanged();
             }
-            catch (RuntimeException e)
-            {
-                ok = false;
-            }
-            onError.accept(ok ? null : failure);
-            refresh();
         });
     }
 
@@ -246,10 +256,10 @@ public class PartyBoard
                 }
             }
         }
-        online = names;
+        boolean changed = !online.equals(names) || world != client.getWorld();
+        online = Collections.unmodifiableSet(names);
         world = client.getWorld();
-        // Online colours and the world label depend on this; re-render.
-        listener.onChanged();
+        if (changed) listener.onChanged();
     }
 
     // ------------------------------------------------------------ notifications
@@ -358,10 +368,12 @@ public class PartyBoard
 
     private void deliver(String message)
     {
+        Session session = clan.snapshot();
+        long capturedEpoch = epoch;
         if (config.lfgPartyNotifications())
         {
             clientThread.invokeLater(() -> {
-                if (client.getGameState() == GameState.LOGGED_IN)
+                if (enabled && capturedEpoch == epoch && clan.current(session) && client.getGameState() == GameState.LOGGED_IN)
                 {
                     client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "[LFG] " + message, null);
                 }

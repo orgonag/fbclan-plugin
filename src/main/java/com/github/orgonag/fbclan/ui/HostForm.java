@@ -137,6 +137,12 @@ class HostForm extends JPanel
     // The party the form describes; id/created_at are server-owned.
     Party build(String hostRsn, int world)
     {
+        try
+        {
+            sizeSpinner.commitEdit(); invocationSpinner.commitEdit(); minKcSpinner.commitEdit();
+            for (JSpinner spinner : coxCounts.values()) spinner.commitEdit();
+        }
+        catch (java.text.ParseException e) { throw new IllegalArgumentException("Enter valid numeric values."); }
         Activity activity = (Activity) activityBox.getSelectedItem();
         boolean hard = activity.hasHardMode() && hardModeBox.isSelected();
         int capacity = (Integer) sizeSpinner.getValue();

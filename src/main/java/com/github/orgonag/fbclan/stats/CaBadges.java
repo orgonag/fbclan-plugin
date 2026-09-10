@@ -66,7 +66,7 @@ public class CaBadges
     // Executor.
     public void refresh()
     {
-        JsonArray rows = db.getOrNull("ca_leaderboard", "select=rsn,tier");
+        JsonArray rows = db.getOrNull("member_badges", "select=rsn,tier&order=rsn.asc");
         if (rows == null)
         {
             return; // keep the previous tiers through an outage

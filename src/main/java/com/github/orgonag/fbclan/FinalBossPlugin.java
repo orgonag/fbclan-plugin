@@ -26,6 +26,9 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.ChatMessage;
+import net.runelite.api.events.GameTick;
+import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.events.RuneScapeProfileChanged;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.VarPlayerID;
@@ -95,6 +98,7 @@ public class FinalBossPlugin extends Plugin
     @Override
     protected void startUp()
     {
+        clan.activate();
         clan.setListener(this::onStatus);
         content.resetSession();
         pbs.resetSession();
@@ -118,34 +122,24 @@ public class FinalBossPlugin extends Plugin
         toolbar.addNavigation(navButton);
 
         // Enabled mid-session: no LOGGED_IN event will fire.
-        if (client.getGameState() == GameState.LOGGED_IN)
-        {
-            clan.verifyAfter(0);
-        }
+        clientThread.invokeLater(() -> {
+            if (client.getGameState() == GameState.LOGGED_IN) clan.verifyAfter(0);
+        });
     }
 
     @Override
     protected void shutDown()
     {
-        // Snapshot before reset(): the executor task may run afterwards.
-        String rsn = clan.rsn();
-        if (rsn != null && config.enableLfg())
-        {
-            // A party and an application can't be kept alive without a
-            // running client.
-            executor.submit(() -> {
-                partyApi.disband(rsn);
-                partyApi.withdrawAll(rsn);
-            });
-        }
+        clan.deactivate();
         stopPolling();
         toolbar.removeNavigation(navButton);
-        clan.reset();
     }
 
     private void onStatus(Clan.Status status)
     {
+        long generation = clan.snapshot().getGeneration();
         SwingUtilities.invokeLater(() -> {
+            if (clan.snapshot().getGeneration() != generation) return;
             sidebar.show(status);
             if (status == Clan.Status.MEMBER)
             {
@@ -162,6 +156,7 @@ public class FinalBossPlugin extends Plugin
         clientThread.invokeLater(() -> {
             pbs.maybeSeed();
             stats.maybeSubmit();
+            executor.submit(drops::flush);
         });
     }
 
@@ -202,7 +197,7 @@ public class FinalBossPlugin extends Plugin
     private void stopPolling()
     {
         parties.stop();
-        partiesTab.reset();
+        SwingUtilities.invokeLater(partiesTab::reset);
         killcounts.clear();
         if (dropRefresh != null)
         {
@@ -232,8 +227,41 @@ public class FinalBossPlugin extends Plugin
         else if (event.getGameState() == GameState.LOGIN_SCREEN && (clan.isVerified() || clan.rsn() != null))
         {
             clan.reset();
+            pbs.resetSession();
+            content.resetSession();
             stopPolling();
             SwingUtilities.invokeLater(() -> sidebar.show(Clan.Status.VERIFYING));
+        }
+    }
+
+    @Subscribe
+    public void onRuneScapeProfileChanged(RuneScapeProfileChanged event)
+    {
+        clan.reset();
+        pbs.resetSession();
+        content.resetSession();
+        stopPolling();
+        if (client.getGameState() == GameState.LOGGED_IN) clan.verifyAfter(1);
+    }
+
+    @Subscribe
+    public void onConfigChanged(ConfigChanged event)
+    {
+        if (!"finalboss".equals(event.getGroup())) return;
+        clientThread.invokeLater(() -> {
+            stopPolling();
+            if (clan.isVerified()) startPolling();
+        });
+    }
+
+    @Subscribe
+    public void onGameTick(GameTick event)
+    {
+        if (client.getTickCount() % 50 == 0)
+        {
+            pbs.maybeSeed();
+            stats.maybeSubmit();
+            executor.submit(drops::flush);
         }
     }
 
@@ -263,7 +291,7 @@ public class FinalBossPlugin extends Plugin
         boolean chestNpc = event.getType() == LootRecordType.NPC && DropRules.CHEST_LOOT_NPCS.contains(event.getName());
         if (event.getType() == LootRecordType.EVENT || chestNpc)
         {
-            drops.onLoot(event.getName(), event.getItems());
+            drops.onLoot(event.getName(), event.getItems(), true);
         }
     }
 

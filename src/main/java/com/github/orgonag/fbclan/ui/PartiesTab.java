@@ -146,6 +146,10 @@ public class PartiesTab extends JPanel
     {
         SwingUtilities.invokeLater(() -> {
             applyingId = null;
+            applicationPanel = null;
+            applicationShape = null;
+            formVisible = false;
+            editing = false;
             addMemberDraft = "";
             render();
         });
@@ -177,12 +181,19 @@ public class PartiesTab extends JPanel
         {
             return;
         }
-        Party party = form.build(rsn, board.world());
-        formVisible = false;
-        editing = false;
-        render();
-        board.markHeartbeat();
-        run(() -> api.save(party), "Couldn't save your party — try again.");
+        try
+        {
+            Party draft = form.build(rsn, board.world());
+            Party existing = editing ? board.mine() : null;
+            Party party = existing == null ? draft : draft.toBuilder().id(existing.getId()).version(existing.getVersion()).build();
+            board.run(() -> api.save(party), "Couldn't save your party. Refresh and try again.", message -> SwingUtilities.invokeLater(() -> {
+                showError(message);
+                if (message == null) { formVisible = false; editing = false; }
+                render();
+            }));
+        }
+        catch (IllegalArgumentException e) { showError(e.getMessage()); }
+
     }
 
     // ------------------------------------------------------------ render
@@ -190,10 +201,12 @@ public class PartiesTab extends JPanel
     private void render()
     {
         String rsn = clan.rsn();
+        if (board.refreshError() != null) { error.setText(board.refreshError()); error.setVisible(true); }
         Party mine = board.mine();
         form.setVisible(formVisible);
         form.setEditing(editing);
         form.setWorld(board.world());
+        hostButton.setEnabled(!board.isBusy() && clan.canUpload() && config.enableLfg());
         hostButton.setText(mine != null ? "Edit your party" : formVisible ? "Hide form" : "Host a party");
 
         list.removeAll();
@@ -353,8 +366,14 @@ public class PartiesTab extends JPanel
         return Ui.pinHeight(card);
     }
 
+    private JPanel applicationPanel;
+    private String applicationShape;
     private JPanel applyRow(Party p)
     {
+        String shape = p.getId() + ":" + p.getActivity() + ":" + p.isHardMode() + ":" + p.openRoles();
+        if (shape.equals(applicationShape) && applicationPanel != null) return applicationPanel;
+        applicationShape = shape;
+
         String rsn = clan.rsn();
         JPanel row = Ui.column(ColorScheme.DARKER_GRAY_COLOR);
         row.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
@@ -431,6 +450,7 @@ public class PartiesTab extends JPanel
             Party.KcSource kcSource = null;
             if (kcSpinnerF != null)
             {
+                try { kcSpinnerF.commitEdit(); } catch (java.text.ParseException ex) { showError("Enter a valid kill count."); return; }
                 int typed = (Integer) kcSpinnerF.getValue();
                 if (prefillF != null && typed == prefillF)
                 {
@@ -445,8 +465,8 @@ public class PartiesTab extends JPanel
             }
             Integer kcF = kc;
             Party.KcSource kcSourceF = kcSource;
-            applyingId = null;
-            run(() -> api.apply(p.getId(), rsn, role, isLearner, kcF, kcSourceF), "Couldn't apply — try again.");
+            board.run(() -> api.apply(p.getId(), rsn, role, isLearner, kcF, kcSourceF), "Couldn't apply. Refresh and try again.",
+                message -> SwingUtilities.invokeLater(() -> { if (message == null) applyingId = null; showError(message); render(); }));
         });
         cancel.addActionListener(e -> {
             applyingId = null;
@@ -455,7 +475,8 @@ public class PartiesTab extends JPanel
         buttons.add(confirm);
         buttons.add(cancel);
         row.add(Ui.pinHeight(buttons));
-        return Ui.pinHeight(row);
+        applicationPanel = Ui.pinHeight(row);
+        return applicationPanel;
     }
 
     private JPanel hostCard(Party p)
@@ -503,7 +524,7 @@ public class PartiesTab extends JPanel
         JButton disband = new JButton("Disband");
         disband.addActionListener(e -> {
             board.expectSelfLeave(p.getId());
-            run(() -> api.disband(clan.rsn()), "Couldn't disband — try again.");
+            run(() -> api.disband(p.getId()), "Couldn't disband — try again.");
         });
         buttons.add(edit);
         buttons.add(disband);
@@ -570,6 +591,7 @@ public class PartiesTab extends JPanel
     }
 
     // Seat a buddy who isn't on LFG so the spot shows as taken to everyone.
+    private Role addMemberRole;
     private JPanel addMemberRow(Party p)
     {
         JPanel row = Ui.column(ColorScheme.DARKER_GRAY_COLOR);
@@ -601,6 +623,9 @@ public class PartiesTab extends JPanel
                 options = Role.playable(p.getActivity(), p.isHardMode());
             }
             roleBox = new JComboBox<>(options.toArray(new Role[0]));
+            if (options.contains(addMemberRole)) roleBox.setSelectedItem(addMemberRole);
+            JComboBox<Role> selected = roleBox;
+            roleBox.addActionListener(e -> addMemberRole = (Role) selected.getSelectedItem());
             row.add(Ui.labeled("Role", roleBox));
         }
         JComboBox<Role> roleBoxF = roleBox;
@@ -617,13 +642,11 @@ public class PartiesTab extends JPanel
                 return;
             }
             Role role = roleBoxF == null ? null : (Role) roleBoxF.getSelectedItem();
-            addMemberDraft = "";
-            executor.submit(() -> {
-                PartyApi.AddResult r = api.addMember(p.getId(), rsn, role);
-                showError(r == PartyApi.AddResult.OK ? null : r == PartyApi.AddResult.REJECTED
-                    ? rsn + " is already in a party (or the party is full)." : "Couldn't add " + rsn + " — try again.");
-                board.refresh();
-            });
+            board.run(() -> api.addMember(p.getId(), rsn, role) == PartyApi.AddResult.OK,
+                "Couldn't add member. Refresh and check the name and available role.", message -> SwingUtilities.invokeLater(() -> {
+                    if (message == null) addMemberDraft = "";
+                    showError(message);
+                }));
         };
         JButton add = new JButton("Add member");
         add.addActionListener(e -> submit.run());

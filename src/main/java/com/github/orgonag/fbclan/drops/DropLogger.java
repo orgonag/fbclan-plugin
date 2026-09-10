@@ -3,6 +3,7 @@ package com.github.orgonag.fbclan.drops;
 import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.clan.ClanContent;
 import com.github.orgonag.fbclan.core.Clan;
+import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.google.gson.JsonArray;
@@ -58,6 +59,10 @@ public class DropLogger
     private static final String COLUMNS = "rsn,npc_name,item_name,item_id,ge_value,quantity,created_at,screenshot_url,rarity";
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
+    private final DropOutbox outbox = new DropOutbox(net.runelite.client.RuneLite.RUNELITE_DIR.toPath().resolve("finalboss-outbox"));
+    private final java.util.concurrent.atomic.AtomicBoolean flushing = new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.atomic.AtomicBoolean framePending = new java.util.concurrent.atomic.AtomicBoolean();
+    private final LootDeduplicator deduplicator = new LootDeduplicator();
     private final Client client;
     private final FinalBossConfig config;
     private final Clan clan;
@@ -85,7 +90,7 @@ public class DropLogger
         this.drawManager = drawManager;
         this.partyService = partyService;
         this.executor = executor;
-        this.http = http;
+        this.http = http.newBuilder().callTimeout(20, java.util.concurrent.TimeUnit.SECONDS).build();
     }
 
     // Every legitimate screenshot URL starts with this; the drop-log tab
@@ -100,6 +105,11 @@ public class DropLogger
     // `source` is what the Loot Tracker reported (NPC, raid, chest); it
     // doubles as the key into the rate table. Client thread.
     public void onLoot(String source, Collection<ItemStack> items)
+    {
+        onLoot(source, items, false);
+    }
+
+    public void onLoot(String source, Collection<ItemStack> items, boolean tracker)
     {
         String rsn = clan.rsn();
         if (!clan.canUpload() || !config.enableDropLogging())
@@ -117,6 +127,7 @@ public class DropLogger
         {
             int id = stack.getId();
             int qty = stack.getQuantity();
+            if (qty <= 0) continue;
             long value = (long) itemManager.getItemPrice(id) * qty;
             String name = itemManager.getItemComposition(id).getName();
             OptionalDouble rarity = rates.rarity(source, id, qty);
@@ -135,7 +146,10 @@ public class DropLogger
         }
         if (!drops.isEmpty())
         {
-            dispatch(rsn, display, drops);
+            // Suppress duplicate delivery of the same loot collection within one game tick.
+            int tick = client.getTickCount();
+            String key = clan.snapshot().getGeneration() + ":" + display + ":" + drops.toString();
+            if (deduplicator.accept(tick, key, tracker)) dispatch(rsn, display, drops);
         }
     }
 
@@ -171,49 +185,101 @@ public class DropLogger
     // every viewer. Executor.
     public JsonArray recent(int limit)
     {
-        return db.get("drops", "select=" + COLUMNS + "&order=created_at.desc&limit=" + limit);
+        JsonArray rows = db.getOrNull("drops", "select=" + COLUMNS + "&order=created_at.desc,id.desc&limit=" + Math.max(1, Math.min(200, limit)));
+        if (rows == null) throw new IllegalStateException("Could not refresh drops. Showing the last loaded list.");
+        for (com.google.gson.JsonElement el : rows)
+        {
+            JsonObject row = el.getAsJsonObject();
+            String path = Supabase.str(row, "screenshot_url");
+            if (path.matches("[0-9a-f-]{36}\\.png")) row.addProperty("screenshot_url", screenshotPrefix() + path);
+        }
+        return rows;
     }
 
     // ------------------------------------------------------------ pipeline
 
     private void dispatch(String rsn, String source, List<Drop> drops)
     {
-        if (!config.enableDropScreenshots())
-        {
-            executor.submit(() -> submit(rsn, source, drops, null));
-            return;
-        }
-        // One screenshot covers every qualifying item from this drop: the
-        // frame is grabbed on the next render, everything else happens on
-        // the executor.
-        List<String> party = partyNames();
-        int bestItem = drops.stream().max(Comparator.comparingLong(d -> d.value)).get().itemId;
-        drawManager.requestNextFrameListener(frame -> executor.submit(() ->
-            submit(rsn, source, drops, uploadScreenshot(frame, rsn, party, bestItem))));
-    }
-
-    private void submit(String rsn, String source, List<Drop> drops, String screenshotUrl)
-    {
+        Session session = clan.snapshot();
+        String worldType = clan.onStandardWorld() ? "standard" : "special";
+        String occurred = java.time.Instant.now().toString();
+        List<JsonObject> rows = new ArrayList<>();
         for (Drop d : drops)
         {
             JsonObject row = new JsonObject();
-            row.addProperty("rsn", rsn);
-            row.addProperty("npc_name", source);
-            row.addProperty("item_name", d.name);
-            row.addProperty("item_id", d.itemId);
-            row.addProperty("ge_value", d.value);
-            row.addProperty("quantity", d.quantity);
-            if (screenshotUrl != null)
-            {
-                row.addProperty("screenshot_url", screenshotUrl);
-            }
-            if (d.rarity != null && d.rarity > 0 && d.rarity <= 1)
-            {
-                row.addProperty("rarity", d.rarity);
-            }
-            db.insert("drops", row);
-            discord(rsn, source, d);
+            row.addProperty("event_id", java.util.UUID.randomUUID().toString());
+            row.addProperty("rsn", rsn); row.addProperty("npc_name", source);
+            row.addProperty("item_name", d.name); row.addProperty("item_id", d.itemId);
+            row.addProperty("ge_value", d.value); row.addProperty("quantity", d.quantity);
+            row.addProperty("world_type", worldType); row.addProperty("occurred_at", occurred);
+            if (d.rarity != null && d.rarity > 0 && d.rarity <= 1) row.addProperty("rarity", d.rarity);
+            rows.add(row);
         }
+        executor.submit(() -> {
+            if (!clan.current(session) || !config.enableDropLogging()) return;
+            for (JsonObject row : rows)
+            {
+                try { outbox.add(session, row); }
+                catch (IOException e) { log.warn("Could not persist a drop for retry", e); }
+            }
+            flush();
+        });
+        // Screenshots are optional enrichment; no rendered frame is needed to save a drop.
+        if (!config.enableDropScreenshots() || !framePending.compareAndSet(false, true)) return;
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        List<String> party = partyNames();
+        drawManager.requestNextFrameListener(frame -> {
+            framePending.set(false);
+            if (System.nanoTime() > deadline || !clan.current(session) || !config.enableDropLogging() || !config.enableDropScreenshots()) return;
+            BufferedImage copy = new BufferedImage(frame.getWidth(null), frame.getHeight(null), BufferedImage.TYPE_INT_RGB);
+            Graphics2D graphics = copy.createGraphics();
+            try { graphics.drawImage(frame, 0, 0, null); } finally { graphics.dispose(); }
+            executor.submit(() -> {
+                if (!clan.current(session) || !config.enableDropLogging() || !config.enableDropScreenshots()) return;
+                String path = uploadScreenshot(copy, rsn, party, 0);
+                if (path == null) return;
+                for (JsonObject row : rows)
+                {
+                    if (!clan.current(session) || !config.enableDropLogging() || !config.enableDropScreenshots()) return;
+                    JsonObject payload = new JsonObject(); payload.add("p_row", row);
+                    if (!db.rpc("fb_submit_drop", payload)) continue;
+                    JsonObject attachment = new JsonObject();
+                    attachment.addProperty("p_event", Supabase.str(row, "event_id"));
+                    attachment.addProperty("p_path", path);
+                    db.rpc("fb_attach_screenshot", attachment);
+                }
+            });
+        });
+    }
+
+    /** Worker only; retry all pending drops for this verified profile. */
+    public void flush()
+    {
+        Session session = clan.snapshot();
+        if (!clan.current(session) || !config.enableDropLogging() || !flushing.compareAndSet(false, true)) return;
+        try
+        {
+            for (JsonObject row : outbox.pending(session))
+            {
+                if (!clan.current(session) || !config.enableDropLogging()) break;
+                JsonObject payload = new JsonObject(); payload.add("p_row", row);
+                com.github.orgonag.fbclan.core.ApiResult result = db.rpcResult("fb_submit_drop", payload);
+                if (!result.successful())
+                {
+                    if (result.retryable()) break;
+                    outbox.reject(Supabase.str(row, "event_id"));
+                    log.warn("Drop rejected by database; saved locally for inspection: {}", result.message());
+                    continue;
+                }
+                outbox.remove(Supabase.str(row, "event_id"));
+                // Webhooks are deliberately best effort, independent of the durable clan record.
+                if (clan.current(session) && config.enableDropLogging()) discord(session.getRsn(), Supabase.str(row, "npc_name"),
+                    new Drop(Supabase.str(row, "item_name"), row.get("item_id").getAsInt(), row.get("ge_value").getAsLong(), row.get("quantity").getAsInt(),
+                        Supabase.has(row, "rarity") ? row.get("rarity").getAsDouble() : null));
+            }
+        }
+        catch (IOException | RuntimeException e) { log.warn("Drop retry failed", e); }
+        finally { flushing.set(false); }
     }
 
     private void discord(String rsn, String source, Drop d)
@@ -274,8 +340,8 @@ public class DropLogger
             g.dispose();
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             ImageIO.write(image, "png", out);
-            String path = rsn.replaceAll("[^A-Za-z0-9_-]", "_") + "/" + System.currentTimeMillis() + "_" + itemId + ".png";
-            return db.upload(BUCKET, path, out.toByteArray(), "image/png");
+            String path = java.util.UUID.randomUUID() + ".png";
+            return db.upload(BUCKET, path, out.toByteArray(), "image/png") == null ? null : path;
         }
         catch (IOException | RuntimeException e)
         {

@@ -32,7 +32,7 @@ import okhttp3.Response;
 @Singleton
 public class Supabase
 {
-    private static final String PROJECT_URL = "https://rzhtoqadvbxylwjndnlo.supabase.co";
+    private static final String DEFAULT_PROJECT_URL = "https://rzhtoqadvbxylwjndnlo.supabase.co";
     private static final String ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6aHRvcWFkdmJ4eWx3am5kbmxvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTU5MDMsImV4cCI6MjA5MTI3MTkwM30.WzWJXS2cpvwnRVBQEroLTsu_iU0j_kkI1wSQhM8eJY0";
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
@@ -41,7 +41,13 @@ public class Supabase
     @Inject
     public Supabase(OkHttpClient http)
     {
-        this.http = http;
+        this.http = http.newBuilder().callTimeout(20, java.util.concurrent.TimeUnit.SECONDS).build();
+        boolean urlSet = System.getProperty("finalboss.apiUrl") != null;
+        boolean keySet = System.getProperty("finalboss.anonKey") != null;
+        if (urlSet != keySet) throw new IllegalArgumentException("Development endpoint requires both finalboss.apiUrl and finalboss.anonKey");
+        okhttp3.HttpUrl parsed = okhttp3.HttpUrl.parse(projectUrl());
+        if (parsed == null || (!"https".equals(parsed.scheme()) && !"localhost".equals(parsed.host()) && !"127.0.0.1".equals(parsed.host())))
+            throw new IllegalArgumentException("Supabase endpoint must use HTTPS (except localhost)");
     }
 
     // ------------------------------------------------------------ reads
@@ -58,82 +64,77 @@ public class Supabase
     // and still clear when the table is genuinely empty.
     public JsonArray getOrNull(String table, String query)
     {
-        Request request = base(PROJECT_URL + "/rest/v1/" + table + "?" + query).get().build();
+        JsonArray all = new JsonArray();
+        boolean limited = query.contains("limit=");
+        for (int offset = 0; offset < 100_000;)
+        {
+            Request.Builder builder = base(projectUrl() + "/rest/v1/" + table + "?" + query
+                + (limited ? "" : "&offset=" + offset + "&limit=500"));
+            if (!limited) builder.header("Prefer", "count=exact");
+            ApiResult result = execute(builder.get().build());
+            if (!result.successful() || result.getBody() == null || !result.getBody().isJsonArray()) return null;
+            JsonArray rows = result.getBody().getAsJsonArray();
+            all.addAll(rows);
+            long total = result.totalRows();
+            if (limited || rows.size() == 0 || (total >= 0 ? all.size() >= total : rows.size() < 500)) return all;
+            offset += rows.size();
+        }
+        log.warn("Supabase result exceeds supported size for {}", table);
+        return null;
+    }
+
+    public static String projectUrl()
+    {
+        return System.getProperty("finalboss.apiUrl", DEFAULT_PROJECT_URL).replaceAll("/+$", "");
+    }
+
+    public ApiResult rpcResult(String function, JsonObject args)
+    {
+        return execute(base(projectUrl() + "/rest/v1/rpc/" + function)
+            .post(RequestBody.create(JSON, args.toString())).build());
+    }
+
+    private ApiResult execute(Request request)
+    {
         try (Response response = http.newCall(request).execute())
         {
-            if (!response.isSuccessful() || response.body() == null)
+            String raw = "";
+            if (response.body() != null)
             {
-                log.warn("Supabase GET {} failed: {}", table, response.code());
-                return null;
+                byte[] bytes = response.body().byteStream().readNBytes(8_000_001);
+                if (bytes.length > 8_000_000) return new ApiResult(response.code(), null, "Response too large");
+                raw = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
             }
-            return new JsonParser().parse(response.body().string()).getAsJsonArray();
+            if (raw.length() > 8_000_000) return new ApiResult(response.code(), null, "Response too large");
+            JsonElement body = raw.isEmpty() ? null : new JsonParser().parse(raw);
+            return new ApiResult(response.code(), body, null, response.header("Content-Range"));
         }
         catch (IOException | RuntimeException e)
         {
-            log.warn("Supabase GET {} failed", table, e);
-            return null;
+            log.debug("Supabase request unavailable", e);
+            return new ApiResult(0, null, "Cannot reach the clan database");
         }
     }
 
     // ------------------------------------------------------------ writes
 
-    public boolean insert(String table, JsonObject row)
-    {
-        return ok(insertStatus(table, row));
-    }
-
-    // HTTP status of an insert, so a caller can tell a constraint
-    // rejection (409 / 400) from an outage.
-    public int insertStatus(String table, JsonObject row)
-    {
-        return send(base(PROJECT_URL + "/rest/v1/" + table)
-            .header("Content-Type", "application/json")
-            .header("Prefer", "return=minimal")
-            .post(RequestBody.create(JSON, row.toString())), "INSERT " + table);
-    }
-
-    // Insert-or-replace keyed on `onConflict` (PostgREST merge-duplicates).
-    public boolean upsert(String table, JsonObject row, String onConflict)
-    {
-        return ok(send(base(PROJECT_URL + "/rest/v1/" + table + "?on_conflict=" + onConflict)
-            .header("Content-Type", "application/json")
-            .header("Prefer", "resolution=merge-duplicates,return=minimal")
-            .post(RequestBody.create(JSON, row.toString())), "UPSERT " + table));
-    }
-
-    // PATCHes only the columns present in `fields` on rows matching `filter`.
-    public boolean patch(String table, String filter, JsonObject fields)
-    {
-        return ok(send(base(PROJECT_URL + "/rest/v1/" + table + "?" + filter)
-            .header("Content-Type", "application/json")
-            .header("Prefer", "return=minimal")
-            .patch(RequestBody.create(JSON, fields.toString())), "PATCH " + table));
-    }
-
-    public boolean delete(String table, String filter)
-    {
-        return ok(send(base(PROJECT_URL + "/rest/v1/" + table + "?" + filter).delete(), "DELETE " + table));
-    }
-
     // A Postgres function exposed by PostgREST (improve-only submits).
     public boolean rpc(String function, JsonObject args)
     {
-        return ok(send(base(PROJECT_URL + "/rest/v1/rpc/" + function)
-            .header("Content-Type", "application/json")
-            .post(RequestBody.create(JSON, args.toString())), "RPC " + function));
+        return rpcResult(function, args).successful();
     }
 
     // Storage upload; returns the public URL or null.
     public String upload(String bucket, String path, byte[] bytes, String contentType)
     {
-        int status = send(base(PROJECT_URL + "/storage/v1/object/" + bucket + "/" + path)
+        int status = send(base(projectUrl() + "/storage/v1/object/" + bucket + "/" + path)
             .post(RequestBody.create(MediaType.parse(contentType), bytes)), "UPLOAD " + bucket);
         return ok(status) ? publicUrl(bucket, path) : null;
     }
 
     public static String publicUrl(String bucket, String path)
     {
-        return PROJECT_URL + "/storage/v1/object/public/" + bucket + "/" + path;
+        return projectUrl() + "/storage/v1/object/public/" + bucket + "/" + path;
     }
 
     // ------------------------------------------------------------ helpers
@@ -148,8 +149,8 @@ public class Supabase
     {
         return new Request.Builder()
             .url(url)
-            .header("apikey", ANON_KEY)
-            .header("Authorization", "Bearer " + ANON_KEY);
+            .header("apikey", System.getProperty("finalboss.anonKey", ANON_KEY))
+            .header("Authorization", "Bearer " + System.getProperty("finalboss.anonKey", ANON_KEY));
     }
 
     private int send(Request.Builder request, String what)
@@ -179,7 +180,7 @@ public class Supabase
     public static String str(JsonObject row, String key)
     {
         JsonElement el = row.get(key);
-        return el == null || el.isJsonNull() ? "" : el.getAsString().trim();
+        return el == null || !el.isJsonPrimitive() ? "" : el.getAsString().trim();
     }
 
     public static boolean has(JsonObject row, String key)
@@ -190,22 +191,31 @@ public class Supabase
 
     public static int intOr(JsonObject row, String key, int def)
     {
-        return has(row, key) ? row.get(key).getAsInt() : def;
+        try { return has(row, key) ? new java.math.BigDecimal(str(row, key)).intValueExact() : def; }
+        catch (RuntimeException e) { return def; }
     }
 
     public static long longOr(JsonObject row, String key, long def)
     {
-        return has(row, key) ? row.get(key).getAsLong() : def;
+        try { return has(row, key) ? new java.math.BigDecimal(str(row, key)).longValueExact() : def; }
+        catch (RuntimeException e) { return def; }
     }
 
     public static Integer intOrNull(JsonObject row, String key)
     {
-        return has(row, key) ? row.get(key).getAsInt() : null;
+        try { return has(row, key) ? new java.math.BigDecimal(str(row, key)).intValueExact() : null; }
+        catch (RuntimeException e) { return null; }
+    }
+
+    public static double doubleOr(JsonObject row, String key, double def)
+    {
+        try { double value = Double.parseDouble(str(row, key)); return Double.isFinite(value) ? value : def; }
+        catch (RuntimeException e) { return def; }
     }
 
     public static boolean bool(JsonObject row, String key)
     {
-        return has(row, key) && row.get(key).getAsBoolean();
+        return "true".equals(str(row, key));
     }
 
     public static Instant instant(JsonObject row, String key, Instant def)

@@ -1,5 +1,7 @@
 # Final Boss Clan Plugin
 
+**v3 rewrite:** See [DEPLOYMENT.md](DEPLOYMENT.md) for the complete SQL package, test-project setup, migration and acceptance checks. This branch requires the v3 database API.
+
 A RuneLite plugin for the **Final Boss** OSRS clan: announcements, drop
 logging, looking-for-group, and clan personal-best leaderboards in one
 side panel. The panel unlocks after clan membership is verified.
@@ -7,8 +9,7 @@ side panel. The panel unlocks after clan membership is verified.
 ## Features
 
 - **Clan Verification** — Verifies membership via the Wise Old Man API
-  (Group 1055). Non-members see a locked panel; no data leaves the client
-  unverified.
+  (Group 1055). Non-members see a locked panel. The WOM lookup sends the player name to check membership; clan uploads start only after verification.
 - **Announcements** — Clan-curated long-form announcements written by the
   clan staff (via a Google Sheet synced to the clan database), shown
   newest-first in their own tab.
@@ -19,7 +20,7 @@ side panel. The panel unlocks after clan membership is verified.
   Wiki drop table bundled with the plugin, and worth at least a small
   minimum so 1/128 junk stays out), on the clan-curated **notable items**
   list (untradeables like Araxyte fang), or a **pet** (always logged).
-  Each logged drop records its drop rate, shown as "[1/512]" in the log
+  Drops are queued locally for retry and use stable event IDs. Known drop rates are recorded, shown as "[1/512]" in the log
   and in Discord. Covers NPC kills, raid chests (CoX/ToB/ToA), and reward
   chests the client reports differently — the Gauntlet, the Whisperer,
   Araxxor, the Royal Titans — which require the core Loot Tracker plugin
