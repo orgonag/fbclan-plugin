@@ -185,7 +185,7 @@ public class DropLogger
     // every viewer. Executor.
     public JsonArray recent(int limit)
     {
-        JsonArray rows = db.getOrNull("drops", "select=" + COLUMNS + "&order=created_at.desc,id.desc&limit=" + Math.max(1, Math.min(200, limit)));
+        JsonArray rows = db.getOrNull("drops", "select=" + COLUMNS + "&order=created_at.desc,id.asc&limit=" + Math.max(1, Math.min(200, limit)));
         if (rows == null) throw new IllegalStateException("Could not refresh drops. Showing the last loaded list.");
         for (com.google.gson.JsonElement el : rows)
         {

@@ -147,7 +147,9 @@ public class Dashboard
             gpWeek = new GpWeek(Supabase.longOr(t, "total_gp", 0), Supabase.intOr(t, "drop_count", 0),
                 Collections.unmodifiableList(names));
         }
-        JsonArray wom = db.getOrNull("wom_cache", "select=metric,payload,updated_at");
+        // Only the two gains rows are rendered; the boss KC rows the sync also
+        // writes are ~97% of the table by size and would just be discarded.
+        JsonArray wom = db.getOrNull("wom_cache", "select=metric,payload,updated_at&metric=in.(gains_overall_week,gains_ehb_week)");
         if (wom != null)
         {
             applyWomCache(wom);
