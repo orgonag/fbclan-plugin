@@ -107,11 +107,16 @@ public class Supabase
             }
             if (raw.length() > 8_000_000) return new ApiResult(response.code(), null, "Response too large");
             JsonElement body = raw.isEmpty() ? null : new JsonParser().parse(raw);
+            if (!response.isSuccessful())
+            {
+                log.warn("Supabase {} {} failed: {} {}", request.method(), request.url().encodedPath(),
+                    response.code(), raw.substring(0, Math.min(raw.length(), 300)));
+            }
             return new ApiResult(response.code(), body, null, response.header("Content-Range"));
         }
         catch (IOException | RuntimeException e)
         {
-            log.debug("Supabase request unavailable", e);
+            log.warn("Supabase {} {} unavailable: {}", request.method(), request.url().encodedPath(), e.toString());
             return new ApiResult(0, null, "Cannot reach the clan database");
         }
     }
