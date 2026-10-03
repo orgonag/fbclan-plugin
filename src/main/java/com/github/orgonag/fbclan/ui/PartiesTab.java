@@ -60,7 +60,7 @@ public class PartiesTab extends Tab
     private String applyingId;
     private Object filter;
     private boolean hideFull;
-    private boolean showFormed;
+    private boolean showFormed = true;
     private String addMemberDraft = "";
     private Role addMemberRole;
     private JPanel applicationPanel;
@@ -99,6 +99,7 @@ public class PartiesTab extends Tab
         });
         Theme.Btn formedChip = Theme.button("Formed (7d)", Theme.Btn.Kind.CHIP, () -> {});
         formedChip.setToolTipText("Parties that filled up in the last 7 days");
+        formedChip.setOn(showFormed);
         formedChip.addActionListener(e -> {
             showFormed = !showFormed;
             formedChip.setOn(showFormed);

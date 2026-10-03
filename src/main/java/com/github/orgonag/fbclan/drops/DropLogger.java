@@ -74,6 +74,14 @@ public class DropLogger
     private final PartyService partyService;
     private final ScheduledExecutorService executor;
     private final okhttp3.OkHttpClient http;
+    // Pet attribution state; client thread only.
+    private String lastSource;
+    private int lastSourceTick = Integer.MIN_VALUE / 2;
+    private String petSource;
+    private int petTick = -1;
+    private int newItemId;
+    private int newItemTick = -1;
+    private java.util.Map<Integer, Integer> inventoryCounts = Collections.emptyMap();
 
     @Inject
     public DropLogger(Client client, FinalBossConfig config, Clan clan, ClanContent content, DropRates rates,
@@ -121,6 +129,8 @@ public class DropLogger
         long rareMin = Math.max(0, config.rareDropMinValueGp());
         Set<String> notable = content.notableItems();
         String display = DropRules.displaySource(source);
+        lastSource = display;
+        lastSourceTick = client.getTickCount();
 
         List<Drop> drops = new ArrayList<>();
         for (ItemStack stack : items)
@@ -154,29 +164,90 @@ public class DropLogger
     }
 
     // Pets only announce themselves in chat. Untradeable, so they bypass
-    // the value rules. Client thread.
+    // the value rules. The source is whatever dropped loot this tick or
+    // the one before; the name comes from the new follower, or for a
+    // backpack pet from the untradeable item that lands in the inventory
+    // (the message and the inventory update can arrive in either order).
+    // Client thread.
     public void onChatMessage(ChatMessage event)
     {
-        String rsn = clan.rsn();
         if (event.getType() != ChatMessageType.GAMEMESSAGE || !clan.canUpload() || !config.enableDropLogging()
             || !DropRules.isPetMessage(event.getMessage()))
         {
             return;
         }
-        String name = "Pet";
+        int tick = client.getTickCount();
+        String source = tick - lastSourceTick <= 1 && lastSource != null ? lastSource : "Pet drop";
         if (DropRules.isFollowerPet(event.getMessage()))
         {
             NPC follower = client.getFollower();
-            if (follower != null && follower.getName() != null)
-            {
-                name = "Pet (" + follower.getName() + ")";
-            }
+            String name = follower != null && follower.getName() != null ? "Pet (" + follower.getName() + ")" : "Pet";
+            dispatch(clan.rsn(), source, Collections.singletonList(new Drop(name, 0, 0, 1, null)));
         }
         else if (DropRules.isDuplicatePet(event.getMessage()))
         {
-            name = "Pet (duplicate)";
+            dispatch(clan.rsn(), source, Collections.singletonList(new Drop("Pet (duplicate)", 0, 0, 1, null)));
         }
-        dispatch(rsn, "Pet drop", Collections.singletonList(new Drop(name, 0, 0, 1, null)));
+        else if (newItemTick == tick && newItemId > 0)
+        {
+            backpackPet(source, newItemId);
+        }
+        else
+        {
+            petSource = source;
+            petTick = tick;
+        }
+    }
+
+    // Inventory changes: remember an untradeable item that just appeared,
+    // and settle a backpack pet that is waiting for it. Client thread.
+    public void onInventoryChanged(net.runelite.api.ItemContainer inventory)
+    {
+        java.util.Map<Integer, Integer> now = new java.util.HashMap<>();
+        for (net.runelite.api.Item item : inventory.getItems())
+        {
+            if (item.getId() > 0) now.merge(item.getId(), item.getQuantity(), Integer::sum);
+        }
+        int added = 0;
+        for (java.util.Map.Entry<Integer, Integer> e : now.entrySet())
+        {
+            if (e.getValue() > inventoryCounts.getOrDefault(e.getKey(), 0)
+                && !itemManager.getItemComposition(e.getKey()).isTradeable())
+            {
+                added = e.getKey();
+            }
+        }
+        inventoryCounts = now;
+        if (added <= 0) return;
+        newItemId = added;
+        newItemTick = client.getTickCount();
+        if (petTick >= 0 && newItemTick - petTick <= 1)
+        {
+            backpackPet(petSource, added);
+        }
+    }
+
+    // A backpack pet whose item never showed up is still logged, unnamed. Client thread.
+    public void onTick()
+    {
+        if (petTick >= 0 && client.getTickCount() - petTick > 1)
+        {
+            String source = petSource;
+            petTick = -1;
+            if (clan.canUpload() && config.enableDropLogging())
+            {
+                dispatch(clan.rsn(), source, Collections.singletonList(new Drop("Pet", 0, 0, 1, null)));
+            }
+        }
+    }
+
+    private void backpackPet(String source, int itemId)
+    {
+        petTick = -1;
+        newItemId = 0;
+        if (!clan.canUpload() || !config.enableDropLogging()) return;
+        String name = "Pet (" + itemManager.getItemComposition(itemId).getName() + ")";
+        dispatch(clan.rsn(), source, Collections.singletonList(new Drop(name, itemId, 0, 1, null)));
     }
 
     // ------------------------------------------------------------ reads

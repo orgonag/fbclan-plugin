@@ -69,6 +69,8 @@ class HostWizard
     private final JPanel stepBody = Theme.stack(10);
     private final JTextArea error = Theme.wrap("", Theme.RED);
     private final Theme.Btn back = Theme.button("Back", Theme.Btn.Kind.GHOST, this::back);
+    private final Theme.Btn details = Theme.button("Next (details)", Theme.Btn.Kind.GHOST, this::next);
+    private final Theme.Btn quick = Theme.button("Post now", Theme.Btn.Kind.PRIMARY, this::submit);
     private final Theme.Btn next = Theme.button("Next", Theme.Btn.Kind.PRIMARY, this::next);
     private int step;
     private int world;
@@ -104,12 +106,17 @@ class HostWizard
         bodyHolder.add(stepBody, BorderLayout.NORTH);
         JScrollPane scroll = new JScrollPane(bodyHolder);
         scroll.setBorder(null);
-        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        Theme.slim(scroll);
         JPanel footer = Theme.stack(6);
         footer.setBorder(BorderFactory.createEmptyBorder(8, 14, 12, 14));
         error.setVisible(false);
         footer.add(error);
-        footer.add(Theme.row(back, null, next));
+        JPanel forward = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 6, 0));
+        forward.setOpaque(false);
+        forward.add(details);
+        forward.add(quick);
+        forward.add(next);
+        footer.add(Theme.row(back, null, forward));
 
         JPanel root = new JPanel(new BorderLayout());
         root.setBackground(Theme.BG);
@@ -153,7 +160,7 @@ class HostWizard
     {
         error.setText(message == null ? "" : message);
         error.setVisible(message != null);
-        next.setEnabled(!busy);
+        setBusy(busy);
         error.getParent().revalidate();
     }
 
@@ -161,6 +168,7 @@ class HostWizard
     {
         this.busy = busy;
         next.setEnabled(!busy);
+        quick.setEnabled(!busy);
     }
 
     void setWorld(int world)
@@ -186,6 +194,8 @@ class HostWizard
         Activity activity = activity();
         boolean hard = activity.hasHardMode() && hardModeBox.isSelected();
         int capacity = (Integer) sizeSpinner.getValue();
+        // A quick post skips step 2, so pick a valid default role here.
+        if (activity.hasRoles()) syncRoles(activity, capacity, hard);
         Map<Role, Integer> counts = new EnumMap<>(Role.class);
         coxCounts.forEach((r, s) -> counts.put(r, (Integer) s.getValue()));
         return Party.builder()
@@ -214,11 +224,17 @@ class HostWizard
         show(step - 1);
     }
 
+    // Post (or save) with whatever is set; untouched steps keep their defaults.
+    private void submit()
+    {
+        onSubmit.accept(this);
+    }
+
     private void next()
     {
         if (step == STEPS.length - 1)
         {
-            onSubmit.accept(this);
+            submit();
             return;
         }
         if (step == 1)
@@ -243,6 +259,10 @@ class HostWizard
         showError(null);
         heading.setText(new String[]{"Pick an activity", "Set requirements", "Final details"}[step]);
         back.setVisible(step > 0);
+        details.setVisible(step == 0);
+        quick.setVisible(step == 0);
+        quick.setText(editing ? "Save now" : "Post now");
+        next.setVisible(step > 0);
         next.setText(step < STEPS.length - 1 ? "Next" : editing ? "Save changes" : "Post party");
         rebuild();
         dialog.repaint();
@@ -321,12 +341,7 @@ class HostWizard
             return;
         }
         boolean hard = hardModeBox.isSelected();
-        // Read the pick before clearing, so a size/mode change keeps it.
-        Object previous = hostRoleBox.getSelectedItem();
-        hostRoleBox.removeAllItems();
-        List<Role> roles = activity == Activity.TOB ? distinct(Role.tobComposition(size, hard)) : Role.playable(activity, hard);
-        roles.forEach(hostRoleBox::addItem);
-        if (previous != null && roles.contains(previous)) hostRoleBox.setSelectedItem(previous);
+        syncRoles(activity, size, hard);
         stepBody.add(Theme.labeled("Your role", hostRoleBox));
         if (activity == Activity.TOB)
         {
@@ -418,6 +433,17 @@ class HostWizard
     }
 
     // ------------------------------------------------------------ helpers
+
+    // The host-role choices for this activity, size and mode; keeps the
+    // current pick when it is still valid, else the first role.
+    private void syncRoles(Activity activity, int size, boolean hard)
+    {
+        Object previous = hostRoleBox.getSelectedItem();
+        hostRoleBox.removeAllItems();
+        List<Role> roles = activity == Activity.TOB ? distinct(Role.tobComposition(size, hard)) : Role.playable(activity, hard);
+        roles.forEach(hostRoleBox::addItem);
+        if (previous != null && roles.contains(previous)) hostRoleBox.setSelectedItem(previous);
+    }
 
     private Activity activity()
     {

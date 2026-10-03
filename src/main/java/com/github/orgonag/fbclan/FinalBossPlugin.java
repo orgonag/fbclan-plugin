@@ -27,6 +27,8 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.ItemContainerChanged;
+import net.runelite.api.gameval.InventoryID;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.events.RuneScapeProfileChanged;
 import net.runelite.api.events.GameStateChanged;
@@ -260,8 +262,18 @@ public class FinalBossPlugin extends Plugin
     }
 
     @Subscribe
+    public void onItemContainerChanged(ItemContainerChanged event)
+    {
+        if (event.getContainerId() == InventoryID.INV)
+        {
+            drops.onInventoryChanged(event.getItemContainer());
+        }
+    }
+
+    @Subscribe
     public void onGameTick(GameTick event)
     {
+        drops.onTick();
         if (client.getTickCount() % 50 == 0)
         {
             pbs.maybeSeed();

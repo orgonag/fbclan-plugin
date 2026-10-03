@@ -138,10 +138,55 @@ final class Theme
         JScrollPane pane = new JScrollPane(view);
         pane.setBorder(null);
         pane.getViewport().setBackground(BG);
-        pane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        pane.getVerticalScrollBar().setUnitIncrement(16);
+        slim(pane);
         host.add(pane, BorderLayout.CENTER);
         return list;
+    }
+
+    // A thin rounded thumb with no arrows or track, in place of the chunky default.
+    static void slim(JScrollPane pane)
+    {
+        pane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        javax.swing.JScrollBar bar = pane.getVerticalScrollBar();
+        bar.setUnitIncrement(16);
+        bar.setOpaque(false);
+        bar.setPreferredSize(new Dimension(8, 0));
+        bar.setUI(new javax.swing.plaf.basic.BasicScrollBarUI()
+        {
+            @Override
+            protected void paintTrack(Graphics g, JComponent c, Rectangle r)
+            {
+            }
+
+            @Override
+            protected void paintThumb(Graphics g, JComponent c, Rectangle r)
+            {
+                if (r.isEmpty()) return;
+                Graphics2D g2 = smooth(g);
+                g2.setColor(isThumbRollover() || isDragging ? FAINT : LINE);
+                g2.fillRoundRect(r.x + 2, r.y + 2, r.width - 4, r.height - 4, 4, 4);
+                g2.dispose();
+            }
+
+            @Override
+            protected javax.swing.JButton createDecreaseButton(int orientation)
+            {
+                return none();
+            }
+
+            @Override
+            protected javax.swing.JButton createIncreaseButton(int orientation)
+            {
+                return none();
+            }
+
+            private javax.swing.JButton none()
+            {
+                javax.swing.JButton b = new javax.swing.JButton();
+                b.setPreferredSize(new Dimension(0, 0));
+                return b;
+            }
+        });
     }
 
     // ------------------------------------------------------------ text

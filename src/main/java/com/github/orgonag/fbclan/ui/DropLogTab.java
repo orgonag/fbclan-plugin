@@ -213,7 +213,7 @@ public class DropLogTab extends Tab
             return !screenshot.isEmpty();
         }
 
-        // Pets carry no item id; show a pet sprite instead.
+        // Follower pets carry no item id; show a stand-in pet sprite.
         int itemId()
         {
             return id > 0 ? id : ItemID.SNAKEPET;
@@ -221,7 +221,7 @@ public class DropLogTab extends Tab
 
         Theme.Tier tier()
         {
-            if (id == 0 && name.startsWith("Pet")) return Theme.Tier.PET;
+            if (value == 0 && name.startsWith("Pet")) return Theme.Tier.PET;
             if ((rarity > 0 && rarity <= 0.001) || value >= 100_000_000L) return Theme.Tier.MEGA;
             if ((rarity > 0 && rarity <= 0.01) || value >= 10_000_000L) return Theme.Tier.RARE;
             return Theme.Tier.COMMON;
