@@ -4,7 +4,7 @@ import com.github.orgonag.fbclan.core.Clan;
 import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.pbs.Leaderboards;
 import com.github.orgonag.fbclan.pbs.Leaderboards.Entry;
-import com.github.orgonag.fbclan.pbs.PbParser;
+import com.github.orgonag.fbclan.pbs.PbFormat;
 import com.github.orgonag.fbclan.stats.Dashboard;
 import com.github.orgonag.fbclan.stats.Dashboard.Named;
 import java.awt.Color;
@@ -214,8 +214,8 @@ public class LeaderboardsTab extends Tab
                     int rank = 1;
                     for (Entry e : pbs.recent())
                     {
-                        rows.add(new Row(rank++, e.getRsn(), PbParser.displayName(e.getBossKey()) + " · " + e.getRsn(),
-                            PbParser.formatSeconds(e.getSeconds()), null));
+                        rows.add(new Row(rank++, e.getRsn(), PbFormat.boss(e.getBossKey()) + " · " + e.getRsn(),
+                            PbFormat.seconds(e.getSeconds()), null));
                     }
                     return new Board(rows, "No new clan bests yet.", "newest first");
                 }
@@ -223,7 +223,7 @@ public class LeaderboardsTab extends Tab
                 {
                     if (e.getBossKey().equals(boss))
                     {
-                        rows.add(new Row(e.getRank(), e.getRsn(), e.getRsn(), PbParser.formatSeconds(e.getSeconds()), null));
+                        rows.add(new Row(e.getRank(), e.getRsn(), e.getRsn(), PbFormat.seconds(e.getSeconds()), null));
                     }
                 }
                 return new Board(rows, "No personal bests recorded yet.", "all-time");
@@ -243,7 +243,7 @@ public class LeaderboardsTab extends Tab
         Map<String, String> out = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (Entry e : pbs.board())
         {
-            out.put(PbParser.displayName(e.getBossKey()), e.getBossKey());
+            out.put(PbFormat.boss(e.getBossKey()), e.getBossKey());
         }
         return out;
     }

@@ -50,19 +50,19 @@ public interface FinalBossConfig extends Config
         return DropRules.MIN_THRESHOLD_GP;
     }
 
-    @Range(min = 0, max = 1_000_000)
+    @Range(min = DropRules.MIN_RARE_DENOMINATOR, max = 1_000_000)
     @ConfigItem(
         keyName = "rareDropThreshold",
         name = "Rare drop threshold (1 in X)",
         description = "Log drops whose drop rate is 1 in X or rarer, even below the valuable threshold. "
-            + "100 = 1% or rarer. 0 turns the rarity rule off. Uses the OSRS Wiki drop table; "
+            + "250 = 1 in 250 or rarer (the minimum). Uses the OSRS Wiki drop table; "
             + "drops it doesn't cover only qualify by value or the clan's notable list.",
         section = dropLoggingSection,
         position = 2
     )
     default int rareDropThreshold()
     {
-        return 100;
+        return DropRules.MIN_RARE_DENOMINATOR;
     }
 
     @Range(min = 0)
