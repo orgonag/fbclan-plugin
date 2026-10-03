@@ -19,11 +19,15 @@ import lombok.Value;
 public class PartyApi
 {
     public enum AddResult { OK, REJECTED, FAILED }
-    @Value public static class Snapshot { List<Party> parties; List<FormedParty> formed; }
+    // `scheduling`: the server supports start times and multiple posts per host.
+    @Value public static class Snapshot { List<Party> parties; List<FormedParty> formed; boolean scheduling; }
+    public static final Snapshot EMPTY = new Snapshot(Collections.emptyList(), Collections.emptyList(), false);
     private final Supabase db;
     private final Clan clan;
     private final ThreadLocal<Session> actor = new ThreadLocal<>();
-    private volatile Snapshot snapshot = new Snapshot(Collections.emptyList(), Collections.emptyList());
+    // The server's reason for the last refused command on this thread, else null.
+    private final ThreadLocal<String> refusal = new ThreadLocal<>();
+    private volatile Snapshot snapshot = EMPTY;
     @Inject public PartyApi(Supabase db, Clan clan) { this.db = db; this.clan = clan; }
 
     public boolean inSession(Session session, java.util.function.BooleanSupplier action)
@@ -57,7 +61,14 @@ public class PartyApi
             }
         }
         catch (RuntimeException e) { return null; }
-        return new Snapshot(Collections.unmodifiableList(parties), Collections.unmodifiableList(formed));
+        return new Snapshot(Collections.unmodifiableList(parties), Collections.unmodifiableList(formed), Supabase.bool(body, "scheduling"));
+    }
+
+    // Executor: why the server refused the last command run on this thread
+    // ("You already have an ASAP party"), or null when it never answered.
+    public String refusal()
+    {
+        return refusal.get();
     }
 
     public void publish(Snapshot value) { snapshot = value; }
@@ -81,10 +92,14 @@ public class PartyApi
         args.add("p_data", data);
         args.addProperty("p_operation", UUID.randomUUID().toString());
         if (expected != null) args.addProperty("p_expected", expected);
+        refusal.remove();
         for (int attempt = 0; attempt < 2 && clan.current(session); attempt++)
         {
             ApiResult result = db.rpcResult("fb_lfg", args);
             if (result.successful()) return true;
+            // A domain refusal (HTTP 200 with a non-ok status) carries a
+            // readable reason; transport errors don't.
+            if (result.getHttpStatus() >= 200 && result.getHttpStatus() < 300 && result.getError() == null) refusal.set(result.message());
             if (!result.retryable()) return false;
         }
         return false;

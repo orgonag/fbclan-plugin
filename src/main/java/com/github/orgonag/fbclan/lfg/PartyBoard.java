@@ -54,6 +54,7 @@ public class PartyBoard
     private volatile List<Party> parties = Collections.emptyList();
     private volatile List<FormedParty> formed = Collections.emptyList();
     private volatile Set<String> online = Collections.emptySet();
+    private volatile boolean scheduling;
     private volatile int world;
     private volatile Listener listener = () -> {};
     private ScheduledFuture<?> poll;
@@ -71,6 +72,9 @@ public class PartyBoard
     private Set<String> previousFormed = Collections.emptySet();
     private boolean primed;
     private final Set<String> selfLeft = new HashSet<>();
+    // Scheduled parties already announced as starting soon / unfilled.
+    private final Set<String> startingSoon = new HashSet<>();
+    private final Set<String> unfilled = new HashSet<>();
 
     @Inject
     public PartyBoard(Client client, ClientThread clientThread, FinalBossConfig config, Clan clan, PartyApi api,
@@ -111,17 +115,56 @@ public class PartyBoard
         return world;
     }
 
-    public Party mine()
+    // ASAP first (newest first), then scheduled by start time.
+    public static final java.util.Comparator<Party> ORDER = (a, b) -> {
+        if (a.isScheduled() != b.isScheduled()) return a.isScheduled() ? 1 : -1;
+        int byStart = a.isScheduled() ? a.getScheduledFor().compareTo(b.getScheduledFor()) : 0;
+        return byStart != 0 ? byStart : b.getCreatedAt().compareTo(a.getCreatedAt());
+    };
+
+    // True when the server supports start times and several posts per host.
+    public boolean scheduling()
+    {
+        return scheduling;
+    }
+
+    // Every post this player hosts, in ORDER.
+    public List<Party> mine()
     {
         String rsn = clan.rsn();
+        List<Party> out = new ArrayList<>();
         for (Party p : parties)
         {
-            if (p.isHostedBy(rsn))
-            {
-                return p;
-            }
+            if (p.isHostedBy(rsn)) out.add(p);
+        }
+        out.sort(ORDER);
+        return out;
+    }
+
+    // This player's ASAP post, else null.
+    public Party mineAsap()
+    {
+        for (Party p : mine())
+        {
+            if (!p.isScheduled()) return p;
         }
         return null;
+    }
+
+    public int mineScheduled()
+    {
+        int n = 0;
+        for (Party p : mine())
+        {
+            if (p.isScheduled()) n++;
+        }
+        return n;
+    }
+
+    // Executor. Post `party` (chat command); `onDone` gets null or the reason it failed.
+    public void post(Party party, java.util.function.Consumer<String> onDone)
+    {
+        run(() -> api.save(party), "Couldn't reach the party board — try again.", onDone);
     }
 
     // ------------------------------------------------------------ lifecycle
@@ -152,7 +195,8 @@ public class PartyBoard
         lastHeartbeat = 0;
         online = Collections.emptySet();
         world = 0;
-        api.publish(new PartyApi.Snapshot(Collections.emptyList(), Collections.emptyList()));
+        api.publish(PartyApi.EMPTY);
+        scheduling = false;
         if (poll != null)
         {
             poll.cancel(true);
@@ -164,6 +208,8 @@ public class PartyBoard
             previousFormed = Collections.emptySet();
             primed = false;
             selfLeft.clear();
+            startingSoon.clear();
+            unfilled.clear();
         }
         parties = Collections.emptyList();
         formed = Collections.emptyList();
@@ -204,9 +250,13 @@ public class PartyBoard
                 api.publish(fetched);
                 parties = fetched.getParties();
                 formed = fetched.getFormed();
+                scheduling = fetched.isScheduling();
                 notify(parties, formed, session.getRsn());
             }
-            if (enabled && capturedEpoch == epoch && config.enableLfg() && mine() != null && System.currentTimeMillis() - lastHeartbeat >= HEARTBEAT_MINUTES * 60_000L
+            // Only servers without scheduling expire posts on a 30-minute
+            // heartbeat; scheduling servers keep them for the whole week.
+            if (enabled && capturedEpoch == epoch && config.enableLfg() && !scheduling && mineAsap() != null
+                && System.currentTimeMillis() - lastHeartbeat >= HEARTBEAT_MINUTES * 60_000L
                 && api.inSession(session, () -> api.heartbeat(session.getRsn()))) lastHeartbeat = System.currentTimeMillis();
             if (enabled && capturedEpoch == epoch && clan.current(session)) listener.onChanged();
         }
@@ -225,12 +275,18 @@ public class PartyBoard
         listener.onChanged();
         executor.submit(() -> {
             boolean ok = false;
-            try { if (enabled && capturedEpoch == epoch && config.enableLfg()) ok = api.inSession(session, action); }
+            String reason = null;
+            try
+            {
+                if (enabled && capturedEpoch == epoch && config.enableLfg()) ok = api.inSession(session, action);
+                reason = api.refusal();
+            }
             catch (RuntimeException e) { log.warn("LFG action failed", e); }
             finally { writing.set(false); }
             if (enabled && capturedEpoch == epoch && clan.current(session))
             {
-                onError.accept(ok ? null : failure);
+                // The server's own reason ("Party is full") beats the generic text.
+                onError.accept(ok ? null : reason != null ? reason : failure);
                 refresh();
                 listener.onChanged();
             }
@@ -291,6 +347,7 @@ public class PartyBoard
             if (primed)
             {
                 diff(previous, nowById, rsn, formedFrom, messages);
+                reminders(now, rsn, messages);
                 for (FormedParty f : formedNow)
                 {
                     if (!previousFormed.contains(f.getId()) && f.includes(rsn))
@@ -331,6 +388,11 @@ public class PartyBoard
             }
             Party.Applicant mine = p.applicantFor(rsn);
             Party.Applicant mineBefore = before == null ? null : before.applicantFor(rsn);
+            if (mine != null && mine.getStatus() != Party.Status.DECLINED && before != null
+                && !java.util.Objects.equals(before.getScheduledFor(), p.getScheduledFor()))
+            {
+                out.add(p.getHostRsn() + " moved their " + p.title() + " party to " + when(p.getScheduledFor()) + ".");
+            }
             if (mine != null && mineBefore != null && mine.getStatus() != mineBefore.getStatus())
             {
                 if (mine.isAccepted())
@@ -360,10 +422,44 @@ public class PartyBoard
             Party.Applicant mineBefore = before.applicantFor(rsn);
             if (mineBefore != null && mineBefore.getStatus() != Party.Status.DECLINED && !selfLeft.remove(before.getId()))
             {
-                out.add(before.getHostRsn() + "'s " + before.title() + " party was disbanded.");
+                boolean expired = scheduling && !java.time.Instant.now().isBefore(before.expiresAt());
+                out.add(before.getHostRsn() + "'s " + before.title() + " party "
+                    + (expired ? "expired." : scheduling ? "was cancelled." : "was disbanded."));
             }
         }
         selfLeft.clear();
+    }
+
+    // Scheduled parties: "starts in N min" to the host and accepted
+    // members, and one "didn't fill" to the host once the time passes.
+    private void reminders(List<Party> now, String rsn, List<String> out)
+    {
+        java.time.Instant t = java.time.Instant.now();
+        for (Party p : now)
+        {
+            if (!p.isScheduled()) continue;
+            boolean host = p.isHostedBy(rsn);
+            Party.Applicant mine = p.applicantFor(rsn);
+            boolean in = host || (mine != null && mine.isAccepted());
+            long minutes = java.time.Duration.between(t, p.getScheduledFor()).toMinutes();
+            if (in && minutes >= 0 && minutes <= 15 && startingSoon.add(p.getId()))
+            {
+                out.add((host ? "Your " : p.getHostRsn() + "'s ") + p.title() + " party starts in " + Math.max(1, minutes) + " min"
+                    + (p.getWorld() != null ? " (World " + p.getWorld() + ")" : "") + ".");
+            }
+            if (host && t.isAfter(p.getScheduledFor()) && !p.isFull() && unfilled.add(p.getId()))
+            {
+                out.add("Your " + p.title() + " party didn't fill by its start time. Edit the time or cancel it.");
+            }
+        }
+    }
+
+    // "ASAP", or the start in the player's time zone: "Sat 20:00".
+    public static String when(java.time.Instant at)
+    {
+        if (at == null) return "ASAP";
+        return java.time.format.DateTimeFormatter.ofPattern("EEE HH:mm", java.util.Locale.ENGLISH)
+            .withZone(java.time.ZoneId.systemDefault()).format(at);
     }
 
     private void deliver(String message)

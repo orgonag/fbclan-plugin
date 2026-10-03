@@ -47,6 +47,8 @@ import net.runelite.client.game.ItemManager;
 public class PartiesTab extends Tab
 {
     private static final Color OFFLINE = new Color(0xBF3F3F);
+    // Scheduled posts a host may keep at once (the server enforces it too).
+    private static final int MAX_SCHEDULED = 7;
 
     private final Clan clan;
     private final FinalBossConfig config;
@@ -78,7 +80,7 @@ public class PartiesTab extends Tab
         this.killcounts = killcounts;
         this.items = items;
 
-        hostButton = Theme.button("Host a party", Theme.Btn.Kind.PRIMARY, () -> openWizard(false));
+        hostButton = Theme.button("Host a party", Theme.Btn.Kind.PRIMARY, () -> openWizard(null));
         control(hostButton);
         List<Object> filters = new ArrayList<>();
         filters.add("All activities");
@@ -143,24 +145,43 @@ public class PartiesTab extends Tab
 
     // ------------------------------------------------------------ host wizard
 
-    private void openWizard(boolean edit)
+    // `target` = the post to edit, or null to host a new one.
+    private void openWizard(Party target)
     {
+        String id = target == null ? null : target.getId();
         if (wizard != null && wizard.isOpen())
         {
-            if (wizard.isEditing() == edit)
+            if (java.util.Objects.equals(wizard.editingId(), id))
             {
                 wizard.focus();
                 return;
             }
-            // A host-mode wizard left open after a party appeared (or the
-            // reverse) would save the wrong thing; start over in the right mode.
+            // A window open for a different post (or for a new one) would
+            // save the wrong thing; start over for this one.
             wizard.close();
         }
-        Party mine = edit ? board.mine() : null;
-        wizard = new HostWizard(SwingUtilities.getWindowAncestor(this), killcounts, mine,
+        wizard = new HostWizard(SwingUtilities.getWindowAncestor(this), killcounts, target, limits(target),
             p -> partyCard(p, false), this::submit);
         wizard.setBusy(board.isBusy());
         wizard.setWorld(board.world());
+    }
+
+    // Which start-time choices are open, not counting the post being edited.
+    private HostWizard.Limits limits(Party editing)
+    {
+        Party asap = board.mineAsap();
+        boolean asapTaken = asap != null && (editing == null || !asap.getId().equals(editing.getId()));
+        int scheduled = board.mineScheduled() - (editing != null && editing.isScheduled() ? 1 : 0);
+        return new HostWizard.Limits(board.scheduling(), asapTaken, scheduled >= MAX_SCHEDULED);
+    }
+
+    private Party find(String id)
+    {
+        for (Party p : board.parties())
+        {
+            if (p.getId().equals(id)) return p;
+        }
+        return null;
     }
 
     // From the wizard's Post/Save. Result: null closes it, else the error shows in it.
@@ -175,10 +196,10 @@ public class PartiesTab extends Tab
         try
         {
             Party draft = w.build(rsn, board.world());
-            Party existing = w.isEditing() ? board.mine() : null;
-            if (w.isEditing() && existing == null)
+            Party existing = w.editingId() == null ? null : find(w.editingId());
+            if (w.editingId() != null && existing == null)
             {
-                w.showError("Your party is no longer listed. Close this and host a new one.");
+                w.showError("This post is no longer listed. Close this and host a new one.");
                 return;
             }
             Party party = existing == null ? draft : draft.toBuilder().id(existing.getId()).version(existing.getVersion()).build();
@@ -199,11 +220,17 @@ public class PartiesTab extends Tab
     private void render()
     {
         String rsn = clan.rsn();
-        Party mine = board.mine();
+        List<Party> mine = board.mine();
+        boolean scheduling = board.scheduling();
         showError(actionError != null ? actionError : board.refreshError());
         note.setText(board.online().isEmpty() ? "" : board.online().size() + " in clan chat");
-        hostButton.setVisible(mine == null);
-        hostButton.setEnabled(!board.isBusy() && clan.canUpload() && config.enableLfg());
+        // Without scheduling a host has one post, so the button hides while
+        // hosting (Edit is on the card). With it, the button stays until both
+        // the ASAP slot and all scheduled slots are used.
+        boolean full = scheduling && board.mineAsap() != null && board.mineScheduled() >= MAX_SCHEDULED;
+        hostButton.setVisible(scheduling || mine.isEmpty());
+        hostButton.setEnabled(!board.isBusy() && clan.canUpload() && config.enableLfg() && !full);
+        hostButton.setToolTipText(full ? "Post limit reached (1 ASAP + " + MAX_SCHEDULED + " scheduled)" : null);
         if (wizard != null && wizard.isOpen())
         {
             wizard.setBusy(board.isBusy());
@@ -213,21 +240,20 @@ public class PartiesTab extends Tab
         List<Party> others = new ArrayList<>();
         for (Party p : board.parties())
         {
-            boolean isMine = mine != null && p.getId().equals(mine.getId());
             boolean hidden = hideFull && p.isFull() && p.applicantFor(rsn) == null;
-            if (!isMine && passes(p.getActivity()) && !hidden) others.add(p);
+            if (!p.isHostedBy(rsn) && passes(p.getActivity()) && !hidden) others.add(p);
         }
-        // Parties the player is in (or waiting on) float to the top.
+        // Parties the player is in (or waiting on) float to the top; then ASAP, then soonest.
         others.sort((a, b) -> {
             boolean ia = a.applicantFor(rsn) != null;
             boolean ib = b.applicantFor(rsn) != null;
-            return ia != ib ? (ia ? -1 : 1) : b.getCreatedAt().compareTo(a.getCreatedAt());
+            return ia != ib ? (ia ? -1 : 1) : PartyBoard.ORDER.compare(a, b);
         });
         fill(() -> {
-            if (mine != null)
+            if (!mine.isEmpty())
             {
-                list.add(Theme.caps("Your party"));
-                list.add(hostCard(mine));
+                list.add(Theme.caps(scheduling ? "Your posts (" + mine.size() + ")" : "Your party"));
+                mine.forEach(p -> list.add(hostCard(p)));
                 list.add(Theme.caps("Open parties (" + others.size() + ")"));
             }
             if (others.isEmpty())
@@ -268,8 +294,11 @@ public class PartiesTab extends Tab
         String rsn = clan.rsn();
         Theme.Card card = Theme.card(null);
         boolean hostOnline = board.online().contains(Names.normalize(p.getHostRsn()));
-        JLabel host = Theme.text(p.getHostRsn() + " · " + Theme.timeAgo(p.getCreatedAt()), hostOnline ? Theme.GREEN : OFFLINE);
+        String asap = board.scheduling() && !p.isScheduled() ? " · ASAP" : "";
+        JLabel host = Theme.text(p.getHostRsn() + asap + " · " + Theme.timeAgo(p.getCreatedAt()), hostOnline ? Theme.GREEN : OFFLINE);
         card.add(head(p.getActivity(), p.title(), p.getWorld(), host, p.memberCount() + "/" + p.getCapacity()));
+        JLabel start = start(p);
+        if (start != null) card.add(start);
         card.add(Theme.seats(p.memberCount(), p.getCapacity()));
         List<String> meta = new ArrayList<>();
         if (p.getLootRule() != LootRule.UNSPECIFIED) meta.add(p.getLootRule().getDisplayName());
@@ -308,7 +337,8 @@ public class PartiesTab extends Tab
                 render();
             });
             if (rsn == null) apply.setEnabled(false);
-            else if (board.mine() != null) disable(apply, "Disband yours to apply");
+            // Servers without scheduling still forbid hosts from applying elsewhere.
+            else if (!board.scheduling() && !board.mine().isEmpty()) disable(apply, "Disband yours to apply");
             else if (p.isFull()) disable(apply, "Full");
             else if (p.getActivity().hasRoles() && p.openRoles().isEmpty()) disable(apply, "No open roles");
             card.add(apply);
@@ -319,7 +349,10 @@ public class PartiesTab extends Tab
     private JPanel hostCard(Party p)
     {
         Theme.Card card = Theme.card(Theme.ACCENT);
-        card.add(head(p.getActivity(), p.title(), p.getWorld(), null, p.memberCount() + "/" + p.getCapacity()));
+        JLabel asap = board.scheduling() && !p.isScheduled() ? Theme.text("ASAP · " + Theme.timeAgo(p.getCreatedAt()), Theme.SUB) : null;
+        card.add(head(p.getActivity(), p.title(), p.getWorld(), asap, p.memberCount() + "/" + p.getCapacity()));
+        JLabel start = start(p);
+        if (start != null) card.add(start);
         card.add(Theme.seats(p.memberCount(), p.getCapacity()));
         body(card, p);
         List<Applicant> pending = p.pending();
@@ -336,21 +369,64 @@ public class PartiesTab extends Tab
         }
         if (pending.isEmpty() && accepted.isEmpty()) card.add(Theme.text("No applicants yet.", Theme.SUB));
         if (!p.isFull()) card.add(addMemberRow(p));
-        Theme.Btn edit = Theme.button("Edit", Theme.Btn.Kind.GHOST, () -> openWizard(true));
+        Theme.Btn edit = Theme.button("Edit", Theme.Btn.Kind.GHOST, () -> openWizard(p));
         edit.setEnabled(!board.isBusy() && clan.canUpload() && config.enableLfg());
+        boolean scheduling = board.scheduling();
         card.add(pair(edit,
-            Theme.button("Disband", Theme.Btn.Kind.DANGER, () -> {
+            Theme.button(scheduling ? "Cancel post" : "Disband", Theme.Btn.Kind.DANGER, () -> {
                 board.expectSelfLeave(p.getId());
-                run(() -> api.disband(p.getId()), "Couldn't disband — try again.");
+                run(() -> api.disband(p.getId()), scheduling ? "Couldn't cancel — try again." : "Couldn't disband — try again.");
             })));
         return card;
+    }
+
+    // A scheduled post's time line: "Starts Today 20:00 · in 3h",
+    // "Started 40m ago" during the grace period, then "Was Sat 20:00".
+    // Null for ASAP posts.
+    private static JLabel start(Party p)
+    {
+        if (!p.isScheduled()) return null;
+        java.time.Instant now = java.time.Instant.now();
+        java.time.Instant at = p.getScheduledFor();
+        if (now.isBefore(at))
+        {
+            return Theme.bold((p.isFull() ? "Full · starts " : "Starts ") + day(at) + " · in " + span(java.time.Duration.between(now, at)), Theme.ACCENT_HI);
+        }
+        if (now.isBefore(at.plus(Party.GRACE)))
+        {
+            return Theme.bold("Started " + Theme.timeAgo(at), Theme.GREEN);
+        }
+        return Theme.bold("Was " + day(at), Theme.ACCENT);
+    }
+
+    // "Today 20:00", "Tomorrow 09:30", else "Sat 20:00", in the player's zone.
+    static String day(java.time.Instant at)
+    {
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        java.time.LocalDate date = at.atZone(zone).toLocalDate();
+        java.time.LocalDate today = java.time.LocalDate.now(zone);
+        String time = java.time.format.DateTimeFormatter.ofPattern("HH:mm").withZone(zone).format(at);
+        if (date.equals(today)) return "Today " + time;
+        if (date.equals(today.plusDays(1))) return "Tomorrow " + time;
+        return PartyBoard.when(at);
+    }
+
+    // "45m", "3h", "2d 4h".
+    static String span(java.time.Duration d)
+    {
+        long minutes = Math.max(1, d.toMinutes());
+        if (minutes < 60) return minutes + "m";
+        long hours = minutes / 60;
+        if (hours < 24) return hours + "h";
+        return (hours / 24) + "d" + (hours % 24 == 0 ? "" : " " + (hours % 24) + "h");
     }
 
     private JPanel formedCard(FormedParty f)
     {
         String rsn = clan.rsn();
         Theme.Card card = Theme.card(null);
-        JLabel when = Theme.text("Formed " + Theme.timeAgo(f.getFormedAt()) + " · hosted by " + f.getHostRsn(), Theme.SUB);
+        JLabel when = Theme.text("Formed " + Theme.timeAgo(f.getFormedAt()) + " · hosted by " + f.getHostRsn()
+            + (f.getScheduledFor() == null ? "" : " · for " + day(f.getScheduledFor())), Theme.SUB);
         card.add(head(f.getActivity(), f.title(), f.getWorld(), when, f.getMembers().size() + "/" + f.getCapacity()));
         card.add(Theme.wrap(f.roster(), f.includes(rsn) ? Theme.TEXT : Theme.SUB));
         if (f.isHostedBy(rsn))

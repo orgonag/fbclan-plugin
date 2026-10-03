@@ -36,6 +36,7 @@ public class FormedParty
     Integer world;
     List<Member> members;  // host first
     Instant formedAt;
+    Instant scheduledFor;  // null = was an ASAP party
 
     public String title()
     {
@@ -76,7 +77,7 @@ public class FormedParty
             members.add(new Member(a.getRsn(), a.getRole(), a.isAddedByHost()));
         }
         return new FormedParty(null, p.getId(), p.getHostRsn(), p.getActivity(), p.isHardMode(), p.getInvocation(),
-            p.getCapacity(), p.getWorld(), members, Instant.now());
+            p.getCapacity(), p.getWorld(), members, Instant.now(), p.getScheduledFor());
     }
 
     public JsonObject toJson()
@@ -130,6 +131,7 @@ public class FormedParty
             Supabase.has(row, "party_id") ? Supabase.str(row, "party_id") : null,
             Supabase.str(row, "host_rsn"), activity, Supabase.bool(row, "hard_mode"),
             Supabase.intOr(row, "invocation", 0), Supabase.intOr(row, "capacity", Math.max(1, members.size())),
-            Supabase.intOrNull(row, "world"), members, Supabase.instant(row, "formed_at", Instant.now()));
+            Supabase.intOrNull(row, "world"), members, Supabase.instant(row, "formed_at", Instant.now()),
+            Supabase.instant(row, "scheduled_for", null));
     }
 }

@@ -566,6 +566,13 @@ final class Theme
             return value;
         }
 
+        void enable(T v, boolean enabled, String why)
+        {
+            Btn b = buttons.get(values.indexOf(v));
+            b.setEnabled(enabled);
+            b.setToolTipText(enabled ? null : why);
+        }
+
         void set(T v)
         {
             value = values.contains(v) ? v : values.get(0);
