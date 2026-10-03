@@ -33,6 +33,7 @@ public class PartyApi
     public boolean inSession(Session session, java.util.function.BooleanSupplier action)
     {
         actor.set(session);
+        refusal.remove();
         try { return clan.current(session) && action.getAsBoolean(); }
         finally { actor.remove(); }
     }

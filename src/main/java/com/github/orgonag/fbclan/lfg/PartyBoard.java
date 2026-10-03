@@ -115,12 +115,26 @@ public class PartyBoard
         return world;
     }
 
-    // ASAP first (newest first), then scheduled by start time.
+    // ASAP first (newest first), then scheduled by start time, then
+    // scheduled posts whose start (plus grace) has passed.
     public static final java.util.Comparator<Party> ORDER = (a, b) -> {
-        if (a.isScheduled() != b.isScheduled()) return a.isScheduled() ? 1 : -1;
+        int byGroup = Integer.compare(group(a), group(b));
+        if (byGroup != 0) return byGroup;
         int byStart = a.isScheduled() ? a.getScheduledFor().compareTo(b.getScheduledFor()) : 0;
         return byStart != 0 ? byStart : b.getCreatedAt().compareTo(a.getCreatedAt());
     };
+
+    private static int group(Party p)
+    {
+        if (!p.isScheduled()) return 0;
+        return java.time.Instant.now().isAfter(p.getScheduledFor().plus(Party.GRACE)) ? 2 : 1;
+    }
+
+    // True while the board is polling (verified, LFG on).
+    public boolean running()
+    {
+        return enabled;
+    }
 
     // True when the server supports start times and several posts per host.
     public boolean scheduling()
@@ -357,6 +371,12 @@ public class PartyBoard
                             + ": " + f.roster() + ".");
                     }
                 }
+            }
+            else
+            {
+                // First poll after login: remember what already qualifies so
+                // reminders aren't replayed on every login.
+                reminders(now, rsn, new ArrayList<>());
             }
             previous = nowById;
             previousFormed = formedIds;

@@ -73,6 +73,8 @@ class HostWizard
     private final JComboBox<Integer> hourBox = new JComboBox<>();
     private final JComboBox<Integer> minuteBox = new JComboBox<>(new Integer[]{0, 15, 30, 45});
     private final JLabel whenSummary = Theme.text("", Theme.SOFT);
+    // The edited post's start time, else null.
+    private Instant original;
     private final Function<Party, JComponent> preview;
     private final Consumer<HostWizard> onSubmit;
     private final JDialog dialog;
@@ -286,9 +288,17 @@ class HostWizard
         java.time.ZonedDateTime start = editing != null && editing.isScheduled()
             ? editing.getScheduledFor().atZone(zone)
             : java.time.ZonedDateTime.now(zone).plusMinutes(30).plusHours(1).withMinute(0).withSecond(0).withNano(0);
+        if (editing != null && editing.isScheduled())
+        {
+            // Keep an edited post's own time selectable, even if it has passed
+            // or isn't on a 15-minute mark, so other fields can be fixed.
+            original = editing.getScheduledFor();
+            if (((javax.swing.DefaultComboBoxModel<java.time.LocalDate>) dayBox.getModel()).getIndexOf(start.toLocalDate()) < 0) dayBox.insertItemAt(start.toLocalDate(), 0);
+            if (((javax.swing.DefaultComboBoxModel<Integer>) minuteBox.getModel()).getIndexOf(start.getMinute()) < 0) minuteBox.addItem(start.getMinute());
+        }
         dayBox.setSelectedItem(start.toLocalDate());
         hourBox.setSelectedItem(start.getHour());
-        minuteBox.setSelectedItem(start.getMinute() - start.getMinute() % 15);
+        minuteBox.setSelectedItem(original != null ? start.getMinute() : start.getMinute() - start.getMinute() % 15);
         java.awt.event.ActionListener changed = e -> summarize();
         dayBox.addActionListener(changed);
         hourBox.addActionListener(changed);
@@ -307,6 +317,8 @@ class HostWizard
         if (day == null) throw new IllegalArgumentException("Pick a day.");
         Instant at = java.time.ZonedDateTime.of(day, java.time.LocalTime.of((Integer) hourBox.getSelectedItem(), (Integer) minuteBox.getSelectedItem()),
             java.time.ZoneId.systemDefault()).toInstant();
+        // An unchanged time is fine even if it has passed (the server only checks a changed one).
+        if (original != null && at.getEpochSecond() / 60 == original.getEpochSecond() / 60) return original;
         if (!at.isAfter(Instant.now().plusSeconds(60))) throw new IllegalArgumentException("Pick a start time in the future.");
         if (at.isAfter(windowEnd)) throw new IllegalArgumentException("Start time must be within 7 days of posting.");
         return at;

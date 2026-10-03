@@ -207,6 +207,11 @@ public class LfgCommand
             print("[LFG] " + activity.shortName() + (min == max ? " needs exactly " + min : " party size must be " + min + "-" + max) + ".");
             return;
         }
+        if (!board.running())
+        {
+            print("[LFG] The party board isn't ready yet. Try again in a moment.");
+            return;
+        }
         Party asap = board.mineAsap();
         if (asap != null)
         {
