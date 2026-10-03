@@ -6,20 +6,49 @@ import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.FontManager;
 
 /** Clan announcements, full text, newest first. Plain text: nothing to inject. */
 @Singleton
 public class AnnouncementsTab extends Tab
 {
+    // Remembers, in the local RuneLite config, the newest post this player has opened.
+    // Its own group: a write under "finalboss" would restart polling (onConfigChanged).
+    private static final String GROUP = "finalbossui";
+    private static final String SEEN_KEY = "announcementSeen";
+
     private final ClanContent content;
+    private final ConfigManager configManager;
+    private String newest = "";
+    private Runnable unreadListener = () -> {};
 
     @Inject
-    public AnnouncementsTab(ClanContent content, ScheduledExecutorService executor)
+    public AnnouncementsTab(ClanContent content, ConfigManager configManager, ScheduledExecutorService executor)
     {
         super("Announcements", executor);
         this.content = content;
+        this.configManager = configManager;
         render(content.announcements());
+    }
+
+    // EDT. True while the newest post hasn't been opened.
+    boolean unread()
+    {
+        return !newest.isEmpty() && !newest.equals(configManager.getConfiguration(GROUP, SEEN_KEY));
+    }
+
+    // EDT. The tab was opened.
+    void markRead()
+    {
+        if (!unread()) return;
+        configManager.setConfiguration(GROUP, SEEN_KEY, newest);
+        unreadListener.run();
+    }
+
+    void setUnreadListener(Runnable listener)
+    {
+        unreadListener = listener;
     }
 
     @Override
@@ -33,6 +62,9 @@ public class AnnouncementsTab extends Tab
 
     private void render(List<Announcement> items)
     {
+        newest = items.isEmpty() ? "" : Integer.toHexString((items.get(0).getDate() + "|" + items.get(0).getTitle() + "|" + items.get(0).getBody()).hashCode());
+        if (isShowing()) markRead();
+        unreadListener.run();
         fill(() -> {
             if (items.isEmpty())
             {
