@@ -132,6 +132,7 @@ public class FinalBossPlugin extends Plugin
     {
         clan.deactivate();
         stopPolling();
+        SwingUtilities.invokeLater(sidebar::closeWindows);
         toolbar.removeNavigation(navButton);
     }
 
@@ -230,7 +231,10 @@ public class FinalBossPlugin extends Plugin
             pbs.resetSession();
             content.resetSession();
             stopPolling();
-            SwingUtilities.invokeLater(() -> sidebar.show(Clan.Status.VERIFYING));
+            SwingUtilities.invokeLater(() -> {
+                sidebar.closeWindows();
+                sidebar.show(Clan.Status.VERIFYING);
+            });
         }
     }
 
@@ -241,6 +245,7 @@ public class FinalBossPlugin extends Plugin
         pbs.resetSession();
         content.resetSession();
         stopPolling();
+        SwingUtilities.invokeLater(sidebar::closeWindows);
         if (client.getGameState() == GameState.LOGGED_IN) clan.verifyAfter(1);
     }
 

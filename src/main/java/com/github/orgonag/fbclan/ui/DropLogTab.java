@@ -1,116 +1,258 @@
 package com.github.orgonag.fbclan.ui;
 
+import com.github.orgonag.fbclan.core.Clan;
+import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.github.orgonag.fbclan.drops.DropLogger;
 import com.github.orgonag.fbclan.drops.DropRules;
+import com.github.orgonag.fbclan.stats.Dashboard;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Cursor;
-import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import javax.swing.BorderFactory;
+import javax.swing.Icon;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import net.runelite.client.ui.ColorScheme;
-import net.runelite.client.ui.FontManager;
-import net.runelite.client.util.LinkBrowser;
+import javax.swing.SwingConstants;
+import net.runelite.api.gameval.ItemID;
+import net.runelite.client.game.ItemManager;
 
-/** The last 50 clan drops. */
+/** The last 50 clan drops: a top-drop highlight, filter chips, and item rows that open {@link DropViewer}. */
 @Singleton
-public class DropLogTab extends JPanel
+public class DropLogTab extends Tab
 {
+    private enum Filter
+    {
+        ALL("All"), MINE("Mine"), RARE("Rare+"), PETS("Pets");
+
+        final String label;
+
+        Filter(String label)
+        {
+            this.label = label;
+        }
+    }
+
     private final DropLogger drops;
-    private final ScheduledExecutorService executor;
-    private final JPanel list;
-    private final javax.swing.JTextArea refreshError = Ui.plain("");
-    private final java.util.concurrent.atomic.AtomicBoolean refreshing = new java.util.concurrent.atomic.AtomicBoolean();
+    private final DropViewer viewer;
+    private final ItemManager items;
+    private final Clan clan;
+    private List<Drop> rows = Collections.emptyList();
+    private Filter filter = Filter.ALL;
 
     @Inject
-    public DropLogTab(DropLogger drops, ScheduledExecutorService executor)
+    public DropLogTab(DropLogger drops, DropViewer viewer, ItemManager items, Clan clan, ScheduledExecutorService executor)
     {
+        super("Drop Log", executor);
         this.drops = drops;
-        this.executor = executor;
-        setLayout(new BorderLayout());
-        add(refreshError, BorderLayout.NORTH);
-        setBackground(ColorScheme.DARK_GRAY_COLOR);
-        list = Ui.scrollList(this);
+        this.viewer = viewer;
+        this.items = items;
+        this.clan = clan;
+        control(new Theme.Choice<>(Arrays.asList(Filter.values()), f -> f.label, filter, f -> {
+            filter = f;
+            render();
+        }));
     }
 
+    @Override
     public void refresh()
     {
-        if (!refreshing.compareAndSet(false, true)) return;
-        Ui.async(executor, () -> drops.recent(50), rows -> { refreshing.set(false); render(rows); }, message -> { if (message != null) refreshing.set(false); refreshError.setText(message == null ? "" : message); });
+        load(() -> parse(drops.recent(50)), parsed -> {
+            rows = parsed;
+            render();
+        });
     }
 
-    private void render(JsonArray rows)
+    public void closeViewer()
     {
-        list.removeAll();
-        if (rows.size() == 0)
-        {
-            list.add(Ui.empty("No drops logged yet."));
-        }
-        for (JsonElement el : rows)
-        {
-            list.add(row(el.getAsJsonObject()));
-        }
-        list.revalidate();
-        list.repaint();
+        viewer.close();
     }
 
-    private JPanel row(JsonObject drop)
+    private void render()
     {
-        JPanel row = Ui.row(ColorScheme.DARKER_GRAY_COLOR);
-        row.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(0, 0, 1, 0, ColorScheme.DARK_GRAY_COLOR),
-            BorderFactory.createEmptyBorder(3, 8, 3, 8)));
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-
-        long value = Supabase.longOr(drop, "ge_value", 0);
-        String suffix = value > 0 ? " (" + DropRules.formatGp(value) + " GP)" : "";
-        if (Supabase.has(drop, "rarity") && Supabase.doubleOr(drop,"rarity",0) > 0)
+        List<Drop> shown = new ArrayList<>();
+        for (Drop d : rows)
         {
-            suffix += " [" + DropRules.formatRarity(Supabase.doubleOr(drop,"rarity",0)) + "]";
+            if (matches(d)) shown.add(d);
         }
-        // Plain labels truncate with "..." where HTML would wrap and grow.
-        JLabel main = new JLabel(Supabase.str(drop, "item_name") + suffix);
-        main.putClientProperty("html.disable", Boolean.TRUE);
-        main.setToolTipText(main.getText());
-        main.setForeground(Color.WHITE);
-        main.setFont(FontManager.getRunescapeSmallFont().deriveFont(Font.BOLD));
-        JLabel detail = Ui.small(Supabase.str(drop, "rsn") + " — " + Supabase.str(drop, "npc_name")
-            + " — " + Ui.timeAgo(Supabase.str(drop, "created_at")), Ui.MUTED);
-        JPanel stack = Ui.column(ColorScheme.DARKER_GRAY_COLOR);
-        stack.add(main);
-        stack.add(detail);
-        row.add(stack, BorderLayout.CENTER);
-
-        // The drops table is anon-writable, so a screenshot link is only
-        // honoured when it points into the plugin's own public bucket.
-        String url = Supabase.str(drop, "screenshot_url");
-        if (url.startsWith(DropLogger.screenshotPrefix()))
+        Drop top = null;
+        long dayGp = 0;
+        int dayCount = 0;
+        for (Drop d : shown)
         {
-            JLabel pic = Ui.small("[pic]", ColorScheme.BRAND_ORANGE);
-            pic.setToolTipText("Click to view screenshot");
-            row.add(pic, BorderLayout.EAST);
-            row.setToolTipText("Click to view screenshot");
-            row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            row.addMouseListener(new MouseAdapter()
+            if (Duration.between(d.at, Instant.now()).toHours() >= 24) continue;
+            dayCount++;
+            dayGp += d.value;
+            if (d.value > 0 && (top == null || d.value > top.value)) top = d;
+        }
+        note.setText(dayCount == 0 ? "" : dayCount + " in 24h · " + Dashboard.shortNumber(dayGp));
+        Drop best = top;
+        fill(() -> {
+            if (best != null) list.add(topCard(best));
+            if (shown.isEmpty())
             {
-                @Override
-                public void mousePressed(MouseEvent e)
-                {
-                    LinkBrowser.browse(url);
-                }
-            });
-        }
-        return row;
+                list.add(Theme.centered(rows.isEmpty() ? "No drops logged yet." : "No drops match this filter."));
+            }
+            for (Drop d : shown)
+            {
+                list.add(row(d));
+            }
+        });
     }
+
+    private boolean matches(Drop d)
+    {
+        switch (filter)
+        {
+            case MINE: return clan.rsn() != null && Names.same(d.rsn, clan.rsn());
+            case RARE: return d.tier() != Theme.Tier.COMMON;
+            case PETS: return d.tier() == Theme.Tier.PET;
+            default: return true;
+        }
+    }
+
+    private JPanel topCard(Drop d)
+    {
+        Theme.Card card = Theme.card(Theme.ACCENT);
+        card.add(Theme.row(Theme.badge("TOP DROP · 24H"), null, Theme.text(Theme.timeAgo(d.at), Theme.SUB)));
+        JPanel text = Theme.stack(1);
+        text.add(Theme.bold(d.name, Theme.TEXT));
+        text.add(Theme.text(d.rsn + " · " + d.npc, Theme.SUB));
+        JLabel value = Theme.bold(Dashboard.shortNumber(d.value) + (d.rarity > 0 ? "  " + DropRules.formatRarity(d.rarity) : ""), Theme.GOLD);
+        text.add(value);
+        card.add(Theme.row(Theme.tile(items, d.itemId(), d.quantity, d.tier(), 40), text, null));
+        card.add(Theme.text(d.hasScreenshot() ? "Click to view the screenshot" : "Click for drop details", Theme.ACCENT_HI));
+        return clickable(card, d);
+    }
+
+    private JPanel row(Drop d)
+    {
+        Theme.Card card = Theme.card(null);
+        JPanel text = Theme.stack(1);
+        text.add(Theme.bold(d.name, Theme.TEXT));
+        text.add(Theme.text(d.rsn + " · " + Theme.timeAgo(d.at), Theme.SUB));
+        text.add(Theme.text(d.npc, Theme.FAINT));
+        JPanel east = Theme.stack(1);
+        east.add(Theme.right(Theme.bold(d.value > 0 ? Dashboard.shortNumber(d.value) : d.tier() == Theme.Tier.PET ? "Pet" : "", Theme.GOLD)));
+        east.add(Theme.right(Theme.text(d.rarity > 0 ? DropRules.formatRarity(d.rarity) : "", d.tier().edge)));
+        JLabel pic = Theme.right(Theme.text(d.hasScreenshot() ? "pic" : "", Theme.ACCENT_HI));
+        pic.setIcon(d.hasScreenshot() ? CAMERA : null);
+        east.add(pic);
+        card.add(Theme.row(Theme.tile(items, d.itemId(), d.quantity, d.tier(), 32), text, east));
+        return clickable(card, d);
+    }
+
+    // The whole card opens the viewer. The tooltip carries the full,
+    // possibly truncated, line and starts with fixed text so a remote
+    // item name can never be read as tooltip HTML.
+    private JPanel clickable(Theme.Card card, Drop d)
+    {
+        card.setToolTipText("Drop: " + d.summary());
+        return Theme.onClick(card, () -> viewer.show(card, d));
+    }
+
+    private static List<Drop> parse(JsonArray array)
+    {
+        List<Drop> out = new ArrayList<>();
+        for (JsonElement el : array)
+        {
+            out.add(new Drop(el.getAsJsonObject()));
+        }
+        return out;
+    }
+
+    /** One drops row, as the tab and the viewer need it. */
+    static final class Drop
+    {
+        final String name;
+        final String rsn;
+        final String npc;
+        final int id;
+        final int quantity;
+        final long value;
+        final double rarity;
+        final Instant at;
+        final String screenshot;
+
+        Drop(JsonObject row)
+        {
+            name = Supabase.str(row, "item_name");
+            rsn = Supabase.str(row, "rsn");
+            npc = Supabase.str(row, "npc_name");
+            id = Supabase.intOr(row, "item_id", 0);
+            quantity = Supabase.intOr(row, "quantity", 1);
+            value = Supabase.longOr(row, "ge_value", 0);
+            rarity = Supabase.doubleOr(row, "rarity", 0);
+            at = Supabase.instant(row, "created_at", Instant.now());
+            // The drops table is anon-writable, so a screenshot link is only
+            // honoured when it points into the plugin's own public bucket.
+            String url = Supabase.str(row, "screenshot_url");
+            screenshot = url.startsWith(DropLogger.screenshotPrefix()) ? url : "";
+        }
+
+        // "Item (1,234,567 GP) [1/512]" — the old one-line form.
+        String summary()
+        {
+            return name + (value > 0 ? " (" + DropRules.formatGp(value) + " GP)" : "")
+                + (rarity > 0 ? " [" + DropRules.formatRarity(rarity) + "]" : "");
+        }
+
+        boolean hasScreenshot()
+        {
+            return !screenshot.isEmpty();
+        }
+
+        // Pets carry no item id; show a pet sprite instead.
+        int itemId()
+        {
+            return id > 0 ? id : ItemID.SNAKEPET;
+        }
+
+        Theme.Tier tier()
+        {
+            if (id == 0 && name.startsWith("Pet")) return Theme.Tier.PET;
+            if ((rarity > 0 && rarity <= 0.001) || value >= 100_000_000L) return Theme.Tier.MEGA;
+            if ((rarity > 0 && rarity <= 0.01) || value >= 10_000_000L) return Theme.Tier.RARE;
+            return Theme.Tier.COMMON;
+        }
+    }
+
+    // A tiny camera, drawn so it needs no asset or font glyph.
+    private static final Icon CAMERA = new Icon()
+    {
+        @Override
+        public void paintIcon(java.awt.Component c, Graphics g, int x, int y)
+        {
+            Graphics2D g2 = Theme.smooth(g);
+            g2.setColor(Theme.ACCENT_HI);
+            g2.fillRoundRect(x, y + 2, 11, 8, 3, 3);
+            g2.fillRect(x + 3, y, 5, 3);
+            g2.setColor(new Color(0x1A1A1A));
+            g2.fillOval(x + 3, y + 3, 5, 5);
+            g2.dispose();
+        }
+
+        @Override
+        public int getIconWidth()
+        {
+            return 11;
+        }
+
+        @Override
+        public int getIconHeight()
+        {
+            return 10;
+        }
+    };
 }
