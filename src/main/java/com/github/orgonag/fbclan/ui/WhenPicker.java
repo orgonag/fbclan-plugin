@@ -141,7 +141,8 @@ final class WhenPicker extends JPanel
             Instant at = start();
             if (at == null) return;
             summary.setForeground(Theme.SOFT);
-            summary.setText(SUMMARY.withZone(zone).format(at) + " · in " + LfgUi.span(Duration.between(Instant.now(), at)) + " (your time)");
+            Duration until = Duration.between(Instant.now(), at);
+            summary.setText(SUMMARY.withZone(zone).format(at) + (until.isNegative() ? " · already passed" : " · in " + LfgUi.span(until)) + " (your time)");
         }
         catch (IllegalArgumentException e)
         {

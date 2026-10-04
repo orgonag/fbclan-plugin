@@ -58,9 +58,9 @@ public class LfgCommand
         alias(Activity.TOB, false, 0, "tob", "theatre", "theatreofblood");
         alias(Activity.TOB, true, 0, "hmt", "hmtob", "tobhm", "hardmodetob");
         alias(Activity.COX, false, 0, "cox", "raids", "chambers", "xeric", "chambersofxeric");
-        alias(Activity.COX, true, 0, "cm", "coxcm", "challengemode");
+        alias(Activity.COX, true, 0, "cm", "coxcm", "cmcox", "challengemode");
         alias(Activity.TOA, false, 150, "toa", "tombs", "tombsofamascut");
-        alias(Activity.TOA, false, 300, "expert", "etoa", "expertoa", "toaexpert");
+        alias(Activity.TOA, false, 300, "expert", "etoa", "experttoa", "toaexpert");
         alias(Activity.NEX, false, 0, "nex");
         alias(Activity.KREEARRA, false, 0, "arma", "kree", "armadyl", "kreearra");
         alias(Activity.GRAARDOR, false, 0, "bandos", "graardor");
@@ -94,7 +94,7 @@ public class LfgCommand
     }
     private static final Set<ChatMessageType> LOCAL_AUTHOR = EnumSet.of(
         ChatMessageType.PUBLICCHAT, ChatMessageType.MODCHAT, ChatMessageType.FRIENDSCHAT,
-        ChatMessageType.CLAN_CHAT, ChatMessageType.CLAN_GUEST_CHAT, ChatMessageType.PRIVATECHATOUT);
+        ChatMessageType.CLAN_CHAT, ChatMessageType.CLAN_GUEST_CHAT, ChatMessageType.CLAN_GIM_CHAT, ChatMessageType.PRIVATECHATOUT);
 
     private final Client client;
     private final ClientThread clientThread;

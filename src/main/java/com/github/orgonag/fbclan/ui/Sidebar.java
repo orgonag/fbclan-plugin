@@ -104,7 +104,7 @@ public class Sidebar extends PluginPanel
         root.add(lockedHolder, LOCKED);
         root.add(main, MAIN);
         add(root, BorderLayout.CENTER);
-        show(Clan.Status.VERIFYING);
+        showLoggedOut();
         select(activeTab);
     }
 
@@ -189,6 +189,14 @@ public class Sidebar extends PluginPanel
         {
             return 16;
         }
+    }
+
+    // EDT. Nobody is logged in: locked, with nothing to wait for.
+    public void showLoggedOut()
+    {
+        status.setText("Log in on your clan character to open the clan panel.");
+        retry.setVisible(false);
+        cards.show(root, LOCKED);
     }
 
     // EDT.

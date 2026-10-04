@@ -21,10 +21,9 @@ import okhttp3.Response;
 
 /**
  * The clan database (Supabase / PostgREST). The anon key below is public
- * by design: Row Level Security on every table decides what it may do,
- * and the two write paths that need server-side judgement (personal
- * bests, member stats) go through improve-only Postgres functions. See
- * README "Data & Security" for the per-table matrix.
+ * by design: it can only read the tables and views the plugin shows, and
+ * every write goes through a server-side function that validates it. See
+ * README "External services and privacy".
  *
  * Every call is blocking network I/O — run on the executor. Reads
  * return null on failure; writes return an {@link ApiResult}.

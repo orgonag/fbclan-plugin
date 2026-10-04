@@ -117,8 +117,8 @@ public class Party
     Instant scheduledFor;   // null = ASAP
     List<Applicant> applicants;
 
-    // The default template behind "Post now" and `!lfg tob 4`: every
-    // optional detail left at its default.
+    // The template behind `!lfg tob 4`: every optional detail left at its
+    // default, the host on "any role".
     public static Party quick(String hostRsn, Activity activity, boolean hard, int invocation, int capacity, Integer world)
     {
         boolean h = hard && activity.hasHardMode();
@@ -236,11 +236,10 @@ public class Party
         return (free > 0 && open.size() > free ? free + " of " : "") + Role.summarize(open);
     }
 
-    // Upsert payload keyed on host_rsn; id and created_at are server-owned.
+    // The create/edit payload. The server owns id, host and timestamps.
     public JsonObject toJson()
     {
         JsonObject d = new JsonObject();
-        d.addProperty("host_rsn", hostRsn);
         d.addProperty("activity", activity.key());
         d.addProperty("hard_mode", hardMode);
         d.addProperty("invocation", invocation);

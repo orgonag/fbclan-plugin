@@ -205,7 +205,7 @@ class HostWizard
         if (activity.hasRoles()) syncRoles(activity, capacity, hard);
         Map<Role, Integer> counts = new EnumMap<>(Role.class);
         coxCounts.forEach((r, s) -> counts.put(r, (Integer) s.getValue()));
-        return Party.builder()
+        Party party = Party.builder()
             .hostRsn(hostRsn)
             .activity(activity)
             .hardMode(hard)
@@ -223,6 +223,11 @@ class HostWizard
             .scheduledFor(when.start())
             .applicants(Collections.emptyList())
             .build();
+        if (activity.hasRoles() && party.openRoles().isEmpty())
+        {
+            throw new IllegalArgumentException("Your role has no seat. Lower a role count or pick another role.");
+        }
+        return party;
     }
 
     // ------------------------------------------------------------ steps
@@ -329,7 +334,8 @@ class HostWizard
         if (activity.hasKillcount())
         {
             stepBody.add(Theme.labeled("Min KC (0=any)", minKcSpinner));
-            Integer mine = killcounts.local(activity, activity.hasHardMode() && hardModeBox.isSelected());
+            Integer mine = killcounts.local(activity, (activity.hasHardMode() && hardModeBox.isSelected())
+                || (activity.usesInvocation() && (Integer) invocationSpinner.getValue() >= 300));
             if (mine != null) stepBody.add(Theme.text("Your KC: " + mine, Theme.SUB));
         }
         else
@@ -444,17 +450,18 @@ class HostWizard
 
     // ------------------------------------------------------------ helpers
 
-    // The host-role choices for this activity, size and mode; keeps the
-    // current pick when it is still valid, else the first role.
+    // The host-role choices for this activity, size and mode. Keeps the
+    // current pick while it is still valid; otherwise "any role" (the host
+    // takes whatever seat is left), the same as a `!lfg` post.
     private void syncRoles(Activity activity, int size, boolean hard)
     {
         Object previous = hostRoleBox.getSelectedItem();
         hostRoleBox.removeAllItems();
         List<Role> roles = new ArrayList<>(activity == Activity.TOB ? distinct(Role.tobComposition(size, hard)) : Role.playable(activity, hard));
-        // A quick post's host holds the "any" role; keep it while it is still the pick.
-        if (previous != null && previous == Role.any(activity, hard) && !roles.contains(previous)) roles.add((Role) previous);
+        Role any = Role.any(activity, hard);
+        if (!roles.contains(any)) roles.add(any);
         roles.forEach(hostRoleBox::addItem);
-        if (previous != null && roles.contains(previous)) hostRoleBox.setSelectedItem(previous);
+        hostRoleBox.setSelectedItem(roles.contains(previous) ? previous : any);
     }
 
     private Activity activity()

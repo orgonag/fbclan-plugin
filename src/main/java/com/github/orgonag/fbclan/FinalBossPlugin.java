@@ -77,10 +77,11 @@ public class FinalBossPlugin extends Plugin
     @Inject private PartyBoard parties;
     @Inject private Killcounts killcounts;
     @Inject private LfgCommand lfgCommand;
-    @Inject private Sidebar sidebar;
-    @Inject private AnnouncementsTab announcementsTab;
-    @Inject private DropLogTab dropLogTab;
-    @Inject private PartiesTab partiesTab;
+    // Swing: built in startUp (on the EDT), not at injection time.
+    private Sidebar sidebar;
+    private AnnouncementsTab announcementsTab;
+    private DropLogTab dropLogTab;
+    private PartiesTab partiesTab;
 
     private NavigationButton navButton;
     private ScheduledFuture<?> dropRefresh;
@@ -96,6 +97,12 @@ public class FinalBossPlugin extends Plugin
     @Override
     protected void startUp()
     {
+        sidebar = injector.getInstance(Sidebar.class);
+        announcementsTab = injector.getInstance(AnnouncementsTab.class);
+        dropLogTab = injector.getInstance(DropLogTab.class);
+        partiesTab = injector.getInstance(PartiesTab.class);
+        // Locked until this session's membership check passes (a re-enable starts over).
+        sidebar.showLoggedOut();
         clan.activate();
         clan.setListener(this::onStatus);
         // Once per client session: the welcome line and the CA icon list.
@@ -225,7 +232,7 @@ public class FinalBossPlugin extends Plugin
             stopPolling();
             SwingUtilities.invokeLater(() -> {
                 sidebar.closeWindows();
-                sidebar.show(Clan.Status.VERIFYING);
+                sidebar.showLoggedOut();
             });
         }
     }
@@ -235,8 +242,13 @@ public class FinalBossPlugin extends Plugin
     {
         clan.reset();
         stopPolling();
-        SwingUtilities.invokeLater(sidebar::closeWindows);
-        if (client.getGameState() == GameState.LOGGED_IN) clan.verifyAfter(1);
+        boolean loggedIn = client.getGameState() == GameState.LOGGED_IN;
+        SwingUtilities.invokeLater(() -> {
+            sidebar.closeWindows();
+            if (loggedIn) sidebar.show(Clan.Status.VERIFYING);
+            else sidebar.showLoggedOut();
+        });
+        if (loggedIn) clan.verifyAfter(1);
     }
 
     @Subscribe

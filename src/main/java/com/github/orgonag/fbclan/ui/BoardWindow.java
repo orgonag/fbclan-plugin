@@ -167,7 +167,8 @@ class BoardWindow
 
     private static JPanel line(LeaderboardsTab.Row r, boolean mine)
     {
-        JLabel rank = Theme.bold(Integer.toString(r.rank), LeaderboardsTab.placeColor(r.rank));
+        // Rank 0 = an unranked list (newest clan bests).
+        JLabel rank = Theme.bold(r.rank > 0 ? Integer.toString(r.rank) : "\u2022", LeaderboardsTab.placeColor(r.rank));
         rank.setPreferredSize(new Dimension(28, 22));
         JPanel east = Theme.row(r.tier == null || r.tier.isEmpty() ? null : LeaderboardsTab.tierBadge(r.tier), null, Theme.bold(r.value, Theme.GOLD));
         JPanel row = Theme.row(rank, mine ? Theme.bold(r.name + "  (you)", Theme.TEXT) : Theme.text(r.name, Theme.SOFT), east);

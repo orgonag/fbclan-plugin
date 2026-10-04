@@ -76,7 +76,7 @@ public class Clan
         Future<?> old = delayed;
         if (old != null) old.cancel(false);
         delayed = executor.schedule(() -> clientThread.invokeLater(() -> {
-            if (!enabled || generation != session.getGeneration()) return;
+            if (!enabled || generation != session.getGeneration() || client.getGameState() == GameState.LOGIN_SCREEN) return;
             if (client.getGameState() != GameState.LOGGED_IN || client.getLocalPlayer() == null
                 || client.getLocalPlayer().getName() == null || configManager.getRSProfileKey() == null)
             {

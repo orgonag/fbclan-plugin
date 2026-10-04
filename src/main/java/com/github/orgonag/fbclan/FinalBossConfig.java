@@ -69,7 +69,7 @@ public interface FinalBossConfig extends Config
     @ConfigItem(
         keyName = "rareDropMinValueGp",
         name = "Rare drop min value (GP)",
-        description = "A rare drop must also be worth at least this much to be logged, so 1/128 rune junk "
+        description = "A rare drop must also be worth at least this much to be logged, so rare junk "
             + "stays out. Set to 0 to log every rare drop regardless of value (untradeables included).",
         section = dropLoggingSection,
         position = 3
@@ -82,7 +82,7 @@ public interface FinalBossConfig extends Config
     @ConfigItem(
         keyName = "enableDropScreenshots",
         name = "Screenshot Drops",
-        description = "Capture a full client screenshot for drops above the threshold and store it in the clan database",
+        description = "Save a picture of your whole client with each drop you log. Stored publicly: anyone with the link can view it.",
         section = dropLoggingSection,
         position = 4
     )

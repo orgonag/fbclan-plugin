@@ -87,7 +87,8 @@ final class AddMemberForm
         }
         JComboBox<Object> roles = roleBox;
         Runnable submit = () -> {
-            String rsn = name.getText().trim();
+            // Underscores are spaces in a name; fold them so nobody is seated twice.
+            String rsn = name.getText().replace('_', ' ').trim().replaceAll("\\s+", " ");
             if (rsn.isEmpty())
             {
                 onResult.accept("Type their name first.");

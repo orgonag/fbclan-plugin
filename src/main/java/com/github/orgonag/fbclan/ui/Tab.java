@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.swing.BorderFactory;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
@@ -82,6 +83,8 @@ abstract class Tab extends JPanel
     {
         Component focused = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
         boolean ours = focused != null && SwingUtilities.isDescendingFrom(focused, list);
+        // Mid-pick in a dropdown: leave it open; the next refresh catches up.
+        if (ours && focused instanceof JComboBox && ((JComboBox<?>) focused).isPopupVisible()) return;
         list.removeAll();
         build.run();
         list.revalidate();

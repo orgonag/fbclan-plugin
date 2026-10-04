@@ -42,6 +42,7 @@ public class PartiesTab extends Tab
     private static final Color OFFLINE = new Color(0xBF3F3F);
     // Scheduled posts a host may keep at once (the server enforces it too).
     private static final int MAX_SCHEDULED = 7;
+    private static final long ERROR_SHOWN_MS = 30_000;
 
     private final Clan clan;
     private final FinalBossConfig config;
@@ -52,6 +53,7 @@ public class PartiesTab extends Tab
     private final Btn hostButton;
     private HostWizard wizard;
     private String actionError;
+    private long actionErrorAt;
     private String applyingId;
     private Object filter;
     private boolean hideFull;
@@ -208,6 +210,7 @@ public class PartiesTab extends Tab
         Set<String> mineIds = new HashSet<>();
         mine.forEach(p -> mineIds.add(p.getId()));
         addMember.keep(mineIds);
+        if (System.currentTimeMillis() - actionErrorAt > ERROR_SHOWN_MS) actionError = null;
         showError(actionError != null ? actionError : board.refreshError());
         note.setText(board.online().isEmpty() ? "" : board.online().size() + " in clan chat");
         // Host stays available until both the ASAP slot and all scheduled slots are used.
@@ -241,7 +244,8 @@ public class PartiesTab extends Tab
             }
             if (others.isEmpty())
             {
-                list.add(Theme.centered(board.parties().isEmpty() ? "No parties are being hosted right now." : "No parties match your filters."));
+                list.add(Theme.centered(!config.enableLfg() ? "LFG is switched off in the plugin settings."
+                    : board.parties().isEmpty() ? "No parties are being hosted right now." : "No parties match your filters."));
             }
             for (Party p : others)
             {
@@ -276,7 +280,7 @@ public class PartiesTab extends Tab
     {
         String rsn = clan.rsn();
         Card card = Theme.card(null);
-        boolean hostOnline = p.isHostedBy(rsn) || board.online().contains(Names.normalize(p.getHostRsn()));
+        boolean hostOnline = !interactive || board.online().contains(Names.normalize(p.getHostRsn()));
         String asap = p.isScheduled() ? "" : " · ASAP";
         JLabel host = Theme.text(p.getHostRsn() + asap + " · " + Theme.timeAgo(p.getCreatedAt()), hostOnline ? Theme.GREEN : OFFLINE);
         card.add(head(p.getActivity(), p.title(), p.getWorld(), host, p.memberCount() + "/" + p.getCapacity()));
@@ -483,10 +487,12 @@ public class PartiesTab extends Tab
         return chip[0];
     }
 
-    // EDT. The last action's failure wins over the board's refresh error; null clears it.
+    // EDT. The last action's failure wins over the board's refresh error
+    // for a short while; null clears it.
     private void setActionError(String message)
     {
         actionError = message;
+        actionErrorAt = System.currentTimeMillis();
         render();
     }
 }

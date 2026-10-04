@@ -15,8 +15,8 @@ import lombok.Value;
 /**
  * Read side of the clan dashboard: collection-log and combat-achievement
  * top-20s (member uploads), GP this week (logged drops), and the weekly
- * Wise Old Man podiums served from the wom_cache table (an hourly sync
- * script fills it; the plugin never calls WOM for this). Every source
+ * Wise Old Man podiums served from the wom_cache table (a sync script
+ * fills it; the plugin never calls WOM for this). Every source
  * fails soft independently, keeping last-known data.
  */
 @Singleton

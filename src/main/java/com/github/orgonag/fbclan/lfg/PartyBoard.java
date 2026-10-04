@@ -344,11 +344,11 @@ public class PartyBoard
             nowById.put(p.getId(), p);
         }
         Set<String> formedIds = new HashSet<>();
-        Set<String> formedFrom = new HashSet<>();
+        Map<String, FormedParty> formedFrom = new HashMap<>();
         for (FormedParty f : formedNow)
         {
             formedIds.add(f.getId());
-            if (f.getPartyId() != null) formedFrom.add(f.getPartyId());
+            if (f.getPartyId() != null) formedFrom.put(f.getPartyId(), f);
         }
         List<String> messages = new ArrayList<>();
         synchronized (this)
@@ -379,7 +379,7 @@ public class PartyBoard
         messages.forEach(this::deliver);
     }
 
-    private void diff(Map<String, Party> prev, Map<String, Party> now, String rsn, Set<String> formedFrom, List<String> out)
+    private void diff(Map<String, Party> prev, Map<String, Party> now, String rsn, Map<String, FormedParty> formedFrom, List<String> out)
     {
         for (Party p : now.values())
         {
@@ -406,16 +406,14 @@ public class PartyBoard
             {
                 out.add(p.getHostRsn() + " moved their " + p.title() + " party to " + when(p.getScheduledFor()) + ".");
             }
-            if (mine != null && mineBefore != null && mine.getStatus() != mineBefore.getStatus())
+            if (mine != null && mine.isAccepted() && (mineBefore == null || !mineBefore.isAccepted()))
             {
-                if (mine.isAccepted())
-                {
-                    out.add("You've been accepted to " + p.getHostRsn() + "'s " + p.title() + " party" + world(p.getWorld()) + ".");
-                }
-                else if (mine.getStatus() == Party.Status.DECLINED)
-                {
-                    out.add(p.getHostRsn() + " declined your " + p.title() + " application.");
-                }
+                out.add((mine.isAddedByHost() ? p.getHostRsn() + " added you to their " : "You've been accepted to " + p.getHostRsn() + "'s ")
+                    + p.title() + " party" + world(p.getWorld()) + ".");
+            }
+            else if (mine != null && mineBefore != null && mine.getStatus() == Party.Status.DECLINED && mineBefore.getStatus() != Party.Status.DECLINED)
+            {
+                out.add(p.getHostRsn() + " declined your " + p.title() + " application.");
             }
             // Only a seated member is "removed"; a pending application also
             // disappears quietly when the player joins another ASAP party.
@@ -424,16 +422,28 @@ public class PartyBoard
                 out.add("You were removed from " + p.getHostRsn() + "'s " + p.title() + " party.");
             }
         }
-        // Parties that vanished while the player was in them (a formed
-        // party is announced from the formed list instead).
+        // Parties that vanished. Members of one that formed hear it from the
+        // formed list; everyone else involved is told here.
         for (Party before : prev.values())
         {
-            if (now.containsKey(before.getId()) || before.isHostedBy(rsn) || formedFrom.contains(before.getId())) continue;
-            Party.Applicant mineBefore = before.applicantFor(rsn);
-            if (mineBefore != null && mineBefore.getStatus() != Party.Status.DECLINED && !selfLeft.remove(before.getId()))
+            if (now.containsKey(before.getId())) continue;
+            FormedParty formedAs = formedFrom.get(before.getId());
+            boolean formed = formedAs != null;
+            boolean expired = !Instant.now().isBefore(before.expiresAt());
+            if (before.isHostedBy(rsn))
             {
-                boolean expired = !Instant.now().isBefore(before.expiresAt());
+                if (!formed && expired) out.add("Your " + before.title() + " post expired after 7 days without filling.");
+                continue;
+            }
+            Party.Applicant mineBefore = before.applicantFor(rsn);
+            if (mineBefore == null || mineBefore.getStatus() == Party.Status.DECLINED || selfLeft.remove(before.getId())) continue;
+            if (!formed)
+            {
                 out.add(before.getHostRsn() + "'s " + before.title() + " party " + (expired ? "expired." : "was cancelled."));
+            }
+            else if (!formedAs.includes(rsn))
+            {
+                out.add(before.getHostRsn() + "'s " + before.title() + " party filled without you.");
             }
         }
         selfLeft.clear();
@@ -477,10 +487,12 @@ public class PartyBoard
         if (config.lfgPartyNotifications())
         {
             clientThread.invokeLater(() -> {
-                if (enabled && capturedEpoch == epoch && clan.current(session) && client.getGameState() == GameState.LOGGED_IN)
-                {
-                    client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "[LFG] " + message, null);
-                }
+                if (!enabled || capturedEpoch != epoch || !clan.current(session)) return true;
+                GameState state = client.getGameState();
+                // Mid-teleport or hop: hold the line until the chatbox is back.
+                if (state == GameState.LOADING || state == GameState.HOPPING || state == GameState.CONNECTION_LOST) return false;
+                if (state == GameState.LOGGED_IN) client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "[LFG] " + message, null);
+                return true;
             });
         }
         if (config.lfgDesktopNotifications())

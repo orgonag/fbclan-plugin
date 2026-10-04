@@ -15,7 +15,7 @@ import net.runelite.client.ui.FontManager;
 public class AnnouncementsTab extends Tab
 {
     // Remembers, in the local RuneLite config, the newest post this player has opened.
-    // Its own group: a write under "finalboss" would restart polling (onConfigChanged).
+    // Its own group, kept apart from the plugin's settings.
     private static final String GROUP = "finalbossui";
     private static final String SEEN_KEY = "announcementSeen";
 
