@@ -134,12 +134,12 @@ public class LeaderboardsTab extends Tab
             value.setFont(FontManager.getRunescapeBoldFont());
             // Clan bests are newest-first, not a ranking: no place numbers there.
             boolean ranked = index != 4;
-            card.add(Theme.row(Theme.bold(ranked ? "1" : "•", PLACE[0]), name, value));
+            card.add(Theme.row(place(ranked, first.rank), name, value));
             JPanel runners = Theme.stack(1);
             for (int i = 1; i < Math.min(3, b.rows.size()); i++)
             {
                 Row r = b.rows.get(i);
-                runners.add(Theme.row(Theme.bold(ranked ? Integer.toString(i + 1) : "•", ranked ? PLACE[i] : Theme.FAINT),
+                runners.add(Theme.row(place(ranked, r.rank),
                     Theme.text(r.name, Theme.SOFT), Theme.text(r.value, Theme.GOLD)));
             }
             card.add(runners);
@@ -191,20 +191,20 @@ public class LeaderboardsTab extends Tab
             case 2:
             {
                 List<Row> rows = new ArrayList<>();
-                int rank = 1;
+                Ranker rank = new Ranker();
                 for (Dashboard.ClEntry e : dashboard.clBoard())
                 {
-                    rows.add(new Row(rank++, e.getRsn(), e.getRsn(), String.format("%,d/%,d", e.getObtained(), e.getTotal()), null));
+                    rows.add(new Row(rank.of(e.getObtained()), e.getRsn(), e.getRsn(), String.format("%,d/%,d", e.getObtained(), e.getTotal()), null));
                 }
                 return new Board(rows, "No collection logs uploaded yet.", "uploaded by members' clients");
             }
             case 3:
             {
                 List<Row> rows = new ArrayList<>();
-                int rank = 1;
+                Ranker rank = new Ranker();
                 for (Dashboard.CaEntry e : dashboard.caBoard())
                 {
-                    rows.add(new Row(rank++, e.getRsn(), e.getRsn(), String.format("%,d", e.getPoints()), e.getTier()));
+                    rows.add(new Row(rank.of(e.getPoints()), e.getRsn(), e.getRsn(), String.format("%,d", e.getPoints()), e.getTier()));
                 }
                 return new Board(rows, "No combat achievements uploaded yet.", "uploaded by members' clients");
             }
@@ -221,11 +221,12 @@ public class LeaderboardsTab extends Tab
                     }
                     return new Board(rows, "No new clan bests yet.", "newest first");
                 }
+                Ranker rank = new Ranker();
                 for (Entry e : pbs.board())
                 {
                     if (e.getBossKey().equals(boss))
                     {
-                        rows.add(new Row(e.getRank(), e.getRsn(), e.getRsn(), PbFormat.seconds(e.getSeconds()), null));
+                        rows.add(new Row(rank.of(e.getSeconds()), e.getRsn(), e.getRsn(), PbFormat.seconds(e.getSeconds()), null));
                     }
                 }
                 return new Board(rows, "No personal bests recorded yet.", "all-time");
@@ -254,12 +255,42 @@ public class LeaderboardsTab extends Tab
     {
         if (entries == null) return new Board(Collections.emptyList(), "waiting for WOM sync", caption);
         List<Row> rows = new ArrayList<>();
-        for (int i = 0; i < entries.size(); i++)
+        Ranker rank = new Ranker();
+        for (Named e : entries)
         {
-            Named e = entries.get(i);
-            rows.add(new Row(i + 1, e.getRsn(), e.getRsn(), fmt.apply(e.getValue()), null));
+            rows.add(new Row(rank.of(e.getValue()), e.getRsn(), e.getRsn(), fmt.apply(e.getValue()), null));
         }
         return new Board(rows, "No data this week.", caption);
+    }
+
+    // Gold, silver, bronze for places 1-3; grey after.
+    static Color placeColor(int rank)
+    {
+        return rank >= 1 && rank <= 3 ? PLACE[rank - 1] : Theme.FAINT;
+    }
+
+    // A card's place label; clan bests are newest-first, not ranked, so they get a bullet.
+    private static JLabel place(boolean ranked, int rank)
+    {
+        return ranked ? Theme.bold(Integer.toString(rank), placeColor(rank)) : Theme.bold("•", Theme.FAINT);
+    }
+
+    // Dense ranking: equal values share a place and the next value takes the
+    // next place (1, 1, 1, 2, 2, ...). Rows arrive best first.
+    private static final class Ranker
+    {
+        private Object last;
+        private int rank;
+
+        int of(Object value)
+        {
+            if (rank == 0 || !value.equals(last))
+            {
+                rank++;
+                last = value;
+            }
+            return rank;
+        }
     }
 
     // GM cyan, Master red, Elite gold, others grey.

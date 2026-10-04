@@ -170,7 +170,7 @@ class BoardWindow
 
     private static JPanel line(LeaderboardsTab.Row r, boolean mine)
     {
-        JLabel rank = Theme.bold(Integer.toString(r.rank), r.rank >= 1 && r.rank <= 3 ? LeaderboardsTab.PLACE[r.rank - 1] : Theme.FAINT);
+        JLabel rank = Theme.bold(Integer.toString(r.rank), LeaderboardsTab.placeColor(r.rank));
         rank.setPreferredSize(new Dimension(28, 22));
         JPanel east = Theme.row(r.tier == null || r.tier.isEmpty() ? null : LeaderboardsTab.tierBadge(r.tier), null, Theme.bold(r.value, Theme.GOLD));
         JPanel row = Theme.row(rank, mine ? Theme.bold(r.name + "  (you)", Theme.TEXT) : Theme.text(r.name, Theme.SOFT), east);
