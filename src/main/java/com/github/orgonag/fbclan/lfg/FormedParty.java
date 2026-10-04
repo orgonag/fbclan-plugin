@@ -2,7 +2,6 @@ package com.github.orgonag.fbclan.lfg;
 
 import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Supabase;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.time.Instant;
@@ -36,6 +35,7 @@ public class FormedParty
     Integer world;
     List<Member> members;  // host first
     Instant formedAt;
+    Instant scheduledFor;  // null = was an ASAP party
 
     public String title()
     {
@@ -67,41 +67,6 @@ public class FormedParty
         return sb.toString();
     }
 
-    public static FormedParty from(Party p)
-    {
-        List<Member> members = new ArrayList<>();
-        members.add(new Member(p.getHostRsn(), p.getHostRole(), false));
-        for (Party.Applicant a : p.accepted())
-        {
-            members.add(new Member(a.getRsn(), a.getRole(), a.isAddedByHost()));
-        }
-        return new FormedParty(null, p.getId(), p.getHostRsn(), p.getActivity(), p.isHardMode(), p.getInvocation(),
-            p.getCapacity(), p.getWorld(), members, Instant.now());
-    }
-
-    public JsonObject toJson()
-    {
-        JsonObject d = new JsonObject();
-        Supabase.put(d, "party_id", partyId);
-        d.addProperty("host_rsn", hostRsn);
-        d.addProperty("activity", activity.key());
-        d.addProperty("hard_mode", hardMode);
-        d.addProperty("invocation", invocation);
-        d.addProperty("capacity", capacity);
-        Supabase.put(d, "world", world);
-        JsonArray arr = new JsonArray();
-        for (Member m : members)
-        {
-            JsonObject o = new JsonObject();
-            o.addProperty("rsn", m.getRsn());
-            Supabase.put(o, "role", m.getRole() == null ? null : m.getRole().key());
-            o.addProperty("added_by_host", m.isAddedByHost());
-            arr.add(o);
-        }
-        d.add("members", arr);
-        return d;
-    }
-
     public static FormedParty fromRow(JsonObject row)
     {
         Activity activity = Activity.fromKey(Supabase.str(row, "activity"));
@@ -130,6 +95,7 @@ public class FormedParty
             Supabase.has(row, "party_id") ? Supabase.str(row, "party_id") : null,
             Supabase.str(row, "host_rsn"), activity, Supabase.bool(row, "hard_mode"),
             Supabase.intOr(row, "invocation", 0), Supabase.intOr(row, "capacity", Math.max(1, members.size())),
-            Supabase.intOrNull(row, "world"), members, Supabase.instant(row, "formed_at", Instant.now()));
+            Supabase.intOrNull(row, "world"), members, Supabase.instant(row, "formed_at", Instant.now()),
+            Supabase.instant(row, "scheduled_for", null));
     }
 }

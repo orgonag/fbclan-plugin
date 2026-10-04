@@ -1,75 +1,96 @@
 # Final Boss Clan Plugin
 
-A RuneLite plugin for the **Final Boss OSRS clan**, bringing clan news, drop sharing, group finding and leaderboards into one side panel.
+An optional RuneLite side panel for the **Final Boss OSRS clan**. It makes it easier to find a group, share drops, see where you stand in the clan and catch announcements, all without leaving the game.
 
-The panel unlocks automatically after your character is verified against **Wise Old Man group 1055**. No Discord login, account linking or database setup is required for clan members.
+| | Feature | What it does |
+|---|---|---|
+| 1 | **LFG** | Post a party or apply to one. Posts stay up through logout and world hops. |
+| 2 | **Drop log** | Big drops and pets are logged for the clan automatically. Screenshots are optional. |
+| 3 | **PBs & leaderboards** | Clan rankings for XP, EHB, collection log, combat achievements, PBs and GP. |
+| 4 | **Announcements** | Clan news in the panel, plus a one-line welcome in chat when you log in. |
+
+**Everything is opt-out.** Each upload has its own switch in the plugin settings, and nothing is sent until your clan membership is confirmed.
+
+An illustrated version of this guide is at the [bottom of this page](#illustrated-guide).
 
 ## Getting started
 
-1. Enable **Final Boss** in RuneLite's plugin settings once the plugin is installed.
-2. Log into your clan character and open the Final Boss sidebar icon.
-3. Wait for membership verification, then use the **Announcements**, **Drop Log**, **LFG** and **PBs** tabs.
-4. Open the plugin's configuration to choose which uploads and notifications you want enabled.
+1. In RuneLite open the **Plugin Hub** and search for **Final Boss**.
+2. Install it and log in on your clan character.
+3. Click the Final Boss icon in the RuneLite sidebar.
+4. The panel unlocks by itself once it sees you in the clan's **Wise Old Man group (1055)**. No account linking and no Discord login.
 
-If verification fails temporarily, use **Retry** in the panel. Your character must be listed in the clan's Wise Old Man group.
+If the check fails or you have only just joined the group, press **Retry** on the locked panel.
 
-## Announcements
+## 1. Looking for Group
 
-Read clan announcements in their own tab and receive the clan welcome message in chat. This content is maintained by clan staff.
+Post a party or join one from inside RuneLite. Anyone who logs in later sees what is open and can apply.
 
-## Drop Log
+**Host a party**
 
-Share qualifying loot with the clan automatically. Drops can qualify through:
+1. Open the **LFG** tab and press **Host a party**.
+2. Pick the activity and party size.
+3. Leave it on **ASAP**, or choose **Later** and set a start time up to 7 days ahead.
+4. Press **Post now**. For roles, a minimum KC, a loot rule or a description, press **Next (details)** first.
 
-- **Value:** GE price multiplied by quantity meets your configured threshold.
-- **Rarity:** a known drop rate meets your rarity threshold and the drop meets the rare-drop minimum value.
-- **Notable items:** the clan's curated list includes the item, including selected untradeables.
-- **Pets:** supported pet and duplicate-pet chat messages are logged regardless of GP value.
+**Join a party**
 
-The log shows the player, item, source, GP value, time and known rarity. Clue scrolls, long/curved bones, champion scrolls and keys are excluded by the automatic value/rarity rules; an explicit clan notable-item entry can override that exclusion.
+1. Browse **Open parties**; filter by activity if you like.
+2. Press **Apply**, choose your role and confirm. Your kill count is filled in from RuneLite's records or the hiscores when available.
+3. You get a chat message when the host accepts you, with the world to hop to.
 
-NPC kills and supported raid/reward chests are covered. Keep RuneLite's core **Loot Tracker** enabled for chest/event loot, including raids and Gauntlet-style rewards. Unknown drop rates can still qualify through value or the notable list.
+**Good to know**
 
-**Optional screenshots** capture the full client frame and can include RuneLite party member names. Uploaded screenshots can be opened from the drop log. **Optional Discord alerts** send drop notifications to a webhook you supply; leave the URL blank to disable them.
+- Posts survive logout and world hops. They come down when an ASAP party fills, when the host cancels, or 7 days after posting. A scheduled party that fills stays listed as full until its start time has passed.
+- Hosts can accept, decline or kick, and can add a member by name if a friend isn't using the plugin.
+- A host can run 1 ASAP post and up to 7 scheduled posts at once.
+- Scheduled parties remind the host and accepted members in chat 15 minutes before the start.
+- Filled parties are kept in a **Formed** list for 7 days.
+- From chat: `!lfg` lists open parties, `!lfg tob 4` posts an ASAP party with default settings, and `!lfg help` lists the activity names. Only you see the replies.
 
-Drops are queued locally for retry during temporary connection failures. Screenshots and Discord alerts are best effort: their failure does not prevent the core drop record from being submitted.
+## 2. Drop log
 
-## Looking For Group
+A shared feed of the clan's notable loot. It is handy as a backup for clan events if nobody took a picture.
 
-Find clanmates for raids, God Wars bosses, group bosses and minigames, or create a general PvP, skilling or social group.
+**What gets logged**
 
-**Hosts can:**
+- **Valuable:** worth 1,000,000 GP or more (GE price times quantity).
+- **Rare:** a known drop rate of 1 in 250 or rarer, and worth at least 100,000 GP.
+- **Pets**, with the pet's name when the client can tell which one it was.
+- **Notable items** picked by clan staff, such as untradeable uniques.
 
-- Choose an activity, party size, world, description and loot rule.
-- Set CM/HMT or ToA invocation where applicable, and learner/teacher tags for raids.
-- Choose roles for ToB/HMT, CoX/CM and Barbarian Assault parties.
-- Display a preferred minimum kill count.
-- Accept or decline applications, remove members, add a buddy by name, edit the party or disband it.
+Clue scrolls, long and curved bones, champion scrolls and keys are never logged by the value and rarity rules; the clan's notable list can override that.
 
-**Applicants can** browse and filter parties, choose an available role, mark themselves as a learner and submit their kill count. Kill counts may come from local RuneLite records, public hiscores or manual entry; the panel labels the source. The host's minimum KC is advisory—the host decides who to accept.
+**Reading the feed**
 
-When the final seat is filled, the party moves into **formed-party history**, with its roster and world. History is kept for seven days. Live advertisements expire after 30 minutes without host activity.
+- Filters: All, Mine, Rare+ and Pets. The tile colour shows how special a drop is.
+- **Top drop** pins the biggest drop of the last 24 hours.
+- Click any drop for its details and, when it has one, its screenshot.
 
-Chat notifications report relevant applications and party changes; desktop notifications are optional. Typing **`!lfg`** lists open parties in your own chatbox. Hosting and applications are handled through the panel.
+**Screenshots and Discord**
 
-## PBs and clan leaderboards
+**Screenshot Drops** is off until you turn it on. When on, it saves a picture of your whole client with each logged drop, and can include RuneLite party member names. You can also paste your own Discord webhook to post your drops to a channel.
 
-The **PBs** tab includes more than personal-best times:
+NPC kills and reward chests are covered. Keep RuneLite's core **Loot Tracker** plugin enabled for raid and chest loot. Drops are queued on your computer and retried if the connection fails.
 
-- **All-Time PBs:** the clan's top three times per tracked boss/activity, including supported raid team-size variants.
-- **New Clan Bests:** recent live-sourced records that currently lead the clan.
-- **Collection Log:** the clan's top 20 uploaded collection-log counts.
-- **Combat Achievements:** the clan's top 20 uploaded CA point totals and tiers.
-- **Weekly XP and EHB:** Wise Old Man gains, with EHB representing efficient bossing hours.
-- **GP This Week:** logged drop value over the last seven days and the leading contributors.
+To stop logging your drops, untick **Enable Drop Logging**. You can still read the clan feed.
 
-With PB uploads enabled, the plugin reads supported completion messages and backfills personal bests already stored by RuneLite. A slower time does not replace a faster one. Collection-log and CA statistics are submitted as they become available.
+## 3. PBs and leaderboards
 
-PB and stat uploads are skipped on special worlds such as Leagues and Deadman. Newly recorded special-world drops are excluded from normal GP totals; older records may have unknown world provenance. Weekly WOM results depend on the clan's backend sync.
+Clan stats at a glance, with your own rank under every board.
 
-## CA chat badges
+- **XP gained** and **EHB** this week, from Wise Old Man.
+- **Collection log** and **Combat Achievements**.
+- **Clan bests:** fastest boss and raid times, by team size.
+- **GP this week:** total value of logged drops and the top contributors.
 
-Show slayer-helmet icons beside eligible clan members' names in supported chat channels:
+Click any card to open the full board. There you can switch boards, pick a boss for clan bests, or search for a player. Your row is highlighted, and ties share a place.
+
+Personal bests are read from RuneLite's core **Chat Commands** plugin, so keep it enabled. They sync after login and every 30 minutes, and a slower time never replaces a faster one. Collection log and combat achievement totals upload when they change. Uploads are skipped on special worlds such as Leagues and Deadman.
+
+**Combat Achievement helmets**
+
+Members with a high CA tier get a slayer helmet next to their name in chat:
 
 | CA tier | Icon |
 |---|---|
@@ -77,44 +98,53 @@ Show slayer-helmet icons beside eligible clan members' names in supported chat c
 | Master | Vampyric slayer helmet |
 | Grandmaster | Tzkal slayer helmet |
 
-Badges use uploaded CA tiers and can be disabled independently of stat uploads.
+## 4. Announcements
 
-## Default settings
+- **In the panel:** the bell tab lists announcements from clan staff, newest first. A red dot on the bell means there is a post you haven't opened.
+- **At login:** one `[Final Boss]` line in your chatbox, once per client session.
+
+## Settings and defaults
+
+RuneLite settings, search **Final Boss**, then the cog icon.
 
 | Setting | Default |
 |---|---|
-| Drop logging | On |
-| Valuable-drop threshold | 1,000,000 GP; cannot be set lower |
-| Rare-drop threshold | 1 in 100 or rarer; set to 0 to disable this rule |
-| Rare-drop minimum value | 100,000 GP |
-| Drop screenshots | Off |
-| LFG and kill-count lookups | On |
+| Enable Drop Logging | On |
+| Valuable drop threshold | 1,000,000 GP; cannot be set lower |
+| Rare drop threshold | 1 in 250; cannot be set more common |
+| Rare drop minimum value | 100,000 GP |
+| Screenshot Drops | Off |
+| Enable LFG | On |
 | Party chat notifications | On |
 | Party desktop notifications | Off |
-| Discord webhook | Blank / disabled |
-| PB and collection-log/CA uploads | On |
-| CA chat badges | On |
+| Kill count lookups | On |
+| Discord Webhook URL | Blank (disabled) |
+| Upload personal bests | On |
+| Upload collection log & CA | On |
+| CA slayer helm chat icons | On |
 
 ## External services and privacy
 
-The plugin uses **Wise Old Man** for membership verification, the clan's **Supabase** backend for shared features, RuneLite's **hiscore client** for optional KC lookups, and **Discord** only when a webhook is configured.
+The plugin uses **Wise Old Man** to check clan membership, the clan's **Supabase** backend for the shared features, RuneLite's **hiscore client** for optional kill count lookups, and **Discord** only when you supply a webhook.
 
-The membership lookup sends your character name. Clan uploads begin only after verification and can be disabled in settings. Depending on enabled features, shared records include your RSN, loot, PB times, collection-log/CA statistics and LFG details. Screenshots include whatever is visible in the captured client frame and are stored in a public screenshot bucket; enable them only if you want to share that image. The Discord webhook URL stays in your local RuneLite configuration.
+- The membership check sends your character name to Wise Old Man.
+- Clan uploads begin only after that check passes, and each can be switched off in the settings.
+- Depending on what is enabled, shared records include your RSN, logged drops, PB times, collection log and combat achievement totals, and your LFG posts and applications.
+- Screenshots include whatever is visible in the client and are stored in a public bucket; enable them only if you want to share that image.
+- The Discord webhook URL stays in your local RuneLite configuration.
 
-Player names, achievements and kill counts are client-reported. The plugin is a clan coordination and sharing tool, not independent verification of those claims.
+Player names, achievements and kill counts are reported by members' clients. The plugin is a clan coordination and sharing tool, not independent verification of those claims.
 
 ## Building from source
 
-Use **JDK 17**. The build targets Java 11 bytecode.
+Use **JDK 11 or newer**. The build targets Java 11.
 
 ```sh
 ./gradlew build
 ./gradlew run
 ```
 
-On Windows, use `gradlew.bat`. The `run` task launches a RuneLite development client with Final Boss loaded. The JAR under `build/libs` is a plugin artifact, not a standalone client. The single class under `src/test` is the development launcher.
-
-Version 3 connects to the clan's v3 backend, which is maintained separately. Availability through RuneLite's Plugin Hub requires RuneLite's separate review and acceptance.
+On Windows, use `gradlew.bat`. The `run` task launches a RuneLite development client with the plugin loaded; the single class under `src/test` is that launcher. The plugin talks to the clan's backend, which is maintained separately.
 
 ## Credits
 
@@ -128,4 +158,8 @@ rarity lookup this plugin mirrors.
 
 ## License
 
-BSD 2-Clause — see [LICENSE](LICENSE)
+BSD 2-Clause. See [LICENSE](LICENSE).
+
+## Illustrated guide
+
+![Final Boss plugin guide](docs/guide.png)

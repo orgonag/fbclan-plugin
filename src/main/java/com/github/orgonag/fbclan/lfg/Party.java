@@ -4,6 +4,7 @@ import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,7 +25,9 @@ public class Party
     public static final int MIN_CAPACITY = 2;
     public static final int MAX_CAPACITY = 100;
     public static final int MAX_INVOCATION = 600;
-    public static final int TTL_MINUTES = 30;
+    // A post lives 7 days from creation; a full scheduled post forms GRACE after its start.
+    public static final Duration LIFETIME = Duration.ofHours(168);
+    public static final Duration GRACE = Duration.ofHours(2);
 
     public enum Status
     {
@@ -111,11 +114,43 @@ public class Party
     boolean learner;
     boolean teacher;
     Instant createdAt;
+    Instant scheduledFor;   // null = ASAP
     List<Applicant> applicants;
+
+    // The default template behind "Post now" and `!lfg tob 4`: every
+    // optional detail left at its default.
+    public static Party quick(String hostRsn, Activity activity, boolean hard, int invocation, int capacity, Integer world)
+    {
+        boolean h = hard && activity.hasHardMode();
+        return Party.builder()
+            .hostRsn(hostRsn)
+            .activity(activity)
+            .hardMode(h)
+            .invocation(activity.usesInvocation() ? invocation : 0)
+            .capacity(capacity)
+            .world(world)
+            .lootRule(LootRule.UNSPECIFIED)
+            .requiredRoles(Role.required(activity, h, capacity, Collections.emptyMap()))
+            .hostRole(Role.any(activity, h))
+            .createdAt(Instant.now())
+            .applicants(Collections.emptyList())
+            .build();
+    }
 
     public String title()
     {
         return activity.partyTitle(hardMode, invocation);
+    }
+
+    public boolean isScheduled()
+    {
+        return scheduledFor != null;
+    }
+
+    // When the server drops an unfilled post.
+    public Instant expiresAt()
+    {
+        return createdAt.plus(LIFETIME);
     }
 
     // CM / HMT, or a ToA at expert-level invocation.
@@ -209,8 +244,8 @@ public class Party
         Supabase.put(d, "host_role", hostRole == null ? null : hostRole.key());
         d.addProperty("learner", learner);
         d.addProperty("teacher", teacher);
-        d.addProperty("updated_at", Instant.now().toString());
-        d.addProperty("ttl_minutes", TTL_MINUTES);
+        // Always sent (JSON null = ASAP) so an edit can switch back.
+        Supabase.put(d, "scheduled_for", scheduledFor == null ? null : scheduledFor.toString());
         return d;
     }
 
@@ -237,13 +272,17 @@ public class Party
         }
         return Party.builder()
             .id(Supabase.str(row, "id"))
-            .version(Supabase.intOr(row, "version", 1))
+            .version(Supabase.longOr(row, "version", 1))
             .hostRsn(Supabase.str(row, "host_rsn"))
             .activity(activity)
             .hardMode(Supabase.bool(row, "hard_mode"))
             .invocation(Supabase.intOr(row, "invocation", 0))
             .capacity(Math.max(1, Supabase.intOr(row, "capacity", activity.getMaxPartySize())))
-            .description(Supabase.has(row, "description") ? Supabase.str(row, "description") : null)
+            // Scheduling servers tag `description` with the start time for old
+            // clients and send the real text as `note`.
+            .description(row.has("note") ? (Supabase.has(row, "note") ? Supabase.str(row, "note") : null)
+                : Supabase.has(row, "description") ? Supabase.str(row, "description") : null)
+            .scheduledFor(Supabase.instant(row, "scheduled_for", null))
             .world(Supabase.intOrNull(row, "world"))
             .minKc(Supabase.intOr(row, "min_kc", 0))
             .lootRule(LootRule.fromKey(Supabase.str(row, "loot_rule")))

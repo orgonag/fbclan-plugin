@@ -8,6 +8,7 @@ import com.google.gson.JsonObject;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.Client;
@@ -16,8 +17,8 @@ import net.runelite.api.gameval.VarbitID;
 
 /**
  * Uploads the member's collection-log count and combat-achievement
- * points through the improve-only submit_stats function. Varps/varbits
- * are read on the client thread (verification success and varb changes);
+ * points through the improve-only fb_submit_stats function. Varps/varbits
+ * are read on the client thread (after verification, then every 30 min);
  * the submit runs on the executor. Values only ever rise, so a
  * resubmission happens only when a counter passes the last sent value.
  */
@@ -31,7 +32,7 @@ public class MemberStats
     private final ScheduledExecutorService executor;
 
     private volatile String acknowledged;
-    private final java.util.concurrent.atomic.AtomicBoolean sending = new java.util.concurrent.atomic.AtomicBoolean();
+    private final AtomicBoolean sending = new AtomicBoolean();
 
     @Inject
     public MemberStats(Client client, FinalBossConfig config, Clan clan, Supabase db, ScheduledExecutorService executor)

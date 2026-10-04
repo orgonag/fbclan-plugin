@@ -11,8 +11,10 @@ import java.util.Set;
 /** What counts as a loggable drop. Pure rules; no I/O. */
 public final class DropRules
 {
-    // Floor for the valuable threshold so nobody floods the shared log.
+    // Floors so nobody floods the shared log: GP value, and the rarity
+    // rule never reaches commoner than 1 in 250.
     public static final int MIN_THRESHOLD_GP = 1_000_000;
+    public static final int MIN_RARE_DENOMINATOR = 250;
 
     // Chat lines the game prints for a pet (pets never appear in loot
     // events); the same set the core Screenshot plugin matches.
@@ -45,10 +47,11 @@ public final class DropRules
         return totalValue >= thresholdGp;
     }
 
-    // 1 in `denominator` or rarer; 0 disables; unknown never qualifies.
+    // 1 in `denominator` or rarer (never below the 1/250 floor, even for
+    // settings saved before it existed); unknown never qualifies.
     public static boolean rare(OptionalDouble rarity, int denominator)
     {
-        return denominator > 0 && rarity.isPresent() && rarity.getAsDouble() <= 1.0 / denominator;
+        return rarity.isPresent() && rarity.getAsDouble() <= 1.0 / Math.max(MIN_RARE_DENOMINATOR, denominator);
     }
 
     // Never logged by the automatic rules regardless of value or rate:

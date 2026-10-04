@@ -5,10 +5,11 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.IOException;
-import java.net.URLEncoder;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -25,8 +26,8 @@ import okhttp3.Response;
  * bests, member stats) go through improve-only Postgres functions. See
  * README "Data & Security" for the per-table matrix.
  *
- * Every call is blocking network I/O — run on the executor. Reads fail
- * soft (empty array), writes return success or the HTTP status.
+ * Every call is blocking network I/O — run on the executor. Reads
+ * return null on failure; writes return an {@link ApiResult}.
  */
 @Slf4j
 @Singleton
@@ -41,7 +42,7 @@ public class Supabase
     @Inject
     public Supabase(OkHttpClient http)
     {
-        this.http = http.newBuilder().callTimeout(20, java.util.concurrent.TimeUnit.SECONDS).build();
+        this.http = http.newBuilder().callTimeout(20, TimeUnit.SECONDS).build();
         boolean urlSet = System.getProperty("finalboss.apiUrl") != null;
         boolean keySet = System.getProperty("finalboss.anonKey") != null;
         if (urlSet != keySet) throw new IllegalArgumentException("Development endpoint requires both finalboss.apiUrl and finalboss.anonKey");
@@ -52,16 +53,9 @@ public class Supabase
 
     // ------------------------------------------------------------ reads
 
-    // Rows matching a PostgREST query ("select=a,b&order=x.desc"); an
-    // empty array on any failure, for callers that render what they get.
-    public JsonArray get(String table, String query)
-    {
-        JsonArray rows = getOrNull(table, query);
-        return rows == null ? new JsonArray() : rows;
-    }
-
-    // Same, but null on failure so a cache can keep its previous value
-    // and still clear when the table is genuinely empty.
+    // Rows matching a PostgREST query ("select=a,b&order=x.desc"). Null
+    // on failure, so a cache can keep its previous value and still clear
+    // when the table is genuinely empty.
     public JsonArray getOrNull(String table, String query)
     {
         JsonArray all = new JsonArray();
@@ -103,9 +97,8 @@ public class Supabase
             {
                 byte[] bytes = response.body().byteStream().readNBytes(8_000_001);
                 if (bytes.length > 8_000_000) return new ApiResult(response.code(), null, "Response too large");
-                raw = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+                raw = new String(bytes, StandardCharsets.UTF_8);
             }
-            if (raw.length() > 8_000_000) return new ApiResult(response.code(), null, "Response too large");
             JsonElement body = raw.isEmpty() ? null : new JsonParser().parse(raw);
             return new ApiResult(response.code(), body, null, response.header("Content-Range"));
         }
@@ -138,12 +131,6 @@ public class Supabase
     }
 
     // ------------------------------------------------------------ helpers
-
-    // PostgREST filter value: "rsn=eq." + enc(name).
-    public static String enc(String value)
-    {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
-    }
 
     private static Request.Builder base(String url)
     {
@@ -191,19 +178,19 @@ public class Supabase
 
     public static int intOr(JsonObject row, String key, int def)
     {
-        try { return has(row, key) ? new java.math.BigDecimal(str(row, key)).intValueExact() : def; }
+        try { return has(row, key) ? new BigDecimal(str(row, key)).intValueExact() : def; }
         catch (RuntimeException e) { return def; }
     }
 
     public static long longOr(JsonObject row, String key, long def)
     {
-        try { return has(row, key) ? new java.math.BigDecimal(str(row, key)).longValueExact() : def; }
+        try { return has(row, key) ? new BigDecimal(str(row, key)).longValueExact() : def; }
         catch (RuntimeException e) { return def; }
     }
 
     public static Integer intOrNull(JsonObject row, String key)
     {
-        try { return has(row, key) ? new java.math.BigDecimal(str(row, key)).intValueExact() : null; }
+        try { return has(row, key) ? new BigDecimal(str(row, key)).intValueExact() : null; }
         catch (RuntimeException e) { return null; }
     }
 

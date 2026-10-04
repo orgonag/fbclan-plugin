@@ -63,13 +63,13 @@ public class CaBadges
         return icons.registerChatIcon(image);
     }
 
-    // Executor.
-    public void refresh()
+    // Executor. False when the fetch failed (the previous tiers are kept).
+    public boolean refresh()
     {
         JsonArray rows = db.getOrNull("member_badges", "select=rsn,tier&order=rsn.asc");
         if (rows == null)
         {
-            return; // keep the previous tiers through an outage
+            return false;
         }
         Map<String, String> tiers = new HashMap<>();
         for (JsonElement el : rows)
@@ -83,6 +83,7 @@ public class CaBadges
             }
         }
         tierByRsn = Collections.unmodifiableMap(tiers);
+        return true;
     }
 
     // Client thread. Chat names carry img tags and non-breaking spaces;

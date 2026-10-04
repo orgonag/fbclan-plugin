@@ -107,6 +107,22 @@ public enum Activity
         return this == TOB || this == COX || this == BA;
     }
 
+    // Starting party size for quick posts and the host window.
+    public int defaultPartySize()
+    {
+        int preferred;
+        switch (this)
+        {
+            case TOB: preferred = 4; break;
+            case COX: case TOA: preferred = 3; break;
+            case BA: preferred = 5; break;
+            case YAMA: case ROYAL_TITANS: preferred = 2; break;
+            default: preferred = 4; break;
+        }
+        int min = Math.max(Party.MIN_CAPACITY, minPartySize);
+        return Math.max(min, Math.min(Math.max(min, maxPartySize), preferred));
+    }
+
     // True when a kill count exists a host can set a minimum for.
     public boolean hasKillcount()
     {

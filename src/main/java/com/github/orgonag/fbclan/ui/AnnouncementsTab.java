@@ -1,94 +1,99 @@
 package com.github.orgonag.fbclan.ui;
 
-import com.github.orgonag.fbclan.clan.ClanContent;
 import com.github.orgonag.fbclan.clan.ClanContent.Announcement;
-import java.awt.BorderLayout;
-import java.awt.Dimension;
+import com.github.orgonag.fbclan.clan.ClanContent;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import javax.swing.BorderFactory;
-import javax.swing.Box;
-import javax.swing.JLabel;
-import javax.swing.JPanel;
-import javax.swing.JSeparator;
 import javax.swing.JTextArea;
-import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.FontManager;
 
 /** Clan announcements, full text, newest first. Plain text: nothing to inject. */
 @Singleton
-public class AnnouncementsTab extends JPanel
+public class AnnouncementsTab extends Tab
 {
+    // Remembers, in the local RuneLite config, the newest post this player has opened.
+    // Its own group: a write under "finalboss" would restart polling (onConfigChanged).
+    private static final String GROUP = "finalbossui";
+    private static final String SEEN_KEY = "announcementSeen";
+
     private final ClanContent content;
-    private final ScheduledExecutorService executor;
-    private final JPanel list;
-    private final javax.swing.JTextArea refreshError = Ui.plain("");
-    private final java.util.concurrent.atomic.AtomicBoolean refreshing = new java.util.concurrent.atomic.AtomicBoolean();
+    private final ConfigManager configManager;
+    private String newest = "";
+    private Runnable unreadListener = () -> {};
 
     @Inject
-    public AnnouncementsTab(ClanContent content, ScheduledExecutorService executor)
+    public AnnouncementsTab(ClanContent content, ConfigManager configManager, ScheduledExecutorService executor)
     {
+        super("Announcements", executor);
         this.content = content;
-        this.executor = executor;
-        setLayout(new BorderLayout());
-        add(refreshError, BorderLayout.NORTH);
-        setBackground(ColorScheme.DARK_GRAY_COLOR);
-        list = Ui.scrollList(this);
-        list.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
+        this.configManager = configManager;
         render(content.announcements());
     }
 
+    // EDT. True while the newest post hasn't been opened.
+    boolean unread()
+    {
+        return !newest.isEmpty() && !newest.equals(configManager.getConfiguration(GROUP, SEEN_KEY));
+    }
+
+    // EDT. The tab was opened.
+    void markRead()
+    {
+        if (!unread()) return;
+        configManager.setConfiguration(GROUP, SEEN_KEY, newest);
+        unreadListener.run();
+    }
+
+    void setUnreadListener(Runnable listener)
+    {
+        unreadListener = listener;
+    }
+
+    @Override
     public void refresh()
     {
-        if (!refreshing.compareAndSet(false, true)) return;
-        Ui.async(executor, () -> {
+        load(() -> {
             if (!content.refreshAnnouncements()) throw new IllegalStateException("Refresh unavailable");
             return content.announcements();
-        }, rows -> { refreshing.set(false); render(rows); }, message -> { if (message != null) refreshing.set(false); refreshError.setText(message == null ? "" : message); });
+        }, this::render);
     }
 
     private void render(List<Announcement> items)
     {
-        list.removeAll();
-        if (items.isEmpty())
-        {
-            JLabel empty = Ui.empty("No announcements yet.");
-            empty.setBorder(BorderFactory.createEmptyBorder(20, 0, 20, 0));
-            list.add(empty);
-        }
-        for (int i = 0; i < items.size(); i++)
-        {
-            if (i > 0)
+        newest = items.isEmpty() ? "" : Integer.toHexString((items.get(0).getDate() + "|" + items.get(0).getTitle() + "|" + items.get(0).getBody()).hashCode());
+        if (isShowing()) markRead();
+        unreadListener.run();
+        fill(() -> {
+            if (items.isEmpty())
             {
-                list.add(Box.createRigidArea(new Dimension(0, 8)));
-                JSeparator sep = new JSeparator();
-                sep.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
-                sep.setAlignmentX(LEFT_ALIGNMENT);
-                list.add(sep);
-                list.add(Box.createRigidArea(new Dimension(0, 8)));
+                list.add(Theme.centered("No announcements yet."));
             }
-            Announcement a = items.get(i);
-            if (!a.getTitle().isEmpty())
+            for (int i = 0; i < items.size(); i++)
             {
-                JTextArea title = Ui.plain(a.getTitle());
-                title.setFont(FontManager.getRunescapeBoldFont());
-                title.setForeground(ColorScheme.BRAND_ORANGE);
-                list.add(title);
+                Announcement a = items.get(i);
+                // The clan's top entry (its own ordering) is outlined.
+                Card card = Theme.card(i == 0 ? Theme.ACCENT : null);
+                if (!a.getDate().isEmpty())
+                {
+                    card.add(Theme.text(a.getDate(), Theme.SUB));
+                }
+                if (!a.getTitle().isEmpty())
+                {
+                    JTextArea title = Theme.wrap(a.getTitle(), Theme.ACCENT_HI);
+                    title.setFont(FontManager.getRunescapeBoldFont());
+                    card.add(title);
+                }
+                if (!a.getBody().isEmpty())
+                {
+                    JTextArea body = Theme.wrap(a.getBody(), Theme.SOFT);
+                    body.setFont(FontManager.getRunescapeFont());
+                    card.add(body);
+                }
+                list.add(card);
             }
-            if (!a.getDate().isEmpty())
-            {
-                JLabel date = Ui.small(a.getDate(), Ui.MUTED);
-                date.setBorder(BorderFactory.createEmptyBorder(2, 0, 4, 0));
-                list.add(date);
-            }
-            if (!a.getBody().isEmpty())
-            {
-                list.add(Ui.plain(a.getBody()));
-            }
-        }
-        list.revalidate();
-        list.repaint();
+        });
     }
 }

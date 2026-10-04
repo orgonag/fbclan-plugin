@@ -2,28 +2,35 @@ package com.github.orgonag.fbclan.drops;
 
 import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.clan.ClanContent;
+import com.github.orgonag.fbclan.core.ApiResult;
 import com.github.orgonag.fbclan.core.Clan;
-import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.core.Names;
+import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
-import java.awt.Image;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -31,8 +38,11 @@ import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.Item;
+import net.runelite.api.ItemContainer;
 import net.runelite.api.NPC;
 import net.runelite.api.events.ChatMessage;
+import net.runelite.client.RuneLite;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.ItemStack;
 import net.runelite.client.party.PartyMember;
@@ -58,10 +68,11 @@ public class DropLogger
     private static final String BUCKET = "drop-screenshots";
     private static final String COLUMNS = "rsn,npc_name,item_name,item_id,ge_value,quantity,created_at,screenshot_url,rarity";
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+    private static final Pattern SCREENSHOT_FILE = Pattern.compile("(?:[A-Za-z0-9_-]{1,12}/)?[A-Za-z0-9_-]{1,64}\\.png");
 
-    private final DropOutbox outbox = new DropOutbox(net.runelite.client.RuneLite.RUNELITE_DIR.toPath().resolve("finalboss-outbox"));
-    private final java.util.concurrent.atomic.AtomicBoolean flushing = new java.util.concurrent.atomic.AtomicBoolean();
-    private final java.util.concurrent.atomic.AtomicBoolean framePending = new java.util.concurrent.atomic.AtomicBoolean();
+    private final DropOutbox outbox = new DropOutbox(RuneLite.RUNELITE_DIR.toPath().resolve("finalboss-outbox"));
+    private final AtomicBoolean flushing = new AtomicBoolean();
+    private final AtomicBoolean framePending = new AtomicBoolean();
     private final LootDeduplicator deduplicator = new LootDeduplicator();
     private final Client client;
     private final FinalBossConfig config;
@@ -74,6 +85,14 @@ public class DropLogger
     private final PartyService partyService;
     private final ScheduledExecutorService executor;
     private final okhttp3.OkHttpClient http;
+    // Pet attribution state; client thread only.
+    private String lastSource;
+    private int lastSourceTick = Integer.MIN_VALUE / 2;
+    private String petSource;
+    private int petTick = -1;
+    private int newItemId;
+    private int newItemTick = -1;
+    private Map<Integer, Integer> inventoryCounts = Collections.emptyMap();
 
     @Inject
     public DropLogger(Client client, FinalBossConfig config, Clan clan, ClanContent content, DropRates rates,
@@ -90,25 +109,22 @@ public class DropLogger
         this.drawManager = drawManager;
         this.partyService = partyService;
         this.executor = executor;
-        this.http = http.newBuilder().callTimeout(20, java.util.concurrent.TimeUnit.SECONDS).build();
+        this.http = http.newBuilder().callTimeout(20, TimeUnit.SECONDS).build();
     }
 
-    // Every legitimate screenshot URL starts with this; the drop-log tab
-    // refuses to open anything else (the drops table is anon-writable).
-    public static String screenshotPrefix()
+    // A file in the plugin's own screenshot bucket: "<uuid>.png", or the
+    // older "<player>/<time>_<item>.png". The drop viewer opens nothing else.
+    public static boolean isScreenshot(String url)
     {
-        return Supabase.publicUrl(BUCKET, "");
+        String prefix = Supabase.publicUrl(BUCKET, "");
+        return url != null && url.startsWith(prefix) && SCREENSHOT_FILE.matcher(url.substring(prefix.length())).matches();
     }
 
     // ------------------------------------------------------------ inputs
 
     // `source` is what the Loot Tracker reported (NPC, raid, chest); it
     // doubles as the key into the rate table. Client thread.
-    public void onLoot(String source, Collection<ItemStack> items)
-    {
-        onLoot(source, items, false);
-    }
-
+    // `tracker`: reported by the Loot Tracker rather than an NPC kill.
     public void onLoot(String source, Collection<ItemStack> items, boolean tracker)
     {
         String rsn = clan.rsn();
@@ -121,6 +137,8 @@ public class DropLogger
         long rareMin = Math.max(0, config.rareDropMinValueGp());
         Set<String> notable = content.notableItems();
         String display = DropRules.displaySource(source);
+        lastSource = display;
+        lastSourceTick = client.getTickCount();
 
         List<Drop> drops = new ArrayList<>();
         for (ItemStack stack : items)
@@ -154,29 +172,90 @@ public class DropLogger
     }
 
     // Pets only announce themselves in chat. Untradeable, so they bypass
-    // the value rules. Client thread.
+    // the value rules. The source is whatever dropped loot this tick or
+    // the one before; the name comes from the new follower, or for a
+    // backpack pet from the untradeable item that lands in the inventory
+    // (the message and the inventory update can arrive in either order).
+    // Client thread.
     public void onChatMessage(ChatMessage event)
     {
-        String rsn = clan.rsn();
         if (event.getType() != ChatMessageType.GAMEMESSAGE || !clan.canUpload() || !config.enableDropLogging()
             || !DropRules.isPetMessage(event.getMessage()))
         {
             return;
         }
-        String name = "Pet";
+        int tick = client.getTickCount();
+        String source = tick - lastSourceTick <= 1 && lastSource != null ? lastSource : "Pet drop";
         if (DropRules.isFollowerPet(event.getMessage()))
         {
             NPC follower = client.getFollower();
-            if (follower != null && follower.getName() != null)
-            {
-                name = "Pet (" + follower.getName() + ")";
-            }
+            String name = follower != null && follower.getName() != null ? "Pet (" + follower.getName() + ")" : "Pet";
+            dispatch(clan.rsn(), source, Collections.singletonList(new Drop(name, 0, 0, 1, null)));
         }
         else if (DropRules.isDuplicatePet(event.getMessage()))
         {
-            name = "Pet (duplicate)";
+            dispatch(clan.rsn(), source, Collections.singletonList(new Drop("Pet (duplicate)", 0, 0, 1, null)));
         }
-        dispatch(rsn, "Pet drop", Collections.singletonList(new Drop(name, 0, 0, 1, null)));
+        else if (newItemTick == tick && newItemId > 0)
+        {
+            backpackPet(source, newItemId);
+        }
+        else
+        {
+            petSource = source;
+            petTick = tick;
+        }
+    }
+
+    // Inventory changes: remember an untradeable item that just appeared,
+    // and settle a backpack pet that is waiting for it. Client thread.
+    public void onInventoryChanged(ItemContainer inventory)
+    {
+        Map<Integer, Integer> now = new HashMap<>();
+        for (Item item : inventory.getItems())
+        {
+            if (item.getId() > 0) now.merge(item.getId(), item.getQuantity(), Integer::sum);
+        }
+        int added = 0;
+        for (Map.Entry<Integer, Integer> e : now.entrySet())
+        {
+            if (e.getValue() > inventoryCounts.getOrDefault(e.getKey(), 0)
+                && !itemManager.getItemComposition(e.getKey()).isTradeable())
+            {
+                added = e.getKey();
+            }
+        }
+        inventoryCounts = now;
+        if (added <= 0) return;
+        newItemId = added;
+        newItemTick = client.getTickCount();
+        if (petTick >= 0 && newItemTick - petTick <= 1)
+        {
+            backpackPet(petSource, added);
+        }
+    }
+
+    // A backpack pet whose item never showed up is still logged, unnamed. Client thread.
+    public void onTick()
+    {
+        if (petTick >= 0 && client.getTickCount() - petTick > 1)
+        {
+            String source = petSource;
+            petTick = -1;
+            if (clan.canUpload() && config.enableDropLogging())
+            {
+                dispatch(clan.rsn(), source, Collections.singletonList(new Drop("Pet", 0, 0, 1, null)));
+            }
+        }
+    }
+
+    private void backpackPet(String source, int itemId)
+    {
+        petTick = -1;
+        newItemId = 0;
+        if (!clan.canUpload() || !config.enableDropLogging()) return;
+        String name = "Pet (" + itemManager.getItemComposition(itemId).getName() + ")";
+        dispatch(clan.rsn(), source, Collections.singletonList(new Drop(name, itemId, 0, 1, null)));
     }
 
     // ------------------------------------------------------------ reads
@@ -187,11 +266,11 @@ public class DropLogger
     {
         JsonArray rows = db.getOrNull("drops", "select=" + COLUMNS + "&order=created_at.desc,id.desc&limit=" + Math.max(1, Math.min(200, limit)));
         if (rows == null) throw new IllegalStateException("Could not refresh drops. Showing the last loaded list.");
-        for (com.google.gson.JsonElement el : rows)
+        for (JsonElement el : rows)
         {
             JsonObject row = el.getAsJsonObject();
             String path = Supabase.str(row, "screenshot_url");
-            if (path.matches("[0-9a-f-]{36}\\.png")) row.addProperty("screenshot_url", screenshotPrefix() + path);
+            if (path.matches("[0-9a-f-]{36}\\.png")) row.addProperty("screenshot_url", Supabase.publicUrl(BUCKET, path));
         }
         return rows;
     }
@@ -202,12 +281,12 @@ public class DropLogger
     {
         Session session = clan.snapshot();
         String worldType = clan.onStandardWorld() ? "standard" : "special";
-        String occurred = java.time.Instant.now().toString();
+        String occurred = Instant.now().toString();
         List<JsonObject> rows = new ArrayList<>();
         for (Drop d : drops)
         {
             JsonObject row = new JsonObject();
-            row.addProperty("event_id", java.util.UUID.randomUUID().toString());
+            row.addProperty("event_id", UUID.randomUUID().toString());
             row.addProperty("rsn", rsn); row.addProperty("npc_name", source);
             row.addProperty("item_name", d.name); row.addProperty("item_id", d.itemId);
             row.addProperty("ge_value", d.value); row.addProperty("quantity", d.quantity);
@@ -216,7 +295,7 @@ public class DropLogger
             rows.add(row);
         }
         executor.submit(() -> {
-            if (!clan.current(session) || !config.enableDropLogging()) return;
+            // Saved even if the player has since logged out; flush sends it at their next login.
             for (JsonObject row : rows)
             {
                 try { outbox.add(session, row); }
@@ -226,7 +305,7 @@ public class DropLogger
         });
         // Screenshots are optional enrichment; no rendered frame is needed to save a drop.
         if (!config.enableDropScreenshots() || !framePending.compareAndSet(false, true)) return;
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         List<String> party = partyNames();
         drawManager.requestNextFrameListener(frame -> {
             framePending.set(false);
@@ -236,7 +315,7 @@ public class DropLogger
             try { graphics.drawImage(frame, 0, 0, null); } finally { graphics.dispose(); }
             executor.submit(() -> {
                 if (!clan.current(session) || !config.enableDropLogging() || !config.enableDropScreenshots()) return;
-                String path = uploadScreenshot(copy, rsn, party, 0);
+                String path = uploadScreenshot(copy, party);
                 if (path == null) return;
                 for (JsonObject row : rows)
                 {
@@ -263,10 +342,10 @@ public class DropLogger
             {
                 if (!clan.current(session) || !config.enableDropLogging()) break;
                 JsonObject payload = new JsonObject(); payload.add("p_row", row);
-                com.github.orgonag.fbclan.core.ApiResult result = db.rpcResult("fb_submit_drop", payload);
+                ApiResult result = db.rpcResult("fb_submit_drop", payload);
                 if (!result.successful())
                 {
-                    if (result.retryable()) break;
+                    if (!result.refused()) break;
                     outbox.reject(Supabase.str(row, "event_id"));
                     log.warn("Drop rejected by database; saved locally for inspection: {}", result.message());
                     continue;
@@ -320,13 +399,12 @@ public class DropLogger
 
     // ------------------------------------------------------------ screenshots
 
-    private String uploadScreenshot(Image frame, String rsn, List<String> party, int itemId)
+    // `image` is this drop's own copy of the frame; the party line is drawn onto it.
+    private String uploadScreenshot(BufferedImage image, List<String> party)
     {
         try
         {
-            BufferedImage image = new BufferedImage(frame.getWidth(null), frame.getHeight(null), BufferedImage.TYPE_INT_RGB);
             Graphics2D g = image.createGraphics();
-            g.drawImage(frame, 0, 0, null);
             if (!party.isEmpty())
             {
                 String line = "Party members: " + String.join(", ", party);
@@ -340,7 +418,7 @@ public class DropLogger
             g.dispose();
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             ImageIO.write(image, "png", out);
-            String path = java.util.UUID.randomUUID() + ".png";
+            String path = UUID.randomUUID() + ".png";
             return db.upload(BUCKET, path, out.toByteArray(), "image/png") == null ? null : path;
         }
         catch (IOException | RuntimeException e)

@@ -7,7 +7,6 @@ import com.github.orgonag.fbclan.drops.DropRates;
 import com.github.orgonag.fbclan.drops.DropRules;
 import com.github.orgonag.fbclan.lfg.Killcounts;
 import com.github.orgonag.fbclan.lfg.LfgCommand;
-import com.github.orgonag.fbclan.lfg.PartyApi;
 import com.github.orgonag.fbclan.lfg.PartyBoard;
 import com.github.orgonag.fbclan.pbs.PersonalBests;
 import com.github.orgonag.fbclan.stats.CaBadges;
@@ -27,12 +26,11 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.ItemContainerChanged;
+import net.runelite.api.gameval.InventoryID;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.events.RuneScapeProfileChanged;
 import net.runelite.api.events.GameStateChanged;
-import net.runelite.api.events.VarbitChanged;
-import net.runelite.api.gameval.VarPlayerID;
-import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -77,7 +75,6 @@ public class FinalBossPlugin extends Plugin
     @Inject private MemberStats stats;
     @Inject private CaBadges badges;
     @Inject private PartyBoard parties;
-    @Inject private PartyApi partyApi;
     @Inject private Killcounts killcounts;
     @Inject private LfgCommand lfgCommand;
     @Inject private Sidebar sidebar;
@@ -87,7 +84,8 @@ public class FinalBossPlugin extends Plugin
 
     private NavigationButton navButton;
     private ScheduledFuture<?> dropRefresh;
-    private ScheduledFuture<?> badgeRefresh;
+    // CA icon tiers loaded this client session.
+    private volatile boolean badgesLoaded;
 
     @Provides
     FinalBossConfig provideConfig(ConfigManager configManager)
@@ -100,16 +98,13 @@ public class FinalBossPlugin extends Plugin
     {
         clan.activate();
         clan.setListener(this::onStatus);
+        // Once per client session: the welcome line and the CA icon list.
         content.resetSession();
-        pbs.resetSession();
+        badgesLoaded = false;
 
         // Startup fetches, all off the client thread.
         executor.submit(dropRates::load);
-        executor.submit(content::refreshNotableItems);
-        executor.submit(() -> {
-            content.refreshWelcome();
-            content.maybeShowWelcome();
-        });
+        executor.submit(this::loadContent);
         // Warms the cache and populates the tab before it's first opened.
         announcementsTab.refresh();
 
@@ -132,6 +127,7 @@ public class FinalBossPlugin extends Plugin
     {
         clan.deactivate();
         stopPolling();
+        SwingUtilities.invokeLater(sidebar::closeWindows);
         toolbar.removeNavigation(navButton);
     }
 
@@ -151,19 +147,27 @@ public class FinalBossPlugin extends Plugin
             return;
         }
         startPolling();
-        executor.submit(content::maybeShowWelcome);
+        // Retries whatever the startup fetch missed.
+        executor.submit(this::loadContent);
         // World-type and varp reads belong on the client thread.
         clientThread.invokeLater(() -> {
-            pbs.maybeSeed();
+            pbs.sync();
             stats.maybeSubmit();
             executor.submit(drops::flush);
         });
     }
 
+    private void loadContent()
+    {
+        content.loadMissing();
+        content.maybeShowWelcome();
+    }
+
     private void startPolling()
     {
         parties.start();
-        if (config.enableDropLogging() && dropRefresh == null)
+        // The feed refreshes whether or not this player uploads their own drops.
+        if (dropRefresh == null)
         {
             dropRefresh = executor.scheduleAtFixedRate(() -> {
                 try
@@ -176,22 +180,18 @@ public class FinalBossPlugin extends Plugin
                 }
             }, 60, 60, TimeUnit.SECONDS);
         }
-        // Badge tiers: fetch on verification, then every 5 minutes so
-        // newly earned tiers show without a relog.
-        if (badgeRefresh != null)
+        loadBadges();
+    }
+
+    // CA icon tiers: once per client session, and only while the icons are on.
+    private void loadBadges()
+    {
+        if (config.enableChatBadges() && !badgesLoaded)
         {
-            return;
+            executor.submit(() -> {
+                badgesLoaded = badges.refresh();
+            });
         }
-        badgeRefresh = executor.scheduleAtFixedRate(() -> {
-            try
-            {
-                badges.refresh();
-            }
-            catch (Exception e)
-            {
-                log.warn("CA badge refresh error", e);
-            }
-        }, 0, 300, TimeUnit.SECONDS);
     }
 
     private void stopPolling()
@@ -203,11 +203,6 @@ public class FinalBossPlugin extends Plugin
         {
             dropRefresh.cancel(true);
             dropRefresh = null;
-        }
-        if (badgeRefresh != null)
-        {
-            badgeRefresh.cancel(true);
-            badgeRefresh = null;
         }
     }
 
@@ -227,10 +222,11 @@ public class FinalBossPlugin extends Plugin
         else if (event.getGameState() == GameState.LOGIN_SCREEN && (clan.isVerified() || clan.rsn() != null))
         {
             clan.reset();
-            pbs.resetSession();
-            content.resetSession();
             stopPolling();
-            SwingUtilities.invokeLater(() -> sidebar.show(Clan.Status.VERIFYING));
+            SwingUtilities.invokeLater(() -> {
+                sidebar.closeWindows();
+                sidebar.show(Clan.Status.VERIFYING);
+            });
         }
     }
 
@@ -238,39 +234,52 @@ public class FinalBossPlugin extends Plugin
     public void onRuneScapeProfileChanged(RuneScapeProfileChanged event)
     {
         clan.reset();
-        pbs.resetSession();
-        content.resetSession();
         stopPolling();
+        SwingUtilities.invokeLater(sidebar::closeWindows);
         if (client.getGameState() == GameState.LOGGED_IN) clan.verifyAfter(1);
     }
 
     @Subscribe
     public void onConfigChanged(ConfigChanged event)
     {
+        // Only two settings start or stop something; the rest are read when
+        // used. (Restarting on any change would wipe a half-filled LFG form.)
         if (!"finalboss".equals(event.getGroup())) return;
-        clientThread.invokeLater(() -> {
-            stopPolling();
-            if (clan.isVerified()) startPolling();
-        });
+        if ("enableChatBadges".equals(event.getKey()))
+        {
+            if (clan.isVerified()) loadBadges();
+        }
+        else if ("enableLfg".equals(event.getKey()))
+        {
+            clientThread.invokeLater(() -> {
+                stopPolling();
+                if (clan.isVerified()) startPolling();
+            });
+        }
+    }
+
+    @Subscribe
+    public void onItemContainerChanged(ItemContainerChanged event)
+    {
+        if (event.getContainerId() == InventoryID.INV)
+        {
+            drops.onInventoryChanged(event.getItemContainer());
+        }
     }
 
     @Subscribe
     public void onGameTick(GameTick event)
     {
+        drops.onTick();
+        // Retry waiting drop uploads about every 30 seconds.
         if (client.getTickCount() % 50 == 0)
         {
-            pbs.maybeSeed();
-            stats.maybeSubmit();
             executor.submit(drops::flush);
         }
-    }
-
-    @Subscribe
-    public void onVarbitChanged(VarbitChanged event)
-    {
-        // Collection log count is a varp; CA points a varbit.
-        if (event.getVarpId() == VarPlayerID.COLLECTION_COUNT || event.getVarbitId() == VarbitID.CA_POINTS)
+        // PBs (from RuneLite's own records) and CL/CA stats: every 30 minutes.
+        if (client.getTickCount() % 3000 == 0)
         {
+            pbs.sync();
             stats.maybeSubmit();
         }
     }
@@ -278,7 +287,7 @@ public class FinalBossPlugin extends Plugin
     @Subscribe
     public void onNpcLootReceived(NpcLootReceived event)
     {
-        drops.onLoot(event.getNpc().getName(), event.getItems());
+        if (event.getNpc().getName() != null) drops.onLoot(event.getNpc().getName(), event.getItems(), false);
     }
 
     // Loot with no NPC kill behind it: raid chests, Barrows, and the few
@@ -298,7 +307,6 @@ public class FinalBossPlugin extends Plugin
     @Subscribe
     public void onChatMessage(ChatMessage event)
     {
-        pbs.onChatMessage(event);
         drops.onChatMessage(event);
         if (config.enableChatBadges())
         {
