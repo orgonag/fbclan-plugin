@@ -2,7 +2,6 @@ package com.github.orgonag.fbclan.pbs;
 
 import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.core.Clan;
-import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.google.gson.Gson;
@@ -25,11 +24,12 @@ import net.runelite.client.config.ConfigManager;
 /**
  * Keeps the clan PB board in step with the PBs RuneLite's Chat Commands
  * plugin already records per account (the source of truth, raid team
- * sizes included). After verification and then every 30 minutes, it
- * uploads only the entries that changed since this account's last
- * successful sync: "seed" on the first sync ever, "live" afterwards (the
- * board's clan-bests list shows live ones). A rename or a different
- * backend counts as a first sync. The server keeps only faster times.
+ * sizes included); the clan database is only a copy of it for display.
+ * The first sync of each login sends every PB, so that copy always
+ * matches this client whatever happened in between (a rename, another
+ * backend, a reset); every 30 minutes after that, only what changed.
+ * A PB that is new since the last successful sync is sent as "live"
+ * (the clan-bests list shows those); everything else as "seed".
  */
 @Slf4j
 @Singleton
@@ -41,15 +41,6 @@ public class PersonalBests
     private static final String GROUP = "finalbossui";
     private static final String KEY = "pbSynced";
     private static final Type TIMES = new TypeToken<Map<String, Double>>() {}.getType();
-
-    // The stored record: who it was synced as, where to, and the times.
-    @Value
-    private static class Synced
-    {
-        String rsn;
-        String endpoint;
-        Map<String, Double> pbs;
-    }
 
     @Value
     private static class Entry
@@ -66,6 +57,8 @@ public class PersonalBests
     private final ScheduledExecutorService executor;
     private final Gson gson;
     private final AtomicBoolean syncing = new AtomicBoolean();
+    // The login (session generation) whose PBs have all been sent.
+    private volatile long fullSync = -1;
 
     @Inject
     public PersonalBests(FinalBossConfig config, Clan clan, Supabase db, ConfigManager configManager,
@@ -90,13 +83,14 @@ public class PersonalBests
             if (!session.getProfile().equals(configManager.getRSProfileKey())) return;
             Map<String, Double> now = stored();
             Map<String, Double> before = lastSynced(session);
-            List<Entry> changed = new ArrayList<>();
+            boolean everything = fullSync != session.getGeneration();
+            List<Entry> sending = new ArrayList<>();
             now.forEach((key, seconds) -> {
-                Double was = before == null ? null : before.get(key);
-                if (was == null || !was.equals(seconds)) changed.add(new Entry(key, seconds, before == null ? "seed" : "live"));
+                boolean fresh = before == null || !seconds.equals(before.get(key));
+                if (fresh || everything) sending.add(new Entry(key, seconds, fresh && before != null ? "live" : "seed"));
             });
-            String snapshot = gson.toJson(new Synced(Names.normalize(session.getRsn()), Supabase.projectUrl(), now));
-            if (changed.isEmpty())
+            String snapshot = gson.toJson(now);
+            if (sending.isEmpty())
             {
                 // Nothing to send, but record the first sync so later PBs count as live.
                 if (before == null) configManager.setConfiguration(GROUP, session.getProfile(), KEY, snapshot);
@@ -107,7 +101,11 @@ public class PersonalBests
                 try
                 {
                     // Written to the profile it was read from, whichever account is logged in by now.
-                    if (submit(session, changed)) configManager.setConfiguration(GROUP, session.getProfile(), KEY, snapshot);
+                    if (submit(session, sending))
+                    {
+                        configManager.setConfiguration(GROUP, session.getProfile(), KEY, snapshot);
+                        fullSync = session.getGeneration();
+                    }
                 }
                 finally
                 {
@@ -143,17 +141,14 @@ public class PersonalBests
         return out;
     }
 
-    // Null when this account has never synced to this backend under this name.
+    // Null when this profile has never synced.
     private Map<String, Double> lastSynced(Session session)
     {
         String json = configManager.getConfiguration(GROUP, session.getProfile(), KEY);
         if (json == null || json.isEmpty()) return null;
         try
         {
-            Synced synced = gson.fromJson(json, Synced.class);
-            // Records written before the name was stored are a bare boss -> time map.
-            if (synced.getPbs() == null) return gson.fromJson(json, TIMES);
-            return Names.same(synced.getRsn(), session.getRsn()) && Supabase.projectUrl().equals(synced.getEndpoint()) ? synced.getPbs() : null;
+            return gson.fromJson(json, TIMES);
         }
         catch (RuntimeException e)
         {

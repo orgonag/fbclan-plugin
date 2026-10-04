@@ -15,7 +15,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Value;
 
-/** The fb_board / fb_lfg API (protocol 3, schema 4). Each logical write has one retry identity. */
+/** The fb_board / fb_lfg API (protocol 3, schema 5). Each logical write has one retry identity. */
 @Singleton
 public class PartyApi
 {
@@ -136,7 +136,13 @@ public class PartyApi
         JsonObject d = data(id);
         d.addProperty("rsn", rsn);
         Supabase.put(d, "role", role == null ? null : role.key());
-        return command("add", d);
+        boolean added = command("add", d);
+        // They applied (or were declined) since the last refresh.
+        if (!added && refusal.get() != null && refusal.get().startsWith("duplicate key"))
+        {
+            refusal.set("They have just applied. Accept them from the list above.");
+        }
+        return added;
     }
 
     public boolean deleteFormed(String id)

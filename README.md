@@ -9,7 +9,7 @@ An optional RuneLite side panel for the **Final Boss OSRS clan**. It makes it ea
 | 3 | **PBs & leaderboards** | Clan rankings for XP, EHB, collection log, combat achievements, PBs and GP. |
 | 4 | **Announcements** | Clan news in the panel, plus a one-line welcome in chat when you log in. |
 
-**Everything is opt-out.** Each upload has its own switch in the plugin settings, and nothing is sent until your clan membership is confirmed.
+**Everything is opt-out.** Each upload has its own switch in the plugin settings, and nothing about you is uploaded to the clan until your membership is confirmed.
 
 An illustrated version of this guide is at the [bottom of this page](#illustrated-guide).
 
@@ -31,7 +31,7 @@ Post a party or join one from inside RuneLite. Anyone who logs in later sees wha
 1. Open the **LFG** tab and press **Host a party**.
 2. Pick the activity and party size.
 3. Leave it on **ASAP**, or choose **Later** and set a start time up to 7 days ahead.
-4. Press **Post now**. For roles, a minimum KC, a loot rule or a description, press **Next (details)** first.
+4. Press **Post now**. For roles, a minimum KC, a loot rule or a description, press **Next (details)** first. Your own role starts as **Any**: you take whichever seat is left, so applicants can pick freely.
 
 **Join a party**
 
@@ -42,7 +42,7 @@ Post a party or join one from inside RuneLite. Anyone who logs in later sees wha
 **Good to know**
 
 - Posts survive logout and world hops. They come down when an ASAP party fills, when the host cancels, or 7 days after posting. A scheduled party that fills stays listed as full until its start time has passed.
-- Hosts can accept, decline or kick, and can add a member by name if a friend isn't using the plugin.
+- Hosts can accept, decline or kick, and can add a member by name if a friend isn't using the plugin. Applicants, added members and hosts get a chat message for each of these.
 - A host can run 1 ASAP post and up to 7 scheduled posts at once.
 - Scheduled parties remind the host and accepted members in chat 15 minutes before the start.
 - Filled parties are kept in a **Formed** list for 7 days.

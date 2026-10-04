@@ -158,9 +158,14 @@ public class Killcounts
             next = hiscores.lookupAsync(rsn, HiscoreEndpoint.NORMAL)
                 .orTimeout(TIMEOUT_MS, TimeUnit.MILLISECONDS)
                 .handle((result, ex) -> {
-                    if (ex != null || result == null)
+                    if (ex != null)
                     {
                         return new Hiscore(-1, -1, true, System.currentTimeMillis());
+                    }
+                    if (result == null)
+                    {
+                        // Not on the hiscores: a real answer, not worth asking again every minute.
+                        return new Hiscore(-1, -1, false, System.currentTimeMillis());
                     }
                     try
                     {

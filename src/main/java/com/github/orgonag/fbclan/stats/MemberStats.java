@@ -19,8 +19,8 @@ import net.runelite.api.gameval.VarbitID;
  * Uploads the member's collection-log count and combat-achievement
  * points through the improve-only fb_submit_stats function. Varps/varbits
  * are read on the client thread (after verification, then every 30 min);
- * the submit runs on the executor. Values only ever rise, so a
- * resubmission happens only when a counter passes the last sent value.
+ * the submit runs on the executor. Sent once per login and again only
+ * when a value changes; the server keeps the highest.
  */
 @Singleton
 public class MemberStats

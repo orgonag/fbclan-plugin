@@ -213,10 +213,9 @@ public class LeaderboardsTab extends Tab
                 List<Row> rows = new ArrayList<>();
                 if (boss == null)
                 {
-                    int rank = 1;
                     for (Entry e : pbs.recent())
                     {
-                        rows.add(new Row(rank++, e.getRsn(), PbFormat.boss(e.getBossKey()) + " · " + e.getRsn(),
+                        rows.add(new Row(0, e.getRsn(), PbFormat.boss(e.getBossKey()) + " · " + e.getRsn(),
                             PbFormat.seconds(e.getSeconds()), null));
                     }
                     return new Board(rows, "No new clan bests yet.", "newest first");

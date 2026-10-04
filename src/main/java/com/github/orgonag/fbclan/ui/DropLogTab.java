@@ -194,8 +194,9 @@ public class DropLogTab extends Tab
             quantity = Supabase.intOr(row, "quantity", 1);
             value = Supabase.longOr(row, "ge_value", 0);
             rarity = Supabase.doubleOr(row, "rarity", 0);
-            at = Supabase.instant(row, "created_at", Instant.now());
-            // The drops table is anon-writable, so a screenshot link is only
+            // When it dropped; rows from before that was recorded only have the upload time.
+            at = Supabase.instant(row, "occurred_at", Supabase.instant(row, "created_at", Instant.now()));
+            // Drop rows are client-reported, so a screenshot link is only
             // honoured when it points into the plugin's own public bucket.
             String url = Supabase.str(row, "screenshot_url");
             screenshot = DropLogger.isScreenshot(url) ? url : "";

@@ -26,7 +26,6 @@ public class Leaderboards
         String bossKey;
         double seconds;
         String achievedAt; // ISO timestamp, may be blank
-        int rank;          // 1..3 on the board, 1 in the feed
     }
 
     private final Supabase db;
@@ -53,7 +52,7 @@ public class Leaderboards
     public boolean refresh()
     {
         boolean complete = true;
-        JsonArray rows = db.getOrNull("pb_leaderboard", "select=rsn,boss_key,seconds,achieved_at,rank&order=boss_key.asc,rank.asc,rsn.asc");
+        JsonArray rows = db.getOrNull("pb_leaderboard", "select=rsn,boss_key,seconds,achieved_at&order=boss_key.asc,rank.asc,rsn.asc");
         if (rows != null)
         {
             board = parse(rows);
@@ -83,8 +82,7 @@ public class Leaderboards
             }
             double seconds = Supabase.doubleOr(row, "seconds", -1);
             if (seconds <= 0 || seconds >= 86400) continue;
-            out.add(new Entry(rsn, boss, seconds,
-                Supabase.str(row, "achieved_at"), Supabase.intOr(row, "rank", 1)));
+            out.add(new Entry(rsn, boss, seconds, Supabase.str(row, "achieved_at")));
         }
         return Collections.unmodifiableList(out);
     }
