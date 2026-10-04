@@ -5,7 +5,11 @@ import com.github.orgonag.fbclan.drops.DropRules;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Iterator;
@@ -69,10 +73,10 @@ public class DropViewer
             dialog = new JDialog(SwingUtilities.getWindowAncestor(anchor));
             dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
             dialog.getRootPane().registerKeyboardAction(e -> close(), KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
-            dialog.addWindowListener(new java.awt.event.WindowAdapter()
+            dialog.addWindowListener(new WindowAdapter()
             {
                 @Override
-                public void windowClosed(java.awt.event.WindowEvent e)
+                public void windowClosed(WindowEvent e)
                 {
                     dialog = null;
                     showing = null;
@@ -91,7 +95,7 @@ public class DropViewer
 
         JLabel image = Theme.text(d.hasScreenshot() ? "Loading screenshot..." : "No screenshot for this drop.", Theme.SUB);
         image.setHorizontalAlignment(SwingConstants.CENTER);
-        Theme.Card frame = new Theme.Card(Theme.SURFACE, Theme.LINE);
+        Card frame = new Card(Theme.SURFACE, Theme.LINE);
         frame.setLayout(new BorderLayout());
         frame.add(image, BorderLayout.CENTER);
         frame.setPreferredSize(new Dimension(FIT_W + 16, (d.hasScreenshot() ? FIT_H : 60) + 16));
@@ -102,7 +106,7 @@ public class DropViewer
         body.add(frame);
         if (d.hasScreenshot())
         {
-            body.add(Theme.row(null, null, Theme.button("Open in browser", Theme.Btn.Kind.GHOST, () -> LinkBrowser.browse(d.screenshot))));
+            body.add(Theme.row(null, null, Theme.button("Open in browser", Btn.Kind.GHOST, () -> LinkBrowser.browse(d.screenshot))));
             load(d.screenshot, image);
         }
         JPanel root = new JPanel(new BorderLayout());
@@ -156,7 +160,7 @@ public class DropViewer
 
     private static byte[] readCapped(InputStream in) throws IOException
     {
-        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] buf = new byte[16384];
         for (int n; (n = in.read(buf)) != -1; )
         {
@@ -169,7 +173,7 @@ public class DropViewer
     // Reads the header first so a small file can't claim a huge canvas.
     private static BufferedImage decode(byte[] bytes) throws IOException
     {
-        try (ImageInputStream in = ImageIO.createImageInputStream(new java.io.ByteArrayInputStream(bytes)))
+        try (ImageInputStream in = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes)))
         {
             Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
             if (!readers.hasNext()) return null;

@@ -5,10 +5,12 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +43,7 @@ public class Supabase
     @Inject
     public Supabase(OkHttpClient http)
     {
-        this.http = http.newBuilder().callTimeout(20, java.util.concurrent.TimeUnit.SECONDS).build();
+        this.http = http.newBuilder().callTimeout(20, TimeUnit.SECONDS).build();
         boolean urlSet = System.getProperty("finalboss.apiUrl") != null;
         boolean keySet = System.getProperty("finalboss.anonKey") != null;
         if (urlSet != keySet) throw new IllegalArgumentException("Development endpoint requires both finalboss.apiUrl and finalboss.anonKey");
@@ -103,7 +105,7 @@ public class Supabase
             {
                 byte[] bytes = response.body().byteStream().readNBytes(8_000_001);
                 if (bytes.length > 8_000_000) return new ApiResult(response.code(), null, "Response too large");
-                raw = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+                raw = new String(bytes, StandardCharsets.UTF_8);
             }
             if (raw.length() > 8_000_000) return new ApiResult(response.code(), null, "Response too large");
             JsonElement body = raw.isEmpty() ? null : new JsonParser().parse(raw);
@@ -191,19 +193,19 @@ public class Supabase
 
     public static int intOr(JsonObject row, String key, int def)
     {
-        try { return has(row, key) ? new java.math.BigDecimal(str(row, key)).intValueExact() : def; }
+        try { return has(row, key) ? new BigDecimal(str(row, key)).intValueExact() : def; }
         catch (RuntimeException e) { return def; }
     }
 
     public static long longOr(JsonObject row, String key, long def)
     {
-        try { return has(row, key) ? new java.math.BigDecimal(str(row, key)).longValueExact() : def; }
+        try { return has(row, key) ? new BigDecimal(str(row, key)).longValueExact() : def; }
         catch (RuntimeException e) { return def; }
     }
 
     public static Integer intOrNull(JsonObject row, String key)
     {
-        try { return has(row, key) ? new java.math.BigDecimal(str(row, key)).intValueExact() : null; }
+        try { return has(row, key) ? new BigDecimal(str(row, key)).intValueExact() : null; }
         catch (RuntimeException e) { return null; }
     }
 

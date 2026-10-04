@@ -7,8 +7,8 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Graphics;
 import java.awt.GridLayout;
 import java.awt.geom.Path2D;
 import java.util.LinkedHashMap;
@@ -41,10 +41,10 @@ public class Sidebar extends PluginPanel
     private final CardLayout cards = new CardLayout();
     private final JPanel root = new JPanel(cards);
     private final JTextArea status = Theme.wrap("", Theme.SOFT);
-    private final Theme.Btn retry;
+    private final Btn retry;
     private final CardLayout tabCards = new CardLayout();
     private final JPanel tabs = new JPanel(tabCards);
-    private final Map<String, Theme.Btn> tabButtons = new LinkedHashMap<>();
+    private final Map<String, Btn> tabButtons = new LinkedHashMap<>();
     private final Map<String, Tab> tabPanels = new LinkedHashMap<>();
     private final AnnouncementsTab announcements;
     private final DropLogTab dropLog;
@@ -71,7 +71,7 @@ public class Sidebar extends PluginPanel
         logo.setHorizontalAlignment(SwingConstants.CENTER);
         JLabel title = Theme.heading("Final Boss");
         title.setHorizontalAlignment(SwingConstants.CENTER);
-        retry = Theme.button("Retry", Theme.Btn.Kind.PRIMARY, clan::verify);
+        retry = Theme.button("Retry", Btn.Kind.PRIMARY, clan::verify);
         locked.add(logo);
         locked.add(title);
         locked.add(status);
@@ -81,7 +81,7 @@ public class Sidebar extends PluginPanel
         lockedHolder.add(locked, BorderLayout.NORTH);
 
         // ---- main card: bell + word tabs over the tabs ----
-        Theme.Btn bell = tab("Announcements", "", announcements);
+        Btn bell = tab("Announcements", "", announcements);
         bell.setIcon(new Bell(announcements));
         bell.setPreferredSize(new Dimension(40, 32));
         announcements.setUnreadListener(bell::repaint);
@@ -108,9 +108,9 @@ public class Sidebar extends PluginPanel
         select(activeTab);
     }
 
-    private Theme.Btn tab(String name, String label, Tab panel)
+    private Btn tab(String name, String label, Tab panel)
     {
-        Theme.Btn b = Theme.button(label, Theme.Btn.Kind.TAB, () -> {
+        Btn b = Theme.button(label, Btn.Kind.TAB, () -> {
             select(name);
             panel.refresh();
         });

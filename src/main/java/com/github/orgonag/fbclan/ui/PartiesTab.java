@@ -7,31 +7,26 @@ import com.github.orgonag.fbclan.lfg.Activity;
 import com.github.orgonag.fbclan.lfg.FormedParty;
 import com.github.orgonag.fbclan.lfg.Killcounts;
 import com.github.orgonag.fbclan.lfg.LootRule;
-import com.github.orgonag.fbclan.lfg.Party;
 import com.github.orgonag.fbclan.lfg.Party.Applicant;
+import com.github.orgonag.fbclan.lfg.Party;
 import com.github.orgonag.fbclan.lfg.PartyApi;
 import com.github.orgonag.fbclan.lfg.PartyBoard;
 import com.github.orgonag.fbclan.lfg.Role;
 import java.awt.Color;
-import java.awt.Component;
-import java.awt.GridLayout;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import javax.swing.DefaultListCellRenderer;
-import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
-import javax.swing.JList;
 import javax.swing.JPanel;
-import javax.swing.JSpinner;
 import javax.swing.JTextField;
-import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -56,7 +51,7 @@ public class PartiesTab extends Tab
     private final PartyApi api;
     private final Killcounts killcounts;
     private final ItemManager items;
-    private final Theme.Btn hostButton;
+    private final Btn hostButton;
     private HostWizard wizard;
     private String actionError;
     private String applyingId;
@@ -65,8 +60,7 @@ public class PartiesTab extends Tab
     private boolean showFormed = true;
     private String addMemberDraft = "";
     private Role addMemberRole;
-    private JPanel applicationPanel;
-    private String applicationShape;
+    private final ApplyForm applyForm;
 
     @Inject
     public PartiesTab(Clan clan, FinalBossConfig config, PartyBoard board, PartyApi api, Killcounts killcounts,
@@ -79,39 +73,30 @@ public class PartiesTab extends Tab
         this.api = api;
         this.killcounts = killcounts;
         this.items = items;
+        applyForm = new ApplyForm(clan, config, killcounts, board, api, this::render, message -> {
+            if (message == null) applyingId = null;
+            setActionError(message);
+        }, () -> {
+            applyingId = null;
+            render();
+        });
 
-        hostButton = Theme.button("Host a party", Theme.Btn.Kind.PRIMARY, () -> openWizard(null));
+        hostButton = Theme.button("Host a party", Btn.Kind.PRIMARY, () -> openWizard(null));
         control(hostButton);
         List<Object> filters = new ArrayList<>();
         filters.add("All activities");
         Collections.addAll(filters, Activity.Category.values());
         Collections.addAll(filters, Activity.values());
-        JComboBox<Object> filterBox = combo(filters.toArray());
+        JComboBox<Object> filterBox = LfgUi.combo(filters.toArray());
         filterBox.addActionListener(e -> {
             Object sel = filterBox.getSelectedItem();
             filter = sel instanceof String ? null : sel;
             render();
         });
         control(filterBox);
-        Theme.Btn hideFullChip = Theme.button("Hide full", Theme.Btn.Kind.CHIP, () -> {});
-        hideFullChip.addActionListener(e -> {
-            hideFull = !hideFull;
-            hideFullChip.setOn(hideFull);
-            render();
-        });
-        Theme.Btn formedChip = Theme.button("Formed (7d)", Theme.Btn.Kind.CHIP, () -> {});
+        Btn formedChip = toggle("Formed (7d)", showFormed, on -> showFormed = on);
         formedChip.setToolTipText("Parties that filled up in the last 7 days");
-        formedChip.setOn(showFormed);
-        formedChip.addActionListener(e -> {
-            showFormed = !showFormed;
-            formedChip.setOn(showFormed);
-            render();
-        });
-        JPanel toggles = new JPanel(new GridLayout(1, 2, 4, 0));
-        toggles.setOpaque(false);
-        toggles.add(hideFullChip);
-        toggles.add(formedChip);
-        control(toggles);
+        control(LfgUi.pair(toggle("Hide full", hideFull, on -> hideFull = on), formedChip));
 
         board.setListener(() -> SwingUtilities.invokeLater(this::render));
         render();
@@ -130,8 +115,7 @@ public class PartiesTab extends Tab
     {
         SwingUtilities.invokeLater(() -> {
             applyingId = null;
-            applicationPanel = null;
-            applicationShape = null;
+            applyForm.reset();
             addMemberDraft = "";
             actionError = null;
             render();
@@ -151,7 +135,7 @@ public class PartiesTab extends Tab
         String id = target == null ? null : target.getId();
         if (wizard != null && wizard.isOpen())
         {
-            if (java.util.Objects.equals(wizard.editingId(), id))
+            if (Objects.equals(wizard.editingId(), id))
             {
                 wizard.focus();
                 return;
@@ -167,12 +151,12 @@ public class PartiesTab extends Tab
     }
 
     // Which start-time choices are open, not counting the post being edited.
-    private HostWizard.Limits limits(Party editing)
+    private WhenPicker.Limits limits(Party editing)
     {
         Party asap = board.mineAsap();
         boolean asapTaken = asap != null && (editing == null || !asap.getId().equals(editing.getId()));
         int scheduled = board.mineScheduled() - (editing != null && editing.isScheduled() ? 1 : 0);
-        return new HostWizard.Limits(board.scheduling(), asapTaken, scheduled >= MAX_SCHEDULED);
+        return new WhenPicker.Limits(asapTaken, scheduled >= MAX_SCHEDULED);
     }
 
     private Party find(String id)
@@ -221,14 +205,10 @@ public class PartiesTab extends Tab
     {
         String rsn = clan.rsn();
         List<Party> mine = board.mine();
-        boolean scheduling = board.scheduling();
         showError(actionError != null ? actionError : board.refreshError());
         note.setText(board.online().isEmpty() ? "" : board.online().size() + " in clan chat");
-        // Without scheduling a host has one post, so the button hides while
-        // hosting (Edit is on the card). With it, the button stays until both
-        // the ASAP slot and all scheduled slots are used.
-        boolean full = scheduling && board.mineAsap() != null && board.mineScheduled() >= MAX_SCHEDULED;
-        hostButton.setVisible(scheduling || mine.isEmpty());
+        // Host stays available until both the ASAP slot and all scheduled slots are used.
+        boolean full = board.mineAsap() != null && board.mineScheduled() >= MAX_SCHEDULED;
         hostButton.setEnabled(!board.isBusy() && clan.canUpload() && config.enableLfg() && !full);
         hostButton.setToolTipText(full ? "Post limit reached (1 ASAP + " + MAX_SCHEDULED + " scheduled)" : null);
         if (wizard != null && wizard.isOpen())
@@ -252,7 +232,7 @@ public class PartiesTab extends Tab
         fill(() -> {
             if (!mine.isEmpty())
             {
-                list.add(Theme.caps(scheduling ? "Your posts (" + mine.size() + ")" : "Your party"));
+                list.add(Theme.caps("Your posts (" + mine.size() + ")"));
                 mine.forEach(p -> list.add(hostCard(p)));
                 list.add(Theme.caps("Open parties (" + others.size() + ")"));
             }
@@ -292,12 +272,12 @@ public class PartiesTab extends Tab
     JComponent partyCard(Party p, boolean interactive)
     {
         String rsn = clan.rsn();
-        Theme.Card card = Theme.card(null);
+        Card card = Theme.card(null);
         boolean hostOnline = board.online().contains(Names.normalize(p.getHostRsn()));
-        String asap = board.scheduling() && !p.isScheduled() ? " · ASAP" : "";
+        String asap = p.isScheduled() ? "" : " · ASAP";
         JLabel host = Theme.text(p.getHostRsn() + asap + " · " + Theme.timeAgo(p.getCreatedAt()), hostOnline ? Theme.GREEN : OFFLINE);
         card.add(head(p.getActivity(), p.title(), p.getWorld(), host, p.memberCount() + "/" + p.getCapacity()));
-        JLabel start = start(p);
+        JLabel start = LfgUi.start(p);
         if (start != null) card.add(start);
         card.add(Theme.seats(p.memberCount(), p.getCapacity()));
         List<String> meta = new ArrayList<>();
@@ -320,7 +300,7 @@ public class PartiesTab extends Tab
         if (mine != null)
         {
             String state = mine.isAccepted() ? "Accepted" : mine.isPending() ? "Pending" : "Declined";
-            Theme.Btn leave = Theme.button(mine.isAccepted() ? "Leave party" : mine.isPending() ? "Withdraw" : "Dismiss", Theme.Btn.Kind.GHOST, () -> {
+            Btn leave = Theme.button(mine.isAccepted() ? "Leave party" : mine.isPending() ? "Withdraw" : "Dismiss", Btn.Kind.GHOST, () -> {
                 board.expectSelfLeave(p.getId());
                 run(() -> api.withdraw(p.getId(), rsn), "Couldn't withdraw — try again.");
             });
@@ -328,19 +308,17 @@ public class PartiesTab extends Tab
         }
         else if (p.getId().equals(applyingId))
         {
-            card.add(applyRow(p));
+            card.add(applyForm.view(p));
         }
         else
         {
-            Theme.Btn apply = Theme.button("Apply", Theme.Btn.Kind.PRIMARY, () -> {
+            Btn apply = Theme.button("Apply", Btn.Kind.PRIMARY, () -> {
                 applyingId = p.getId();
                 render();
             });
             if (rsn == null) apply.setEnabled(false);
-            // Servers without scheduling still forbid hosts from applying elsewhere.
-            else if (!board.scheduling() && !board.mine().isEmpty()) disable(apply, "Disband yours to apply");
-            else if (p.isFull()) disable(apply, "Full");
-            else if (p.getActivity().hasRoles() && p.openRoles().isEmpty()) disable(apply, "No open roles");
+            else if (p.isFull()) LfgUi.disable(apply, "Full");
+            else if (p.getActivity().hasRoles() && p.openRoles().isEmpty()) LfgUi.disable(apply, "No open roles");
             card.add(apply);
         }
         return card;
@@ -348,10 +326,10 @@ public class PartiesTab extends Tab
 
     private JPanel hostCard(Party p)
     {
-        Theme.Card card = Theme.card(Theme.ACCENT);
-        JLabel asap = board.scheduling() && !p.isScheduled() ? Theme.text("ASAP · " + Theme.timeAgo(p.getCreatedAt()), Theme.SUB) : null;
+        Card card = Theme.card(Theme.ACCENT);
+        JLabel asap = p.isScheduled() ? null : Theme.text("ASAP · " + Theme.timeAgo(p.getCreatedAt()), Theme.SUB);
         card.add(head(p.getActivity(), p.title(), p.getWorld(), asap, p.memberCount() + "/" + p.getCapacity()));
-        JLabel start = start(p);
+        JLabel start = LfgUi.start(p);
         if (start != null) card.add(start);
         card.add(Theme.seats(p.memberCount(), p.getCapacity()));
         body(card, p);
@@ -369,69 +347,27 @@ public class PartiesTab extends Tab
         }
         if (pending.isEmpty() && accepted.isEmpty()) card.add(Theme.text("No applicants yet.", Theme.SUB));
         if (!p.isFull()) card.add(addMemberRow(p));
-        Theme.Btn edit = Theme.button("Edit", Theme.Btn.Kind.GHOST, () -> openWizard(p));
+        Btn edit = Theme.button("Edit", Btn.Kind.GHOST, () -> openWizard(p));
         edit.setEnabled(!board.isBusy() && clan.canUpload() && config.enableLfg());
-        boolean scheduling = board.scheduling();
-        card.add(pair(edit,
-            Theme.button(scheduling ? "Cancel post" : "Disband", Theme.Btn.Kind.DANGER, () -> {
+        card.add(LfgUi.pair(edit,
+            Theme.button("Cancel post", Btn.Kind.DANGER, () -> {
                 board.expectSelfLeave(p.getId());
-                run(() -> api.disband(p.getId()), scheduling ? "Couldn't cancel — try again." : "Couldn't disband — try again.");
+                run(() -> api.disband(p.getId()), "Couldn't cancel — try again.");
             })));
         return card;
-    }
-
-    // A scheduled post's time line: "Starts Today 20:00 · in 3h",
-    // "Started 40m ago" during the grace period, then "Was Sat 20:00".
-    // Null for ASAP posts.
-    private static JLabel start(Party p)
-    {
-        if (!p.isScheduled()) return null;
-        java.time.Instant now = java.time.Instant.now();
-        java.time.Instant at = p.getScheduledFor();
-        if (now.isBefore(at))
-        {
-            return Theme.bold((p.isFull() ? "Full · starts " : "Starts ") + day(at) + " · in " + span(java.time.Duration.between(now, at)), Theme.ACCENT_HI);
-        }
-        if (now.isBefore(at.plus(Party.GRACE)))
-        {
-            return Theme.bold("Started " + Theme.timeAgo(at), Theme.GREEN);
-        }
-        return Theme.bold("Was " + day(at), Theme.ACCENT);
-    }
-
-    // "Today 20:00", "Tomorrow 09:30", else "Sat 20:00", in the player's zone.
-    static String day(java.time.Instant at)
-    {
-        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
-        java.time.LocalDate date = at.atZone(zone).toLocalDate();
-        java.time.LocalDate today = java.time.LocalDate.now(zone);
-        String time = java.time.format.DateTimeFormatter.ofPattern("HH:mm").withZone(zone).format(at);
-        if (date.equals(today)) return "Today " + time;
-        if (date.equals(today.plusDays(1))) return "Tomorrow " + time;
-        return PartyBoard.when(at);
-    }
-
-    // "45m", "3h", "2d 4h".
-    static String span(java.time.Duration d)
-    {
-        long minutes = Math.max(1, d.toMinutes());
-        if (minutes < 60) return minutes + "m";
-        long hours = minutes / 60;
-        if (hours < 24) return hours + "h";
-        return (hours / 24) + "d" + (hours % 24 == 0 ? "" : " " + (hours % 24) + "h");
     }
 
     private JPanel formedCard(FormedParty f)
     {
         String rsn = clan.rsn();
-        Theme.Card card = Theme.card(null);
+        Card card = Theme.card(null);
         JLabel when = Theme.text("Formed " + Theme.timeAgo(f.getFormedAt()) + " · hosted by " + f.getHostRsn()
-            + (f.getScheduledFor() == null ? "" : " · for " + day(f.getScheduledFor())), Theme.SUB);
+            + (f.getScheduledFor() == null ? "" : " · for " + LfgUi.day(f.getScheduledFor())), Theme.SUB);
         card.add(head(f.getActivity(), f.title(), f.getWorld(), when, f.getMembers().size() + "/" + f.getCapacity()));
         card.add(Theme.wrap(f.roster(), f.includes(rsn) ? Theme.TEXT : Theme.SUB));
         if (f.isHostedBy(rsn))
         {
-            Theme.Btn remove = Theme.button("Remove", Theme.Btn.Kind.GHOST, () -> run(() -> api.deleteFormed(f.getId()), "Couldn't remove — try again."));
+            Btn remove = Theme.button("Remove", Btn.Kind.GHOST, () -> run(() -> api.deleteFormed(f.getId()), "Couldn't remove — try again."));
             remove.setToolTipText("Take this off the formed list now instead of in 7 days");
             card.add(remove);
         }
@@ -445,7 +381,7 @@ public class PartiesTab extends Tab
         JLabel name = Theme.bold(title, Theme.TEXT);
         text.add(Theme.row(name, world == null ? null : Theme.text("W" + world, Theme.SUB), null));
         if (second != null) text.add(second);
-        return Theme.row(Theme.tile(items, activity.getIconItemId(), 1, tier(activity), 30), text, Theme.bold(count, Theme.GOLD));
+        return Theme.row(Theme.tile(items, activity.getIconItemId(), 1, LfgUi.tier(activity), 30), text, Theme.bold(count, Theme.GOLD));
     }
 
     // Needs line and quoted description.
@@ -481,7 +417,7 @@ public class PartiesTab extends Tab
         JPanel buttons = Theme.stack(2);
         if (pending)
         {
-            Theme.Btn accept = small(Theme.button("Accept", Theme.Btn.Kind.PRIMARY,
+            Btn accept = LfgUi.small(Theme.button("Accept", Btn.Kind.PRIMARY,
                 () -> run(() -> api.setStatus(p.getId(), a.getRsn(), Party.Status.ACCEPTED), "Couldn't accept — try again.")));
             if (p.isFull())
             {
@@ -489,12 +425,12 @@ public class PartiesTab extends Tab
                 accept.setToolTipText("Party is full");
             }
             buttons.add(accept);
-            buttons.add(small(Theme.button("Decline", Theme.Btn.Kind.GHOST,
+            buttons.add(LfgUi.small(Theme.button("Decline", Btn.Kind.GHOST,
                 () -> run(() -> api.setStatus(p.getId(), a.getRsn(), Party.Status.DECLINED), "Couldn't decline — try again."))));
         }
         else
         {
-            buttons.add(small(Theme.button("Kick", Theme.Btn.Kind.DANGER,
+            buttons.add(LfgUi.small(Theme.button("Kick", Btn.Kind.DANGER,
                 () -> run(() -> api.withdraw(p.getId(), a.getRsn()), "Couldn't kick — try again."))));
         }
         return Theme.row(null, who, buttons);
@@ -523,7 +459,7 @@ public class PartiesTab extends Tab
                 if (!options.contains(r)) options.add(r);
             }
             if (options.isEmpty()) options = Role.playable(p.getActivity(), p.isHardMode());
-            roleBox = combo(options.toArray());
+            roleBox = LfgUi.combo(options.toArray());
             if (options.contains(addMemberRole)) roleBox.setSelectedItem(addMemberRole);
             JComboBox<Object> box = roleBox;
             roleBox.addActionListener(e -> addMemberRole = (Role) box.getSelectedItem());
@@ -543,127 +479,14 @@ public class PartiesTab extends Tab
                 return;
             }
             Role role = roleBoxF == null ? null : (Role) roleBoxF.getSelectedItem();
-            board.run(() -> api.addMember(p.getId(), rsn, role) == PartyApi.AddResult.OK,
+            board.run(() -> api.addMember(p.getId(), rsn, role),
                 "Couldn't add member. Refresh and check the name and available role.", message -> SwingUtilities.invokeLater(() -> {
                     if (message == null) addMemberDraft = "";
                     setActionError(message);
                 }));
         };
         name.addActionListener(e -> submit.run());
-        row.add(Theme.button("Add member", Theme.Btn.Kind.GHOST, submit));
-        return row;
-    }
-
-    // ------------------------------------------------------------ applying
-
-    // Kept across re-renders (the board refreshes every 30s) so typed
-    // values survive; rebuilt when the party's shape or the KC prefill changes.
-    private JPanel applyRow(Party p)
-    {
-        String rsn = clan.rsn();
-        // Your KC for this activity: your own client's record first, else
-        // a hiscore lookup, else blank to type. Editing it marks the value
-        // self-reported. The host sees it; it never blocks applying.
-        Integer prefill = null;
-        Party.KcSource source = null;
-        if (p.getActivity().hasKillcount())
-        {
-            prefill = killcounts.local(p.getActivity(), p.isHard());
-            if (prefill != null)
-            {
-                source = Party.KcSource.LOCAL;
-            }
-            else if (rsn != null && config.lfgKcLookups())
-            {
-                Killcounts.Hiscore h = killcounts.cached(rsn, p.getActivity());
-                if (h == null)
-                {
-                    killcounts.lookup(rsn, p.getActivity(), () -> SwingUtilities.invokeLater(this::render));
-                }
-                else if (h.known(p.isHard()))
-                {
-                    prefill = h.kc(p.isHard());
-                    source = Party.KcSource.HISCORES;
-                }
-            }
-        }
-        String shape = p.getId() + ":" + p.getActivity() + ":" + p.isHardMode() + ":" + p.openRoles() + ":" + prefill + ":" + source;
-        if (shape.equals(applicationShape) && applicationPanel != null) return applicationPanel;
-        applicationShape = shape;
-
-        JPanel row = Theme.stack(4);
-        JComboBox<Object> roleBox = null;
-        if (p.getActivity().hasRoles())
-        {
-            roleBox = combo(Role.applyOptions(p.getActivity(), p.isHardMode(), p.openRoles()).toArray());
-            row.add(Theme.labeled("Role", roleBox));
-        }
-        JCheckBox learner = null;
-        if (p.getActivity().isRaid())
-        {
-            learner = checkbox("I'm a learner");
-            row.add(learner);
-        }
-        JSpinner kcSpinner = null;
-        if (p.getActivity().hasKillcount())
-        {
-            kcSpinner = new JSpinner(new SpinnerNumberModel(prefill == null ? 0 : prefill, 0, 100_000, 1));
-            row.add(Theme.labeled(source == Party.KcSource.LOCAL ? "Your KC (auto)"
-                : source == Party.KcSource.HISCORES ? "Your KC (hiscores)" : "Your KC", kcSpinner));
-            if (p.getMinKc() > 0)
-            {
-                boolean below = prefill != null && prefill < p.getMinKc();
-                row.add(Theme.text("Host asks for " + p.getMinKc() + "+ KC" + (below ? " - you're below it" : ""), below ? Theme.ACCENT_HI : Theme.SUB));
-            }
-        }
-        JComboBox<Object> roleBoxF = roleBox;
-        JCheckBox learnerF = learner;
-        JSpinner kcSpinnerF = kcSpinner;
-        Integer prefillF = prefill;
-        Party.KcSource sourceF = source;
-        Theme.Btn confirm = Theme.button("Confirm", Theme.Btn.Kind.PRIMARY, () -> {
-            if (rsn == null) return;
-            Role role = roleBoxF == null ? null : (Role) roleBoxF.getSelectedItem();
-            boolean isLearner = learnerF != null && learnerF.isSelected();
-            Integer kc = null;
-            Party.KcSource kcSource = null;
-            if (kcSpinnerF != null)
-            {
-                try
-                {
-                    kcSpinnerF.commitEdit();
-                }
-                catch (java.text.ParseException ex)
-                {
-                    setActionError("Enter a valid kill count.");
-                    return;
-                }
-                int typed = (Integer) kcSpinnerF.getValue();
-                if (prefillF != null && typed == prefillF)
-                {
-                    kc = typed;
-                    kcSource = sourceF;
-                }
-                else if (typed > 0)
-                {
-                    kc = typed;
-                    kcSource = Party.KcSource.MANUAL;
-                }
-            }
-            Integer kcF = kc;
-            Party.KcSource kcSourceF = kcSource;
-            board.run(() -> api.apply(p.getId(), rsn, role, isLearner, kcF, kcSourceF), "Couldn't apply. Refresh and try again.",
-                message -> SwingUtilities.invokeLater(() -> {
-                    if (message == null) applyingId = null;
-                    setActionError(message);
-                }));
-        });
-        Theme.Btn cancel = Theme.button("Cancel", Theme.Btn.Kind.GHOST, () -> {
-            applyingId = null;
-            render();
-        });
-        row.add(pair(confirm, cancel));
-        applicationPanel = row;
+        row.add(Theme.button("Add member", Btn.Kind.GHOST, submit));
         return row;
     }
 
@@ -699,6 +522,21 @@ public class PartiesTab extends Tab
         board.run(action, failure, message -> SwingUtilities.invokeLater(() -> setActionError(message)));
     }
 
+    // An on/off chip that re-renders the list when flipped.
+    private Btn toggle(String label, boolean initial, Consumer<Boolean> onChange)
+    {
+        boolean[] on = {initial};
+        Btn[] chip = new Btn[1];
+        chip[0] = Theme.button(label, Btn.Kind.CHIP, () -> {
+            on[0] = !on[0];
+            chip[0].setOn(on[0]);
+            onChange.accept(on[0]);
+            render();
+        });
+        chip[0].setOn(initial);
+        return chip[0];
+    }
+
     // EDT. The last action's failure wins over the board's refresh error; null clears it.
     private void setActionError(String message)
     {
@@ -706,70 +544,4 @@ public class PartiesTab extends Tab
         render();
     }
 
-    static Theme.Tier tier(Activity a)
-    {
-        switch (a.getCategory())
-        {
-            case RAIDS: return Theme.Tier.MEGA;
-            case GOD_WARS: return Theme.Tier.RARE;
-            case BOSSES: return Theme.Tier.PET;
-            default: return Theme.Tier.COMMON;
-        }
-    }
-
-    private static void disable(Theme.Btn b, String reason)
-    {
-        b.setText(reason);
-        b.setEnabled(false);
-    }
-
-    private static Theme.Btn small(Theme.Btn b)
-    {
-        b.setBorder(javax.swing.BorderFactory.createEmptyBorder(2, 6, 2, 6));
-        return b;
-    }
-
-    private static JPanel pair(Component a, Component b)
-    {
-        JPanel p = new JPanel(new GridLayout(1, 2, 5, 0));
-        p.setOpaque(false);
-        p.add(a);
-        p.add(b);
-        return p;
-    }
-
-    static JCheckBox checkbox(String text)
-    {
-        JCheckBox box = new JCheckBox(text);
-        box.setOpaque(false);
-        box.setForeground(Theme.TEXT);
-        box.setFont(net.runelite.client.ui.FontManager.getRunescapeSmallFont());
-        return box;
-    }
-
-    // Activities read "Category: Name"; categories read "All <category>".
-    static JComboBox<Object> combo(Object[] values)
-    {
-        JComboBox<Object> box = new JComboBox<>(values);
-        box.setFont(net.runelite.client.ui.FontManager.getRunescapeSmallFont());
-        box.setRenderer(new DefaultListCellRenderer()
-        {
-            @Override
-            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected, boolean focus)
-            {
-                Object shown = value;
-                if (value instanceof Activity)
-                {
-                    Activity a = (Activity) value;
-                    shown = a.getCategory() == Activity.Category.GENERAL ? a.getDisplayName() : a.getCategory().getDisplayName() + ": " + a.getDisplayName();
-                }
-                else if (value instanceof Activity.Category)
-                {
-                    shown = "All " + ((Activity.Category) value).getDisplayName();
-                }
-                return super.getListCellRendererComponent(list, shown, index, selected, focus);
-            }
-        });
-        return box;
-    }
 }

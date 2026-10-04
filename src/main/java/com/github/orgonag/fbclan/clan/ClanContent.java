@@ -2,6 +2,7 @@ package com.github.orgonag.fbclan.clan;
 
 import com.github.orgonag.fbclan.core.Clan;
 import com.github.orgonag.fbclan.core.Names;
+import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -144,7 +145,7 @@ public class ClanContent
     // threads.
     public synchronized void maybeShowWelcome()
     {
-        com.github.orgonag.fbclan.core.Session session = clan.snapshot();
+        Session session = clan.snapshot();
         String message = welcome;
         if (!clan.isVerified() || welcomeShown || message.isEmpty())
         {

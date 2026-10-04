@@ -10,8 +10,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.awt.Color;
-import java.awt.Graphics;
+import java.awt.Component;
 import java.awt.Graphics2D;
+import java.awt.Graphics;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -24,7 +25,6 @@ import javax.inject.Singleton;
 import javax.swing.Icon;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.SwingConstants;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.client.game.ItemManager;
 
@@ -59,7 +59,7 @@ public class DropLogTab extends Tab
         this.viewer = viewer;
         this.items = items;
         this.clan = clan;
-        control(new Theme.Choice<>(Arrays.asList(Filter.values()), f -> f.label, filter, f -> {
+        control(new Choice<>(Arrays.asList(Filter.values()), f -> f.label, filter, f -> {
             filter = f;
             render();
         }));
@@ -124,7 +124,7 @@ public class DropLogTab extends Tab
 
     private JPanel topCard(Drop d)
     {
-        Theme.Card card = Theme.card(Theme.ACCENT);
+        Card card = Theme.card(Theme.ACCENT);
         card.add(Theme.row(Theme.badge("TOP DROP · 24H"), null, Theme.text(Theme.timeAgo(d.at), Theme.SUB)));
         JPanel text = Theme.stack(1);
         text.add(Theme.bold(d.name, Theme.TEXT));
@@ -138,7 +138,7 @@ public class DropLogTab extends Tab
 
     private JPanel row(Drop d)
     {
-        Theme.Card card = Theme.card(null);
+        Card card = Theme.card(null);
         JPanel text = Theme.stack(1);
         text.add(Theme.bold(d.name, Theme.TEXT));
         text.add(Theme.text(d.rsn + " · " + Theme.timeAgo(d.at), Theme.SUB));
@@ -156,7 +156,7 @@ public class DropLogTab extends Tab
     // The whole card opens the viewer. The tooltip carries the full,
     // possibly truncated, line and starts with fixed text so a remote
     // item name can never be read as tooltip HTML.
-    private JPanel clickable(Theme.Card card, Drop d)
+    private JPanel clickable(Card card, Drop d)
     {
         card.setToolTipText("Drop: " + d.summary());
         return Theme.onClick(card, () -> viewer.show(card, d));
@@ -232,7 +232,7 @@ public class DropLogTab extends Tab
     private static final Icon CAMERA = new Icon()
     {
         @Override
-        public void paintIcon(java.awt.Component c, Graphics g, int x, int y)
+        public void paintIcon(Component c, Graphics g, int x, int y)
         {
             Graphics2D g2 = Theme.smooth(g);
             g2.setColor(Theme.ACCENT_HI);

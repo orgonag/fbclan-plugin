@@ -2,15 +2,16 @@ package com.github.orgonag.fbclan.ui;
 
 import com.github.orgonag.fbclan.core.Clan;
 import com.github.orgonag.fbclan.core.Names;
-import com.github.orgonag.fbclan.pbs.Leaderboards;
 import com.github.orgonag.fbclan.pbs.Leaderboards.Entry;
+import com.github.orgonag.fbclan.pbs.Leaderboards;
 import com.github.orgonag.fbclan.pbs.PbFormat;
-import com.github.orgonag.fbclan.stats.Dashboard;
 import com.github.orgonag.fbclan.stats.Dashboard.Named;
+import com.github.orgonag.fbclan.stats.Dashboard;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -19,6 +20,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import net.runelite.client.ui.FontManager;
 
 /**
  * The clan dashboard as six highlight cards (weekly XP and EHB from Wise
@@ -117,7 +119,7 @@ public class LeaderboardsTab extends Tab
     private JPanel card(int index)
     {
         Board b = board(index, null);
-        Theme.Card card = Theme.card(null);
+        Card card = Theme.card(null);
         card.add(Theme.row(null, Theme.caps(TITLES[index]), Theme.text("›", Theme.FAINT)));
         if (b.rows.isEmpty())
         {
@@ -127,9 +129,9 @@ public class LeaderboardsTab extends Tab
         {
             Row first = b.rows.get(0);
             JLabel name = Theme.bold(first.name, Theme.TEXT);
-            name.setFont(net.runelite.client.ui.FontManager.getRunescapeBoldFont());
+            name.setFont(FontManager.getRunescapeBoldFont());
             JLabel value = Theme.bold(first.value, Theme.GOLD);
-            value.setFont(net.runelite.client.ui.FontManager.getRunescapeBoldFont());
+            value.setFont(FontManager.getRunescapeBoldFont());
             // Clan bests are newest-first, not a ranking: no place numbers there.
             boolean ranked = index != 4;
             card.add(Theme.row(Theme.bold(ranked ? "1" : "•", PLACE[0]), name, value));
@@ -268,7 +270,7 @@ public class LeaderboardsTab extends Tab
             case "Grandmaster": return Theme.bold("GM", new Color(0x7DF9FF));
             case "Master": return Theme.bold("MASTER", new Color(0xFF6B6B));
             case "Elite": return Theme.bold("ELITE", Theme.GOLD);
-            default: return Theme.bold(tier.toUpperCase(java.util.Locale.ROOT), Theme.FAINT);
+            default: return Theme.bold(tier.toUpperCase(Locale.ROOT), Theme.FAINT);
         }
     }
 }

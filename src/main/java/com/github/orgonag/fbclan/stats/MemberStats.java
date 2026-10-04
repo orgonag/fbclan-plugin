@@ -8,6 +8,7 @@ import com.google.gson.JsonObject;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.Client;
@@ -31,7 +32,7 @@ public class MemberStats
     private final ScheduledExecutorService executor;
 
     private volatile String acknowledged;
-    private final java.util.concurrent.atomic.AtomicBoolean sending = new java.util.concurrent.atomic.AtomicBoolean();
+    private final AtomicBoolean sending = new AtomicBoolean();
 
     @Inject
     public MemberStats(Client client, FinalBossConfig config, Clan clan, Supabase db, ScheduledExecutorService executor)

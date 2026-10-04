@@ -1,6 +1,7 @@
 package com.github.orgonag.fbclan.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -40,7 +41,7 @@ abstract class Tab extends JPanel
     }
 
     // A control strip line under the heading.
-    protected void control(java.awt.Component c)
+    protected void control(Component c)
     {
         controls.add(c);
         controls.setVisible(true);

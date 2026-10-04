@@ -7,15 +7,18 @@ import com.github.orgonag.fbclan.lfg.Party;
 import com.github.orgonag.fbclan.lfg.Role;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
-import java.awt.Graphics;
+import java.awt.FlowLayout;
 import java.awt.Graphics2D;
+import java.awt.Graphics;
 import java.awt.Window;
+import java.text.ParseException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -34,6 +37,7 @@ import javax.swing.KeyStroke;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import net.runelite.client.ui.FontManager;
 
 /**
  * Host (or edit) a party in three steps: activity, requirements,
@@ -44,49 +48,22 @@ class HostWizard
 {
     private static final String[] STEPS = {"Activity", "Requirements", "Details"};
     private static final List<String> RUN_TYPES = Arrays.asList("Normal", "Learner", "Teacher");
-    private static final String ASAP = "ASAP";
-    private static final String LATER = "Later";
-
-    /** Which start-time choices the host still has (the post being edited excluded). */
-    static final class Limits
-    {
-        final boolean scheduling;
-        final boolean asapTaken;
-        final boolean laterFull;
-
-        Limits(boolean scheduling, boolean asapTaken, boolean laterFull)
-        {
-            this.scheduling = scheduling;
-            this.asapTaken = asapTaken;
-            this.laterFull = laterFull;
-        }
-    }
-
     private final Killcounts killcounts;
     private final boolean editing;
     private final String editingId;
-    private final Limits limits;
-    // Latest allowed start: 7 days from when the post was (or is being) created.
-    private final java.time.Instant windowEnd;
-    private final Theme.Choice<String> when = new Theme.Choice<>(Arrays.asList(ASAP, LATER), s -> s, ASAP, s -> rebuild());
-    private final JComboBox<java.time.LocalDate> dayBox = new JComboBox<>();
-    private final JComboBox<Integer> hourBox = new JComboBox<>();
-    private final JComboBox<Integer> minuteBox = new JComboBox<>(new Integer[]{0, 15, 30, 45});
-    private final JLabel whenSummary = Theme.text("", Theme.SOFT);
-    // The edited post's start time, else null.
-    private Instant original;
+    private final WhenPicker when;
     private final Function<Party, JComponent> preview;
     private final Consumer<HostWizard> onSubmit;
     private final JDialog dialog;
 
-    private final JComboBox<Object> activityBox = PartiesTab.combo(Activity.values());
-    private final JCheckBox hardModeBox = PartiesTab.checkbox("Hard mode");
+    private final JComboBox<Object> activityBox = LfgUi.combo(Activity.values());
+    private final JCheckBox hardModeBox = LfgUi.checkbox("Hard mode");
     private final JSpinner invocationSpinner = spinner(150, 0, Party.MAX_INVOCATION, 5);
     private final JSpinner sizeSpinner = spinner(5, Party.MIN_CAPACITY, Party.MAX_CAPACITY, 1);
-    private final Theme.Choice<LootRule> loot = new Theme.Choice<>(Arrays.asList(LootRule.values()),
+    private final Choice<LootRule> loot = new Choice<>(Arrays.asList(LootRule.values()),
         r -> r == LootRule.UNSPECIFIED ? "Any" : r.getDisplayName(), LootRule.UNSPECIFIED, r -> {});
     private final JSpinner minKcSpinner = spinner(0, 0, 100_000, 10);
-    private final Theme.Choice<String> runType = new Theme.Choice<>(RUN_TYPES, s -> s, "Normal", s -> {});
+    private final Choice<String> runType = new Choice<>(RUN_TYPES, s -> s, "Normal", s -> {});
     private final JComboBox<Object> hostRoleBox = new JComboBox<>();
     private final Map<Role, JSpinner> coxCounts = new EnumMap<>(Role.class);
     private final JTextField descField = Theme.field("", Party.MAX_DESCRIPTION);
@@ -96,26 +73,24 @@ class HostWizard
     private final JLabel heading = Theme.heading("");
     private final JPanel stepBody = Theme.stack(10);
     private final JTextArea error = Theme.wrap("", Theme.RED);
-    private final Theme.Btn back = Theme.button("Back", Theme.Btn.Kind.GHOST, this::back);
-    private final Theme.Btn details = Theme.button("Next (details)", Theme.Btn.Kind.GHOST, this::next);
-    private final Theme.Btn quick = Theme.button("Post now", Theme.Btn.Kind.PRIMARY, this::submit);
-    private final Theme.Btn next = Theme.button("Next", Theme.Btn.Kind.PRIMARY, this::next);
+    private final Btn back = Theme.button("Back", Btn.Kind.GHOST, this::back);
+    private final Btn details = Theme.button("Next (details)", Btn.Kind.GHOST, this::next);
+    private final Btn quick = Theme.button("Post now", Btn.Kind.PRIMARY, this::submit);
+    private final Btn next = Theme.button("Next", Btn.Kind.PRIMARY, this::next);
     private int step;
     private int world;
     private boolean busy;
     private boolean rebuilding;
 
     // `editing` = the party to edit, or null to host a new one.
-    HostWizard(Window owner, Killcounts killcounts, Party editing, Limits limits, Function<Party, JComponent> preview, Consumer<HostWizard> onSubmit)
+    HostWizard(Window owner, Killcounts killcounts, Party editing, WhenPicker.Limits limits, Function<Party, JComponent> preview, Consumer<HostWizard> onSubmit)
     {
         this.killcounts = killcounts;
         this.editing = editing != null;
         this.editingId = editing == null ? null : editing.getId();
-        this.limits = limits;
-        this.windowEnd = (editing == null ? java.time.Instant.now() : editing.getCreatedAt()).plus(Party.LIFETIME);
         this.preview = preview;
         this.onSubmit = onSubmit;
-        setUpWhen(editing);
+        this.when = new WhenPicker(editing, limits);
 
         // Only the activity changes what step 1 shows; later steps rebuild on
         // entry. A new post starts at the activity's usual party size.
@@ -148,7 +123,7 @@ class HostWizard
         footer.setBorder(BorderFactory.createEmptyBorder(8, 14, 12, 14));
         error.setVisible(false);
         footer.add(error);
-        JPanel forward = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 6, 0));
+        JPanel forward = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         forward.setOpaque(false);
         forward.add(details);
         forward.add(quick);
@@ -225,7 +200,7 @@ class HostWizard
             minKcSpinner.commitEdit();
             for (JSpinner s : coxCounts.values()) s.commitEdit();
         }
-        catch (java.text.ParseException e)
+        catch (ParseException e)
         {
             throw new IllegalArgumentException("Enter valid numeric values.");
         }
@@ -251,108 +226,9 @@ class HostWizard
             .learner(activity.isRaid() && "Learner".equals(runType.value()))
             .teacher(activity.isRaid() && "Teacher".equals(runType.value()))
             .createdAt(Instant.now())
-            .scheduledFor(start())
+            .scheduledFor(when.start())
             .applicants(Collections.emptyList())
             .build();
-    }
-
-    // ------------------------------------------------------------ when
-
-    // Day list up to the window end, hours, a sensible default, and the
-    // starting choice (an edited post keeps its time).
-    private void setUpWhen(Party editing)
-    {
-        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
-        java.time.LocalDate end = windowEnd.atZone(zone).toLocalDate();
-        for (java.time.LocalDate d = java.time.LocalDate.now(zone); !d.isAfter(end); d = d.plusDays(1)) dayBox.addItem(d);
-        for (int h = 0; h < 24; h++) hourBox.addItem(h);
-        dayBox.setRenderer(new javax.swing.DefaultListCellRenderer()
-        {
-            @Override
-            public java.awt.Component getListCellRendererComponent(javax.swing.JList<?> list, Object value, int index, boolean selected, boolean focus)
-            {
-                Object shown = value;
-                if (value instanceof java.time.LocalDate)
-                {
-                    java.time.LocalDate d = (java.time.LocalDate) value;
-                    java.time.LocalDate today = java.time.LocalDate.now(zone);
-                    shown = d.equals(today) ? "Today" : d.equals(today.plusDays(1)) ? "Tomorrow"
-                        : java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.ENGLISH).format(d);
-                }
-                return super.getListCellRendererComponent(list, shown, index, selected, focus);
-            }
-        });
-        hourBox.setRenderer(twoDigits());
-        minuteBox.setRenderer(twoDigits());
-        // Next whole hour at least 30 minutes away, unless editing a scheduled post.
-        java.time.ZonedDateTime start = editing != null && editing.isScheduled()
-            ? editing.getScheduledFor().atZone(zone)
-            : java.time.ZonedDateTime.now(zone).plusMinutes(30).plusHours(1).withMinute(0).withSecond(0).withNano(0);
-        if (editing != null && editing.isScheduled())
-        {
-            // Keep an edited post's own time selectable, even if it has passed
-            // or isn't on a 15-minute mark, so other fields can be fixed.
-            original = editing.getScheduledFor();
-            if (((javax.swing.DefaultComboBoxModel<java.time.LocalDate>) dayBox.getModel()).getIndexOf(start.toLocalDate()) < 0) dayBox.insertItemAt(start.toLocalDate(), 0);
-            if (((javax.swing.DefaultComboBoxModel<Integer>) minuteBox.getModel()).getIndexOf(start.getMinute()) < 0) minuteBox.addItem(start.getMinute());
-        }
-        dayBox.setSelectedItem(start.toLocalDate());
-        hourBox.setSelectedItem(start.getHour());
-        minuteBox.setSelectedItem(original != null ? start.getMinute() : start.getMinute() - start.getMinute() % 15);
-        java.awt.event.ActionListener changed = e -> summarize();
-        dayBox.addActionListener(changed);
-        hourBox.addActionListener(changed);
-        minuteBox.addActionListener(changed);
-        when.enable(ASAP, !limits.asapTaken, "You already have an ASAP party");
-        when.enable(LATER, !limits.laterFull, "You already have 7 scheduled parties");
-        boolean later = editing != null ? editing.isScheduled() : limits.asapTaken;
-        when.set(later ? LATER : ASAP);
-    }
-
-    // The chosen start, or null for ASAP (and always null on servers without scheduling).
-    private Instant start()
-    {
-        if (!limits.scheduling || !LATER.equals(when.value())) return null;
-        java.time.LocalDate day = (java.time.LocalDate) dayBox.getSelectedItem();
-        if (day == null) throw new IllegalArgumentException("Pick a day.");
-        Instant at = java.time.ZonedDateTime.of(day, java.time.LocalTime.of((Integer) hourBox.getSelectedItem(), (Integer) minuteBox.getSelectedItem()),
-            java.time.ZoneId.systemDefault()).toInstant();
-        // An unchanged time is fine even if it has passed (the server only checks a changed one).
-        if (original != null && at.getEpochSecond() / 60 == original.getEpochSecond() / 60) return original;
-        if (!at.isAfter(Instant.now().plusSeconds(60))) throw new IllegalArgumentException("Pick a start time in the future.");
-        if (at.isAfter(windowEnd)) throw new IllegalArgumentException("Start time must be within 7 days of posting.");
-        return at;
-    }
-
-    // "Sat 5 Oct, 20:00 · in 2d 4h (your time)", or the reason it can't be used.
-    private void summarize()
-    {
-        try
-        {
-            Instant at = start();
-            if (at == null) return;
-            whenSummary.setForeground(Theme.SOFT);
-            whenSummary.setText(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM, HH:mm", java.util.Locale.ENGLISH)
-                .withZone(java.time.ZoneId.systemDefault()).format(at)
-                + " · in " + PartiesTab.span(java.time.Duration.between(Instant.now(), at)) + " (your time)");
-        }
-        catch (IllegalArgumentException e)
-        {
-            whenSummary.setForeground(Theme.RED);
-            whenSummary.setText(e.getMessage());
-        }
-    }
-
-    private static javax.swing.ListCellRenderer<Object> twoDigits()
-    {
-        return new javax.swing.DefaultListCellRenderer()
-        {
-            @Override
-            public java.awt.Component getListCellRendererComponent(javax.swing.JList<?> list, Object value, int index, boolean selected, boolean focus)
-            {
-                return super.getListCellRendererComponent(list, value instanceof Integer ? String.format("%02d", value) : value, index, selected, focus);
-            }
-        };
     }
 
     // ------------------------------------------------------------ steps
@@ -448,20 +324,8 @@ class HostWizard
         }
         if (activity.usesInvocation()) stepBody.add(Theme.labeled("Invocation", invocationSpinner));
         stepBody.add(Theme.labeled("Party size", sizeSpinner));
-        if (!limits.scheduling) return;
-        stepBody.add(Theme.text("When", Theme.SUB));
         stepBody.add(when);
-        if (LATER.equals(when.value()))
-        {
-            stepBody.add(Theme.labeled("Day", dayBox));
-            JPanel time = new JPanel(new java.awt.GridLayout(1, 2, 6, 0));
-            time.setOpaque(false);
-            time.add(hourBox);
-            time.add(minuteBox);
-            stepBody.add(Theme.labeled("Time", time));
-            stepBody.add(whenSummary);
-            summarize();
-        }
+        when.summarize();
     }
 
     private void requirementsStep(Activity activity, int size)
@@ -643,14 +507,14 @@ class HostWizard
         {
             Graphics2D g2 = Theme.smooth(g);
             int seg = (getWidth() - 8) / 3;
-            g2.setFont(net.runelite.client.ui.FontManager.getRunescapeSmallFont());
+            g2.setFont(FontManager.getRunescapeSmallFont());
             for (int i = 0; i < STEPS.length; i++)
             {
                 int x = i * (seg + 4);
                 g2.setColor(i <= step ? Theme.ACCENT : Theme.LINE);
                 g2.fillRoundRect(x, 0, seg, 4, 4, 4);
                 g2.setColor(i == step ? Theme.ACCENT_HI : i < step ? Theme.SOFT : Theme.FAINT);
-                g2.drawString(STEPS[i].toUpperCase(java.util.Locale.ROOT), x, 17);
+                g2.drawString(STEPS[i].toUpperCase(Locale.ROOT), x, 17);
             }
             g2.dispose();
         }

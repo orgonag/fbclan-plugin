@@ -4,6 +4,7 @@ import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,10 +25,9 @@ public class Party
     public static final int MIN_CAPACITY = 2;
     public static final int MAX_CAPACITY = 100;
     public static final int MAX_INVOCATION = 600;
-    // Sent for protocol-3 servers without scheduling; scheduling servers keep posts for LIFETIME.
-    public static final int TTL_MINUTES = 30;
-    public static final java.time.Duration LIFETIME = java.time.Duration.ofHours(168);
-    public static final java.time.Duration GRACE = java.time.Duration.ofHours(2);
+    // A post lives 7 days from creation; a full scheduled post forms GRACE after its start.
+    public static final Duration LIFETIME = Duration.ofHours(168);
+    public static final Duration GRACE = Duration.ofHours(2);
 
     public enum Status
     {
@@ -244,10 +244,7 @@ public class Party
         Supabase.put(d, "host_role", hostRole == null ? null : hostRole.key());
         d.addProperty("learner", learner);
         d.addProperty("teacher", teacher);
-        d.addProperty("updated_at", Instant.now().toString());
-        d.addProperty("ttl_minutes", TTL_MINUTES);
-        // Always sent (JSON null = ASAP) so an edit can switch back; servers
-        // without scheduling ignore the unknown key.
+        // Always sent (JSON null = ASAP) so an edit can switch back.
         Supabase.put(d, "scheduled_for", scheduledFor == null ? null : scheduledFor.toString());
         return d;
     }

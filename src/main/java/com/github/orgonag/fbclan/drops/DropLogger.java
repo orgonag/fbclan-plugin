@@ -2,11 +2,13 @@ package com.github.orgonag.fbclan.drops;
 
 import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.clan.ClanContent;
+import com.github.orgonag.fbclan.core.ApiResult;
 import com.github.orgonag.fbclan.core.Clan;
-import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.core.Names;
+import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.awt.Color;
 import java.awt.Font;
@@ -16,14 +18,19 @@ import java.awt.Image;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -31,8 +38,11 @@ import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.Item;
+import net.runelite.api.ItemContainer;
 import net.runelite.api.NPC;
 import net.runelite.api.events.ChatMessage;
+import net.runelite.client.RuneLite;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.ItemStack;
 import net.runelite.client.party.PartyMember;
@@ -59,9 +69,9 @@ public class DropLogger
     private static final String COLUMNS = "rsn,npc_name,item_name,item_id,ge_value,quantity,created_at,screenshot_url,rarity";
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
-    private final DropOutbox outbox = new DropOutbox(net.runelite.client.RuneLite.RUNELITE_DIR.toPath().resolve("finalboss-outbox"));
-    private final java.util.concurrent.atomic.AtomicBoolean flushing = new java.util.concurrent.atomic.AtomicBoolean();
-    private final java.util.concurrent.atomic.AtomicBoolean framePending = new java.util.concurrent.atomic.AtomicBoolean();
+    private final DropOutbox outbox = new DropOutbox(RuneLite.RUNELITE_DIR.toPath().resolve("finalboss-outbox"));
+    private final AtomicBoolean flushing = new AtomicBoolean();
+    private final AtomicBoolean framePending = new AtomicBoolean();
     private final LootDeduplicator deduplicator = new LootDeduplicator();
     private final Client client;
     private final FinalBossConfig config;
@@ -81,7 +91,7 @@ public class DropLogger
     private int petTick = -1;
     private int newItemId;
     private int newItemTick = -1;
-    private java.util.Map<Integer, Integer> inventoryCounts = Collections.emptyMap();
+    private Map<Integer, Integer> inventoryCounts = Collections.emptyMap();
 
     @Inject
     public DropLogger(Client client, FinalBossConfig config, Clan clan, ClanContent content, DropRates rates,
@@ -98,7 +108,7 @@ public class DropLogger
         this.drawManager = drawManager;
         this.partyService = partyService;
         this.executor = executor;
-        this.http = http.newBuilder().callTimeout(20, java.util.concurrent.TimeUnit.SECONDS).build();
+        this.http = http.newBuilder().callTimeout(20, TimeUnit.SECONDS).build();
     }
 
     // Every legitimate screenshot URL starts with this; the drop-log tab
@@ -201,15 +211,15 @@ public class DropLogger
 
     // Inventory changes: remember an untradeable item that just appeared,
     // and settle a backpack pet that is waiting for it. Client thread.
-    public void onInventoryChanged(net.runelite.api.ItemContainer inventory)
+    public void onInventoryChanged(ItemContainer inventory)
     {
-        java.util.Map<Integer, Integer> now = new java.util.HashMap<>();
-        for (net.runelite.api.Item item : inventory.getItems())
+        Map<Integer, Integer> now = new HashMap<>();
+        for (Item item : inventory.getItems())
         {
             if (item.getId() > 0) now.merge(item.getId(), item.getQuantity(), Integer::sum);
         }
         int added = 0;
-        for (java.util.Map.Entry<Integer, Integer> e : now.entrySet())
+        for (Map.Entry<Integer, Integer> e : now.entrySet())
         {
             if (e.getValue() > inventoryCounts.getOrDefault(e.getKey(), 0)
                 && !itemManager.getItemComposition(e.getKey()).isTradeable())
@@ -258,7 +268,7 @@ public class DropLogger
     {
         JsonArray rows = db.getOrNull("drops", "select=" + COLUMNS + "&order=created_at.desc,id.desc&limit=" + Math.max(1, Math.min(200, limit)));
         if (rows == null) throw new IllegalStateException("Could not refresh drops. Showing the last loaded list.");
-        for (com.google.gson.JsonElement el : rows)
+        for (JsonElement el : rows)
         {
             JsonObject row = el.getAsJsonObject();
             String path = Supabase.str(row, "screenshot_url");
@@ -273,12 +283,12 @@ public class DropLogger
     {
         Session session = clan.snapshot();
         String worldType = clan.onStandardWorld() ? "standard" : "special";
-        String occurred = java.time.Instant.now().toString();
+        String occurred = Instant.now().toString();
         List<JsonObject> rows = new ArrayList<>();
         for (Drop d : drops)
         {
             JsonObject row = new JsonObject();
-            row.addProperty("event_id", java.util.UUID.randomUUID().toString());
+            row.addProperty("event_id", UUID.randomUUID().toString());
             row.addProperty("rsn", rsn); row.addProperty("npc_name", source);
             row.addProperty("item_name", d.name); row.addProperty("item_id", d.itemId);
             row.addProperty("ge_value", d.value); row.addProperty("quantity", d.quantity);
@@ -297,7 +307,7 @@ public class DropLogger
         });
         // Screenshots are optional enrichment; no rendered frame is needed to save a drop.
         if (!config.enableDropScreenshots() || !framePending.compareAndSet(false, true)) return;
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         List<String> party = partyNames();
         drawManager.requestNextFrameListener(frame -> {
             framePending.set(false);
@@ -334,7 +344,7 @@ public class DropLogger
             {
                 if (!clan.current(session) || !config.enableDropLogging()) break;
                 JsonObject payload = new JsonObject(); payload.add("p_row", row);
-                com.github.orgonag.fbclan.core.ApiResult result = db.rpcResult("fb_submit_drop", payload);
+                ApiResult result = db.rpcResult("fb_submit_drop", payload);
                 if (!result.successful())
                 {
                     if (result.retryable()) break;
@@ -411,7 +421,7 @@ public class DropLogger
             g.dispose();
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             ImageIO.write(image, "png", out);
-            String path = java.util.UUID.randomUUID() + ".png";
+            String path = UUID.randomUUID() + ".png";
             return db.upload(BUCKET, path, out.toByteArray(), "image/png") == null ? null : path;
         }
         catch (IOException | RuntimeException e)

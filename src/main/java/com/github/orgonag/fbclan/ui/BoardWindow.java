@@ -3,6 +3,8 @@ package com.github.orgonag.fbclan.ui;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -20,6 +22,7 @@ import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import net.runelite.client.ui.FontManager;
 
 /**
  * The full leaderboard pop-out: pick a board, (for clan bests) a boss,
@@ -32,7 +35,7 @@ class BoardWindow
 
     private final LeaderboardsTab tab;
     private JDialog dialog;
-    private Theme.Choice<Integer> boards;
+    private Choice<Integer> boards;
     private JComboBox<String> bossBox;
     private JTextField find;
     private JLabel heading;
@@ -68,9 +71,9 @@ class BoardWindow
 
     private void build(Component anchor)
     {
-        boards = new Theme.Choice<>(Arrays.asList(0, 1, 2, 3, 4, 5), i -> LeaderboardsTab.SHORT[i], 0, i -> render());
+        boards = new Choice<>(Arrays.asList(0, 1, 2, 3, 4, 5), i -> LeaderboardsTab.SHORT[i], 0, i -> render());
         bossBox = new JComboBox<>();
-        bossBox.setFont(net.runelite.client.ui.FontManager.getRunescapeSmallFont());
+        bossBox.setFont(FontManager.getRunescapeSmallFont());
         bossBox.addActionListener(e -> renderRows());
         find = Theme.field("", 12);
         find.setToolTipText("Filter by player name");
@@ -108,10 +111,10 @@ class BoardWindow
         dialog = new JDialog(SwingUtilities.getWindowAncestor(anchor), "Final Boss · Leaderboards");
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.getRootPane().registerKeyboardAction(e -> close(), KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
-        dialog.addWindowListener(new java.awt.event.WindowAdapter()
+        dialog.addWindowListener(new WindowAdapter()
         {
             @Override
-            public void windowClosed(java.awt.event.WindowEvent e)
+            public void windowClosed(WindowEvent e)
             {
                 dialog = null;
             }
@@ -172,7 +175,7 @@ class BoardWindow
         JPanel east = Theme.row(r.tier == null || r.tier.isEmpty() ? null : LeaderboardsTab.tierBadge(r.tier), null, Theme.bold(r.value, Theme.GOLD));
         JPanel row = Theme.row(rank, mine ? Theme.bold(r.name + "  (you)", Theme.TEXT) : Theme.text(r.name, Theme.SOFT), east);
         if (!mine) return row;
-        Theme.Card highlight = new Theme.Card(Theme.ACCENT_BG, Theme.ACCENT);
+        Card highlight = new Card(Theme.ACCENT_BG, Theme.ACCENT);
         highlight.setBorder(BorderFactory.createEmptyBorder(1, 4, 1, 4));
         highlight.add(row);
         return highlight;

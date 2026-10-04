@@ -1,17 +1,13 @@
 package com.github.orgonag.fbclan.ui;
 
-import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Container;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.Insets;
-import java.awt.LayoutManager;
+import java.awt.Graphics;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
@@ -19,23 +15,23 @@ import java.awt.event.MouseEvent;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.plaf.basic.BasicScrollBarUI;
 import javax.swing.text.AbstractDocument;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
@@ -147,11 +143,11 @@ final class Theme
     static void slim(JScrollPane pane)
     {
         pane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        javax.swing.JScrollBar bar = pane.getVerticalScrollBar();
+        JScrollBar bar = pane.getVerticalScrollBar();
         bar.setUnitIncrement(16);
         bar.setOpaque(false);
         bar.setPreferredSize(new Dimension(8, 0));
-        bar.setUI(new javax.swing.plaf.basic.BasicScrollBarUI()
+        bar.setUI(new BasicScrollBarUI()
         {
             @Override
             protected void paintTrack(Graphics g, JComponent c, Rectangle r)
@@ -169,20 +165,20 @@ final class Theme
             }
 
             @Override
-            protected javax.swing.JButton createDecreaseButton(int orientation)
+            protected JButton createDecreaseButton(int orientation)
             {
                 return none();
             }
 
             @Override
-            protected javax.swing.JButton createIncreaseButton(int orientation)
+            protected JButton createIncreaseButton(int orientation)
             {
                 return none();
             }
 
-            private javax.swing.JButton none()
+            private JButton none()
             {
-                javax.swing.JButton b = new javax.swing.JButton();
+                JButton b = new JButton();
                 b.setPreferredSize(new Dimension(0, 0));
                 return b;
             }
@@ -216,7 +212,7 @@ final class Theme
 
     static JLabel caps(String s)
     {
-        JLabel l = bold(s.toUpperCase(java.util.Locale.ROOT), SUB);
+        JLabel l = bold(s.toUpperCase(Locale.ROOT), SUB);
         l.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
         return l;
     }
@@ -421,237 +417,6 @@ final class Theme
         return g2;
     }
 
-    // ------------------------------------------------------------ classes
-
-    /** A rounded surface with an optional outline. */
-    static final class Card extends JPanel
-    {
-        private final Color fill;
-        private Color edge;
-
-        Card(Color fill, Color edge)
-        {
-            super(new Stack(5));
-            this.fill = fill;
-            this.edge = edge;
-            setOpaque(false);
-            setBorder(BorderFactory.createEmptyBorder(7, 7, 7, 7));
-        }
-
-        void setEdge(Color edge)
-        {
-            this.edge = edge;
-            repaint();
-        }
-
-        @Override
-        protected void paintComponent(Graphics g)
-        {
-            Graphics2D g2 = smooth(g);
-            g2.setColor(fill);
-            g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
-            if (edge != null)
-            {
-                g2.setColor(edge);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
-            }
-            g2.dispose();
-        }
-    }
-
-    /** A flat, self-painted button; CHIP and TAB kinds can be switched on. */
-    static final class Btn extends JButton
-    {
-        enum Kind { PRIMARY, GHOST, DANGER, CHIP, TAB }
-
-        private final Kind kind;
-        private boolean on;
-
-        Btn(String text, Kind kind, Runnable action)
-        {
-            super(text);
-            this.kind = kind;
-            setFont(FontManager.getRunescapeSmallFont().deriveFont(Font.BOLD));
-            setContentAreaFilled(false);
-            setBorderPainted(false);
-            setFocusPainted(false);
-            setOpaque(false);
-            setRolloverEnabled(true);
-            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            setBorder(BorderFactory.createEmptyBorder(5, 9, 5, 9));
-            addActionListener(e -> action.run());
-            restyle();
-        }
-
-        void setOn(boolean on)
-        {
-            this.on = on;
-            restyle();
-            repaint();
-        }
-
-        boolean isOn()
-        {
-            return on;
-        }
-
-        private boolean filled()
-        {
-            return kind == Kind.PRIMARY || (kind == Kind.CHIP && on);
-        }
-
-        private void restyle()
-        {
-            setForeground(filled() ? INK : kind == Kind.DANGER ? RED : kind == Kind.TAB && on ? ACCENT_HI : SOFT);
-        }
-
-        @Override
-        protected void paintComponent(Graphics g)
-        {
-            Graphics2D g2 = smooth(g);
-            int w = getWidth() - 1;
-            int h = getHeight() - 1;
-            int arc = kind == Kind.CHIP ? h : 6;
-            boolean hover = isEnabled() && getModel().isRollover();
-            Color fill = !isEnabled() ? RAISED
-                : filled() ? (hover ? ACCENT_HI : ACCENT)
-                : kind == Kind.TAB && on ? ACCENT_BG
-                : hover ? RAISED : null;
-            Color edge = filled() || !isEnabled() ? null
-                : kind == Kind.DANGER ? new Color(0x5A2A2A)
-                : kind == Kind.TAB && on ? ACCENT : LINE;
-            if (fill != null)
-            {
-                g2.setColor(fill);
-                g2.fillRoundRect(0, 0, w, h, arc, arc);
-            }
-            if (edge != null)
-            {
-                g2.setColor(edge);
-                g2.setStroke(new BasicStroke(1f));
-                g2.drawRoundRect(0, 0, w, h, arc, arc);
-            }
-            g2.dispose();
-            super.paintComponent(g);
-        }
-    }
-
-    /** One-of-N choice drawn as chips; `value()` is the current pick. */
-    static final class Choice<T> extends JPanel
-    {
-        private final List<T> values;
-        private final List<Btn> buttons = new ArrayList<>();
-        private T value;
-
-        Choice(List<T> values, Function<T, String> label, T initial, Consumer<T> onPick)
-        {
-            super(new java.awt.GridLayout(1, values.size(), 3, 0));
-            setOpaque(false);
-            this.values = values;
-            for (T v : values)
-            {
-                Btn b = new Btn(label.apply(v), Btn.Kind.CHIP, () -> {
-                    set(v);
-                    onPick.accept(v);
-                });
-                b.setBorder(BorderFactory.createEmptyBorder(4, 2, 4, 2));
-                buttons.add(b);
-                add(b);
-            }
-            set(initial);
-        }
-
-        T value()
-        {
-            return value;
-        }
-
-        void enable(T v, boolean enabled, String why)
-        {
-            Btn b = buttons.get(values.indexOf(v));
-            b.setEnabled(enabled);
-            b.setToolTipText(enabled ? null : why);
-        }
-
-        void set(T v)
-        {
-            value = values.contains(v) ? v : values.get(0);
-            for (int i = 0; i < values.size(); i++)
-            {
-                buttons.get(i).setOn(values.get(i).equals(value));
-            }
-        }
-    }
-
-    /** Children top to bottom, full width, preferred height, `gap` apart. */
-    static final class Stack implements LayoutManager
-    {
-        private final int gap;
-
-        Stack(int gap)
-        {
-            this.gap = gap;
-        }
-
-        @Override
-        public Dimension preferredLayoutSize(Container parent)
-        {
-            Insets in = parent.getInsets();
-            int width = parent.getWidth() - in.left - in.right;
-            int height = 0;
-            int widest = 0;
-            int shown = 0;
-            for (Component c : parent.getComponents())
-            {
-                if (!c.isVisible()) continue;
-                if (width > 0) measureAt(c, width);
-                Dimension d = c.getPreferredSize();
-                height += d.height + (shown++ > 0 ? gap : 0);
-                widest = Math.max(widest, d.width);
-            }
-            return new Dimension(widest + in.left + in.right, height + in.top + in.bottom);
-        }
-
-        // Sizing to the real width first lets wrapped text report its true
-        // wrapped height. A text area ignores the width while its height is
-        // 0 (fresh components), so give it room to measure in.
-        private static void measureAt(Component c, int width)
-        {
-            c.setSize(width, c.getHeight() > 0 ? c.getHeight() : Short.MAX_VALUE);
-        }
-
-        @Override
-        public Dimension minimumLayoutSize(Container parent)
-        {
-            return preferredLayoutSize(parent);
-        }
-
-        @Override
-        public void layoutContainer(Container parent)
-        {
-            Insets in = parent.getInsets();
-            int width = parent.getWidth() - in.left - in.right;
-            int y = in.top;
-            for (Component c : parent.getComponents())
-            {
-                if (!c.isVisible()) continue;
-                measureAt(c, width);
-                int h = c.getPreferredSize().height;
-                c.setBounds(in.left, y, width, h);
-                y += h + gap;
-            }
-        }
-
-        @Override
-        public void addLayoutComponent(String name, Component comp)
-        {
-        }
-
-        @Override
-        public void removeLayoutComponent(Component comp)
-        {
-        }
-    }
 
     // Tracks the viewport width so wrapped rows wrap to the real panel width.
     private static final class Viewport extends JPanel implements Scrollable

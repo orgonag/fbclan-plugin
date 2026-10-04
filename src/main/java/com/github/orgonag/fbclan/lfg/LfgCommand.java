@@ -3,11 +3,17 @@ package com.github.orgonag.fbclan.lfg;
 import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.core.Clan;
 import com.github.orgonag.fbclan.core.Names;
+import com.github.orgonag.fbclan.core.Session;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.regex.Pattern;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.ChatMessageType;
@@ -28,7 +34,7 @@ import net.runelite.client.util.Text;
 public class LfgCommand
 {
     private static final String USAGE = "!lfg lists parties · !lfg <activity> [size] posts an ASAP party, e.g. !lfg tob 4";
-    private static final java.util.regex.Pattern TIME = java.util.regex.Pattern.compile("\\d{1,2}:\\d{2}|\\d{1,2}(am|pm)|am|pm|tomorrow|today|tonight");
+    private static final Pattern TIME = Pattern.compile("\\d{1,2}:\\d{2}|\\d{1,2}(am|pm)|am|pm|tomorrow|today|tonight");
 
     /** What an alias posts: the activity, hard mode, and ToA invocation. */
     private static final class Alias
@@ -45,7 +51,7 @@ public class LfgCommand
         }
     }
 
-    private static final java.util.Map<String, Alias> ALIASES = new java.util.HashMap<>();
+    private static final Map<String, Alias> ALIASES = new HashMap<>();
 
     static
     {
@@ -137,7 +143,7 @@ public class LfgCommand
         String keyword = rest.trim().split("\\s+", 2)[0].toLowerCase(Locale.ROOT);
         if (keyword.isEmpty() || keyword.equals("parties") || keyword.equals("party"))
         {
-            com.github.orgonag.fbclan.core.Session session = clan.snapshot();
+            Session session = clan.snapshot();
             executor.submit(() -> {
                 if (!clan.current(session) || !config.enableLfg()) return;
                 PartyApi.Snapshot snapshot = api.fetch();
@@ -164,7 +170,7 @@ public class LfgCommand
     // "!lfg tob 4": activity words, then an optional size as the last word. Client thread.
     private void post(String args)
     {
-        List<String> words = new java.util.ArrayList<>(java.util.Arrays.asList(args.split("\\s+")));
+        List<String> words = new ArrayList<>(Arrays.asList(args.split("\\s+")));
         for (String w : words)
         {
             if (TIME.matcher(w).matches())
@@ -222,13 +228,14 @@ public class LfgCommand
         String rsn = clan.rsn();
         int world = client.getWorld();
         Party party = Party.quick(rsn, activity, alias.hard, alias.invocation, capacity, world > 0 ? world : null);
-        com.github.orgonag.fbclan.core.Session session = clan.snapshot();
-        executor.submit(() -> board.post(party, failure -> clientThread.invokeLater(() -> {
+        Session session = clan.snapshot();
+        // run() does the network write on the executor and reports back here.
+        board.run(() -> api.save(party), "Couldn't reach the party board — try again.", failure -> clientThread.invokeLater(() -> {
             if (!clan.current(session) || client.getGameState() != GameState.LOGGED_IN) return;
             print(failure == null
                 ? "[LFG] Posted " + party.title() + " 1/" + capacity + " (ASAP" + (world > 0 ? ", W" + world : "") + "). Manage it in the Final Boss panel."
                 : "[LFG] " + failure);
-        })));
+        }));
     }
 
     // "Parties: HMT - Host 3/5 W420 - needs Melee, North freeze | ..."

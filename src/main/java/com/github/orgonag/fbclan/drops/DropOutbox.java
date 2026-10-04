@@ -1,5 +1,6 @@
 package com.github.orgonag.fbclan.drops;
 
+import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.google.gson.JsonObject;
@@ -9,6 +10,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+import java.util.stream.Stream;
 
 /** Disk I/O only on workers. One atomic file per event; no credentials stored. */
 public final class DropOutbox
@@ -18,7 +21,7 @@ public final class DropOutbox
     public synchronized void add(Session session, JsonObject row) throws IOException
     {
         Files.createDirectories(directory);
-        try (java.util.stream.Stream<Path> files = Files.list(directory))
+        try (Stream<Path> files = Files.list(directory))
         {
             if (files.filter(p -> p.toString().endsWith(".json")).count() >= 1000)
                 throw new IOException("Drop outbox is full (1000 events)");
@@ -51,7 +54,7 @@ public final class DropOutbox
                     JsonObject row = record.getAsJsonObject("row");
                     if (session.getProfile().equals(Supabase.str(record, "profile"))
                         && Supabase.projectUrl().equals(Supabase.str(record, "endpoint"))
-                        && com.github.orgonag.fbclan.core.Names.same(session.getRsn(), Supabase.str(row, "rsn"))) out.add(row);
+                        && Names.same(session.getRsn(), Supabase.str(row, "rsn"))) out.add(row);
                 }
                 catch (RuntimeException e) { Files.move(file, file.resolveSibling(file.getFileName() + ".invalid")); }
             }
@@ -60,11 +63,11 @@ public final class DropOutbox
     }
     public synchronized void reject(String id) throws IOException
     {
-        Path file = directory.resolve(java.util.UUID.fromString(id) + ".json");
+        Path file = directory.resolve(UUID.fromString(id) + ".json");
         Files.move(file, file.resolveSibling(file.getFileName() + ".rejected"), StandardCopyOption.REPLACE_EXISTING);
     }
     public synchronized void remove(String id) throws IOException
     {
-        Files.deleteIfExists(directory.resolve(java.util.UUID.fromString(id) + ".json"));
+        Files.deleteIfExists(directory.resolve(UUID.fromString(id) + ".json"));
     }
 }
