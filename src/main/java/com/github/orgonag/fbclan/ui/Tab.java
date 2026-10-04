@@ -2,7 +2,7 @@ package com.github.orgonag.fbclan.ui;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
-import java.awt.KeyboardFocusManager;
+import java.awt.Container;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -81,14 +81,25 @@ abstract class Tab extends JPanel
     // tab keeps its input rows across refreshes) keeps the keyboard focus.
     protected void fill(Runnable build)
     {
-        Component focused = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-        boolean ours = focused != null && SwingUtilities.isDescendingFrom(focused, list);
+        Component focused = focused(list);
         // Mid-pick in a dropdown: leave it open; the next refresh catches up.
-        if (ours && focused instanceof JComboBox && ((JComboBox<?>) focused).isPopupVisible()) return;
+        if (focused instanceof JComboBox && ((JComboBox<?>) focused).isPopupVisible()) return;
         list.removeAll();
         build.run();
         list.revalidate();
         list.repaint();
-        if (ours && SwingUtilities.isDescendingFrom(focused, list)) focused.requestFocusInWindow();
+        if (focused != null && SwingUtilities.isDescendingFrom(focused, list)) focused.requestFocusInWindow();
+    }
+
+    // The component inside `root` that has the keyboard focus, else null.
+    private static Component focused(Container root)
+    {
+        for (Component c : root.getComponents())
+        {
+            if (c.isFocusOwner()) return c;
+            Component inner = c instanceof Container ? focused((Container) c) : null;
+            if (inner != null) return inner;
+        }
+        return null;
     }
 }
