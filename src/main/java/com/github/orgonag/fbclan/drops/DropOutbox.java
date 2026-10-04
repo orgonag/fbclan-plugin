@@ -1,6 +1,5 @@
 package com.github.orgonag.fbclan.drops;
 
-import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.google.gson.JsonObject;
@@ -53,9 +52,10 @@ public final class DropOutbox
                 {
                     JsonObject record = new JsonParser().parse(Files.readString(file)).getAsJsonObject();
                     JsonObject row = record.getAsJsonObject("row");
+                    // Matched on the RuneLite profile (the account), not the name: a
+                    // drop saved before a rename still sends, under the name it was earned on.
                     if (session.getProfile().equals(Supabase.str(record, "profile"))
-                        && Supabase.projectUrl().equals(Supabase.str(record, "endpoint"))
-                        && Names.same(session.getRsn(), Supabase.str(row, "rsn"))) out.add(row);
+                        && Supabase.projectUrl().equals(Supabase.str(record, "endpoint")) && row.has("event_id")) out.add(row);
                 }
                 catch (CharacterCodingException | RuntimeException e)
                 {
