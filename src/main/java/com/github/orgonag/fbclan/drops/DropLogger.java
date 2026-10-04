@@ -222,20 +222,21 @@ public class DropLogger
             if (e.getValue() > inventoryCounts.getOrDefault(e.getKey(), 0)
                 && !itemManager.getItemComposition(e.getKey()).isTradeable())
             {
-                added = e.getKey();
+                // Two at once: no telling which is the pet.
+                added = added == 0 ? e.getKey() : -1;
             }
         }
         inventoryCounts = now;
-        if (added <= 0) return;
+        if (added == 0) return;
         newItemId = added;
         newItemTick = client.getTickCount();
-        if (petTick >= 0 && newItemTick - petTick <= 1)
+        if (added > 0 && petTick >= 0 && newItemTick - petTick <= 1)
         {
             backpackPet(petSource, added);
         }
     }
 
-    // A backpack pet whose item never showed up is still logged, unnamed. Client thread.
+    // A backpack pet whose item never showed up (or couldn't be told apart) is still logged, unnamed. Client thread.
     public void onTick()
     {
         if (petTick >= 0 && client.getTickCount() - petTick > 1)
@@ -352,7 +353,7 @@ public class DropLogger
                 }
                 outbox.remove(Supabase.str(row, "event_id"));
                 // Webhooks are deliberately best effort, independent of the durable clan record.
-                if (clan.current(session) && config.enableDropLogging()) discord(session.getRsn(), Supabase.str(row, "npc_name"),
+                if (clan.current(session) && config.enableDropLogging()) discord(Supabase.str(row, "rsn"), Supabase.str(row, "npc_name"),
                     new Drop(Supabase.str(row, "item_name"), row.get("item_id").getAsInt(), row.get("ge_value").getAsLong(), row.get("quantity").getAsInt(),
                         Supabase.has(row, "rarity") ? row.get("rarity").getAsDouble() : null));
             }

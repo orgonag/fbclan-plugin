@@ -388,7 +388,9 @@ public class PartyBoard
             {
                 for (Party.Applicant a : p.pending())
                 {
-                    if (before == null || before.applicantFor(a.getRsn()) == null)
+                    // New, or back after being declined.
+                    Party.Applicant was = before == null ? null : before.applicantFor(a.getRsn());
+                    if (was == null || was.getStatus() == Party.Status.DECLINED)
                     {
                         out.add(a.getRsn() + " applied to your " + p.title() + " party"
                             + (a.getRole() == null ? "" : " as " + a.getRole().getDisplayName())

@@ -224,7 +224,16 @@ public class Party
         {
             taken.add(a.getRole());
         }
-        return Role.open(activity, hardMode, capacity, requiredRoles, taken);
+        return Role.open(activity, requiredRoles, taken);
+    }
+
+    // What the party still needs: "Ranged, South freeze", or "3 of Melee,
+    // Ranged, ..." while an "any role" member hasn't settled on a seat.
+    public String needs()
+    {
+        List<Role> open = openRoles();
+        int free = capacity - memberCount();
+        return (free > 0 && open.size() > free ? free + " of " : "") + Role.summarize(open);
     }
 
     // Upsert payload keyed on host_rsn; id and created_at are server-owned.
