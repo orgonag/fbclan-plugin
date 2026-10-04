@@ -17,6 +17,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
+import javax.imageio.stream.MemoryCacheImageInputStream;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import javax.swing.BorderFactory;
@@ -173,7 +174,8 @@ public class DropViewer
     // Reads the header first so a small file can't claim a huge canvas.
     private static BufferedImage decode(byte[] bytes) throws IOException
     {
-        try (ImageInputStream in = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes)))
+        // Memory-backed: ImageIO.createImageInputStream may spool to a temp file on disk.
+        try (ImageInputStream in = new MemoryCacheImageInputStream(new ByteArrayInputStream(bytes)))
         {
             Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
             if (!readers.hasNext()) return null;
