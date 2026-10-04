@@ -4,3 +4,7 @@ build/
 *.iml
 out/
 .DS_Store
+
+# Maintainer notes and backend copies (local only)
+AGENTS.md
+maintainer/
