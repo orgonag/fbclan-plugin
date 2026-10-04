@@ -21,7 +21,7 @@ import lombok.Getter;
  * <li>ToB / HMT: composition is fixed by size (3 = Melee/Ranged/Freeze;
  *     4 splits North/South; 5 runs two Melee).</li>
  * <li>CoX / CM: the host sets a count per role, Fill takes the rest.</li>
- * <li>BA: one of each base role, then a spare seat may double one.</li>
+ * <li>BA: one of each base role, and a spare seat that may double one.</li>
  * </ul>
  * Stored in the database by enum name.
  */
@@ -37,6 +37,8 @@ public enum Role
     private static final Set<Role> TOB_FREEZE = EnumSet.of(TOB_FRZ, TOB_NFRZ, TOB_SFRZ);
     private static final Set<Role> TOB_HM_FREEZE = EnumSet.of(TOB_HM_FRZ, TOB_HM_NFRZ, TOB_HM_SFRZ);
     private static final Set<Role> FILLS = EnumSet.of(TOB_FILL, TOB_HM_FILL, COX_FILL, COX_CM_FILL, BA_FILL);
+    // BA: one of each base role, and a spare seat that may double one.
+    private static final List<Role> BA_SEATS = Arrays.asList(BA_ATTACKER, BA_DEFENDER, BA_COLLECTOR, BA_HEALER, BA_FILL);
 
     private final String displayName;
 
@@ -189,86 +191,43 @@ public enum Role
         return roles;
     }
 
-    // Seats still open given the stored composition and the roles already
-    // taken (host + accepted members). Each taken role consumes the best
-    // matching seat: exact, then interchangeable (ToB freezes), then Fill,
-    // then whatever's last.
-    public static List<Role> open(Activity activity, boolean hard, int capacity, List<Role> required, List<Role> taken)
+    // Seats nobody has claimed yet, given the composition and the roles
+    // already taken (host + accepted members). Specific roles are seated
+    // first: their own seat, else an interchangeable one (ToB freezes),
+    // else a Fill seat. "Any" members go last: they take a Fill seat if
+    // one is left, otherwise they float and end up with whatever remains
+    // - so the list can be longer than the number of free places. The
+    // server (fb_private.unclaimed) seats people the same way.
+    public static List<Role> open(Activity activity, List<Role> required, List<Role> taken)
     {
-        if (activity == Activity.BA)
-        {
-            return baOpen(taken, capacity);
-        }
-        if (required == null || required.isEmpty())
-        {
-            return Collections.emptyList();
-        }
-        List<Role> open = new ArrayList<>(required);
+        List<Role> open = new ArrayList<>(activity == Activity.BA ? BA_SEATS : required == null ? Collections.<Role>emptyList() : required);
         for (Role t : taken)
         {
-            if (open.isEmpty())
-            {
-                break;
-            }
             if (t == null) return Collections.emptyList();
-            int idx = open.indexOf(t);
-            if (idx < 0)
-            {
-                idx = fillable(open, t, false);
-            }
-            if (idx < 0)
-            {
-                idx = fillable(open, t, true);
-            }
-            if (idx < 0) return Collections.emptyList();
-            open.remove(idx);
-        }
-        return open;
-    }
-
-    private static int fillable(List<Role> open, Role taken, boolean allowFill)
-    {
-        for (int i = 0; i < open.size(); i++)
-        {
-            if ((allowFill || !open.get(i).isFill()) && taken.canFill(open.get(i)))
-            {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    // BA: each base role once, then a spare seat may double one (never
-    // more than two of the same).
-    private static List<Role> baOpen(List<Role> taken, int capacity)
-    {
-        Map<Role, Integer> counts = new EnumMap<>(Role.class);
-        for (Role r : playable(Activity.BA, false))
-        {
-            counts.put(r, 0);
+            if (t.isFill()) continue;
+            int seat = seat(open, t);
+            if (seat < 0) return Collections.emptyList();
+            open.remove(seat);
         }
         for (Role t : taken)
         {
-            if (t != null && counts.containsKey(t))
-            {
-                counts.merge(t, 1, Integer::sum);
-            }
+            if (t.isFill()) open.remove(t);
         }
-        int openSeats = Math.max(0, capacity - taken.size());
-        if (openSeats == 0)
-        {
-            return Collections.emptyList();
-        }
-        long empty = counts.values().stream().filter(c -> c == 0).count();
-        boolean allowExtra = openSeats > empty;
-        List<Role> open = new ArrayList<>();
-        counts.forEach((role, c) -> {
-            if (c == 0 || (allowExtra && c < 2))
-            {
-                open.add(role);
-            }
-        });
         return open;
+    }
+
+    private static int seat(List<Role> open, Role wanted)
+    {
+        int seat = open.indexOf(wanted);
+        // Not its own seat: an interchangeable one first, a Fill seat last.
+        for (boolean fill : new boolean[] {false, true})
+        {
+            for (int i = 0; seat < 0 && i < open.size(); i++)
+            {
+                if (open.get(i).isFill() == fill && wanted.canFill(open.get(i))) seat = i;
+            }
+        }
+        return seat;
     }
 
     // Distinct roles a player could apply as, plus the mode's wildcard.

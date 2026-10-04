@@ -264,7 +264,7 @@ public class LfgCommand
             }
             else
             {
-                String needs = Role.summarize(p.openRoles());
+                String needs = p.needs();
                 if (!needs.isEmpty())
                 {
                     sb.append(" - needs ").append(needs);

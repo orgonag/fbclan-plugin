@@ -6,9 +6,7 @@ import com.github.orgonag.fbclan.lfg.PartyApi;
 import com.github.orgonag.fbclan.lfg.PartyBoard;
 import com.github.orgonag.fbclan.lfg.Role;
 import java.awt.event.ActionListener;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -82,7 +80,7 @@ final class AddMemberForm
         JComboBox<Object> roleBox = null;
         if (p.getActivity().hasRoles())
         {
-            List<Role> options = new ArrayList<>(new LinkedHashSet<>(p.openRoles()));
+            List<Role> options = Role.applyOptions(p.getActivity(), p.isHardMode(), p.openRoles());
             if (options.isEmpty()) options = Role.playable(p.getActivity(), p.isHardMode());
             roleBox = LfgUi.combo(options.toArray());
             panel.add(Theme.labeled("Role", roleBox));

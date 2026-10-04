@@ -11,7 +11,6 @@ import com.github.orgonag.fbclan.lfg.Party.Applicant;
 import com.github.orgonag.fbclan.lfg.Party;
 import com.github.orgonag.fbclan.lfg.PartyApi;
 import com.github.orgonag.fbclan.lfg.PartyBoard;
-import com.github.orgonag.fbclan.lfg.Role;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -390,7 +389,7 @@ public class PartiesTab extends Tab
     {
         if (p.getActivity().hasRoles())
         {
-            String needs = p.isFull() ? "" : Role.summarize(p.openRoles());
+            String needs = p.isFull() ? "" : p.needs();
             card.add(Theme.wrap(p.isFull() ? "Full" : needs.isEmpty() ? "Roles: any" : "Needs: " + needs, Theme.SUB));
         }
         else if (p.isFull())
