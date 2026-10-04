@@ -35,8 +35,6 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.SpinnerNumberModel;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import net.runelite.client.ui.FontManager;
 
 /**
@@ -100,12 +98,7 @@ class HostWizard
         });
         if (editingId == null) sizeSpinner.setValue(activity().defaultPartySize());
         descField.setToolTipText("Optional description (max " + Party.MAX_DESCRIPTION + " chars)");
-        descField.getDocument().addDocumentListener(new DocumentListener()
-        {
-            public void insertUpdate(DocumentEvent e) { described(); }
-            public void removeUpdate(DocumentEvent e) { described(); }
-            public void changedUpdate(DocumentEvent e) { described(); }
-        });
+        Theme.onEdit(descField, this::described);
         if (editing != null) populate(editing);
 
         JPanel top = Theme.stack(8);
@@ -113,8 +106,9 @@ class HostWizard
         top.add(heading);
         top.add(new Progress());
         stepBody.setBorder(BorderFactory.createEmptyBorder(4, 14, 8, 14));
-        JPanel bodyHolder = new JPanel(new BorderLayout());
-        bodyHolder.setBackground(Theme.BG);
+        // Tracks the window width, so a long description can't widen the step.
+        Theme.Viewport bodyHolder = new Theme.Viewport();
+        bodyHolder.setBorder(null);
         bodyHolder.add(stepBody, BorderLayout.NORTH);
         JScrollPane scroll = new JScrollPane(bodyHolder);
         scroll.setBorder(null);
@@ -456,7 +450,9 @@ class HostWizard
     {
         Object previous = hostRoleBox.getSelectedItem();
         hostRoleBox.removeAllItems();
-        List<Role> roles = activity == Activity.TOB ? distinct(Role.tobComposition(size, hard)) : Role.playable(activity, hard);
+        List<Role> roles = new ArrayList<>(activity == Activity.TOB ? distinct(Role.tobComposition(size, hard)) : Role.playable(activity, hard));
+        // A quick post's host holds the "any" role; keep it while it is still the pick.
+        if (previous != null && previous == Role.any(activity, hard) && !roles.contains(previous)) roles.add((Role) previous);
         roles.forEach(hostRoleBox::addItem);
         if (previous != null && roles.contains(previous)) hostRoleBox.setSelectedItem(previous);
     }

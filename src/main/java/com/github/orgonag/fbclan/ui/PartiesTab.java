@@ -15,8 +15,10 @@ import com.github.orgonag.fbclan.lfg.Role;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -26,10 +28,7 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import net.runelite.client.game.ItemManager;
 
 /**
@@ -58,9 +57,8 @@ public class PartiesTab extends Tab
     private Object filter;
     private boolean hideFull;
     private boolean showFormed = true;
-    private String addMemberDraft = "";
-    private Role addMemberRole;
     private final ApplyForm applyForm;
+    private final AddMemberForm addMember;
 
     @Inject
     public PartiesTab(Clan clan, FinalBossConfig config, PartyBoard board, PartyApi api, Killcounts killcounts,
@@ -78,8 +76,9 @@ public class PartiesTab extends Tab
             setActionError(message);
         }, () -> {
             applyingId = null;
-            render();
+            setActionError(null);
         });
+        addMember = new AddMemberForm(board, api, this::setActionError);
 
         hostButton = Theme.button("Host a party", Btn.Kind.PRIMARY, () -> openWizard(null));
         control(hostButton);
@@ -105,6 +104,8 @@ public class PartiesTab extends Tab
     @Override
     public void refresh()
     {
+        // Reopening the tab clears the last action's leftover error.
+        actionError = null;
         executor.submit(board::refresh);
     }
 
@@ -116,7 +117,7 @@ public class PartiesTab extends Tab
         SwingUtilities.invokeLater(() -> {
             applyingId = null;
             applyForm.reset();
-            addMemberDraft = "";
+            addMember.reset();
             actionError = null;
             render();
         });
@@ -205,6 +206,9 @@ public class PartiesTab extends Tab
     {
         String rsn = clan.rsn();
         List<Party> mine = board.mine();
+        Set<String> mineIds = new HashSet<>();
+        mine.forEach(p -> mineIds.add(p.getId()));
+        addMember.keep(mineIds);
         showError(actionError != null ? actionError : board.refreshError());
         note.setText(board.online().isEmpty() ? "" : board.online().size() + " in clan chat");
         // Host stays available until both the ASAP slot and all scheduled slots are used.
@@ -273,7 +277,7 @@ public class PartiesTab extends Tab
     {
         String rsn = clan.rsn();
         Card card = Theme.card(null);
-        boolean hostOnline = board.online().contains(Names.normalize(p.getHostRsn()));
+        boolean hostOnline = p.isHostedBy(rsn) || board.online().contains(Names.normalize(p.getHostRsn()));
         String asap = p.isScheduled() ? "" : " · ASAP";
         JLabel host = Theme.text(p.getHostRsn() + asap + " · " + Theme.timeAgo(p.getCreatedAt()), hostOnline ? Theme.GREEN : OFFLINE);
         card.add(head(p.getActivity(), p.title(), p.getWorld(), host, p.memberCount() + "/" + p.getCapacity()));
@@ -346,14 +350,11 @@ public class PartiesTab extends Tab
             accepted.forEach(a -> card.add(applicantRow(p, a, false)));
         }
         if (pending.isEmpty() && accepted.isEmpty()) card.add(Theme.text("No applicants yet.", Theme.SUB));
-        if (!p.isFull()) card.add(addMemberRow(p));
+        if (!p.isFull()) card.add(addMember.view(p));
         Btn edit = Theme.button("Edit", Btn.Kind.GHOST, () -> openWizard(p));
         edit.setEnabled(!board.isBusy() && clan.canUpload() && config.enableLfg());
         card.add(LfgUi.pair(edit,
-            Theme.button("Cancel post", Btn.Kind.DANGER, () -> {
-                board.expectSelfLeave(p.getId());
-                run(() -> api.disband(p.getId()), "Couldn't cancel — try again.");
-            })));
+            Theme.button("Cancel post", Btn.Kind.DANGER, () -> run(() -> api.disband(p.getId()), "Couldn't cancel — try again."))));
         return card;
     }
 
@@ -436,60 +437,6 @@ public class PartiesTab extends Tab
         return Theme.row(null, who, buttons);
     }
 
-    // Seat a buddy who isn't on LFG so the spot shows as taken to everyone.
-    private JPanel addMemberRow(Party p)
-    {
-        JPanel row = Theme.stack(4);
-        row.add(Theme.bold("Add a member who isn't on LFG", Theme.ACCENT_HI));
-        JTextField name = Theme.field(addMemberDraft, 12);
-        name.setToolTipText("Their RSN");
-        name.getDocument().addDocumentListener(new DocumentListener()
-        {
-            public void insertUpdate(DocumentEvent e) { addMemberDraft = name.getText(); }
-            public void removeUpdate(DocumentEvent e) { addMemberDraft = name.getText(); }
-            public void changedUpdate(DocumentEvent e) { addMemberDraft = name.getText(); }
-        });
-        row.add(Theme.labeled("Name", name));
-        JComboBox<Object> roleBox = null;
-        if (p.getActivity().hasRoles())
-        {
-            List<Role> options = new ArrayList<>();
-            for (Role r : p.openRoles())
-            {
-                if (!options.contains(r)) options.add(r);
-            }
-            if (options.isEmpty()) options = Role.playable(p.getActivity(), p.isHardMode());
-            roleBox = LfgUi.combo(options.toArray());
-            if (options.contains(addMemberRole)) roleBox.setSelectedItem(addMemberRole);
-            JComboBox<Object> box = roleBox;
-            roleBox.addActionListener(e -> addMemberRole = (Role) box.getSelectedItem());
-            row.add(Theme.labeled("Role", roleBox));
-        }
-        JComboBox<Object> roleBoxF = roleBox;
-        Runnable submit = () -> {
-            String rsn = name.getText().trim();
-            if (rsn.isEmpty())
-            {
-                setActionError("Type their name first.");
-                return;
-            }
-            if (Names.same(rsn, p.getHostRsn()))
-            {
-                setActionError("That's you — you're already in.");
-                return;
-            }
-            Role role = roleBoxF == null ? null : (Role) roleBoxF.getSelectedItem();
-            board.run(() -> api.addMember(p.getId(), rsn, role),
-                "Couldn't add member. Refresh and check the name and available role.", message -> SwingUtilities.invokeLater(() -> {
-                    if (message == null) addMemberDraft = "";
-                    setActionError(message);
-                }));
-        };
-        name.addActionListener(e -> submit.run());
-        row.add(Theme.button("Add member", Btn.Kind.GHOST, submit));
-        return row;
-    }
-
     // What a host sees next to an applicant, in order of trust: the KC
     // their own client recorded, else a hiscore lookup, else what they
     // typed "(self)", else unknown. Null when the activity has no KC.
@@ -543,5 +490,4 @@ public class PartiesTab extends Tab
         actionError = message;
         render();
     }
-
 }

@@ -35,6 +35,9 @@ public class Clan
     private volatile Future<?> delayed;
     private volatile Call verificationCall;
     private volatile boolean verifying;
+    // This login already has a yes or no; only the panel's Retry asks
+    // again. (An error is left open, so the next area load tries once more.)
+    private volatile boolean resolved;
 
     @Inject
     public Clan(Client client, ClientThread clientThread, ScheduledExecutorService executor,
@@ -61,6 +64,7 @@ public class Clan
     {
         session = new Session(generations.incrementAndGet(), null, null, false);
         verifying = false;
+        resolved = false;
         Future<?> task = delayed;
         if (task != null) task.cancel(false);
         Call call = verificationCall;
@@ -85,7 +89,7 @@ public class Clan
                 String name = client.getLocalPlayer().getName();
                 String profile = configManager.getRSProfileKey();
                 if (session.getRsn() != null && (!Names.same(session.getRsn(), name) || !profile.equals(session.getProfile()))) reset();
-                if (session.isVerified()) return;
+                if (session.isVerified() || resolved) return;
                 session = new Session(session.getGeneration(), name, profile, false);
                 verify();
             }
@@ -108,6 +112,7 @@ public class Clan
                     {
                         if (!enabled || captured.getGeneration() != session.getGeneration()) return;
                         verifying = false;
+                        resolved = result != Status.ERROR;
                         session = new Session(captured.getGeneration(), captured.getRsn(), captured.getProfile(), result == Status.MEMBER);
                         listener.onStatus(result);
                     }
@@ -131,12 +136,14 @@ public class Clan
     private boolean inGroup(String name) throws IOException
     {
         String url = "https://api.wiseoldman.net/v2/players/"
-            + URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20") + "/groups";
+            + URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20") + "/groups?limit=50";
         Request request = new Request.Builder().url(url).header("User-Agent", "FinalBoss-RuneLite-Plugin").build();
         Call call = http.newCall(request);
         verificationCall = call;
         try (Response response = call.execute())
         {
+            // Wise Old Man has never seen this name: not in any group.
+            if (response.code() == 404) return false;
             if (!response.isSuccessful() || response.body() == null)
             {
                 throw new IOException("WOM API returned " + response.code());

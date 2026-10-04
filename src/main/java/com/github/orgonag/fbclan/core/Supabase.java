@@ -6,7 +6,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -27,8 +26,8 @@ import okhttp3.Response;
  * bests, member stats) go through improve-only Postgres functions. See
  * README "Data & Security" for the per-table matrix.
  *
- * Every call is blocking network I/O — run on the executor. Reads fail
- * soft (empty array), writes return success or the HTTP status.
+ * Every call is blocking network I/O — run on the executor. Reads
+ * return null on failure; writes return an {@link ApiResult}.
  */
 @Slf4j
 @Singleton
@@ -54,16 +53,9 @@ public class Supabase
 
     // ------------------------------------------------------------ reads
 
-    // Rows matching a PostgREST query ("select=a,b&order=x.desc"); an
-    // empty array on any failure, for callers that render what they get.
-    public JsonArray get(String table, String query)
-    {
-        JsonArray rows = getOrNull(table, query);
-        return rows == null ? new JsonArray() : rows;
-    }
-
-    // Same, but null on failure so a cache can keep its previous value
-    // and still clear when the table is genuinely empty.
+    // Rows matching a PostgREST query ("select=a,b&order=x.desc"). Null
+    // on failure, so a cache can keep its previous value and still clear
+    // when the table is genuinely empty.
     public JsonArray getOrNull(String table, String query)
     {
         JsonArray all = new JsonArray();
@@ -107,7 +99,6 @@ public class Supabase
                 if (bytes.length > 8_000_000) return new ApiResult(response.code(), null, "Response too large");
                 raw = new String(bytes, StandardCharsets.UTF_8);
             }
-            if (raw.length() > 8_000_000) return new ApiResult(response.code(), null, "Response too large");
             JsonElement body = raw.isEmpty() ? null : new JsonParser().parse(raw);
             return new ApiResult(response.code(), body, null, response.header("Content-Range"));
         }
@@ -140,12 +131,6 @@ public class Supabase
     }
 
     // ------------------------------------------------------------ helpers
-
-    // PostgREST filter value: "rsn=eq." + enc(name).
-    public static String enc(String value)
-    {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
-    }
 
     private static Request.Builder base(String url)
     {

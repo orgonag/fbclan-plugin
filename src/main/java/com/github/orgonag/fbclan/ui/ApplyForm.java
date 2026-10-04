@@ -85,7 +85,7 @@ final class ApplyForm
                 }
             }
         }
-        String now = p.getId() + ":" + p.getActivity() + ":" + p.isHardMode() + ":" + p.openRoles() + ":" + prefill + ":" + source;
+        String now = p.getId() + ":" + p.getActivity() + ":" + p.isHardMode() + ":" + p.openRoles() + ":" + p.getMinKc() + ":" + prefill + ":" + source;
         if (now.equals(shape) && panel != null) return panel;
         shape = now;
         panel = build(p, rsn, prefill, source);

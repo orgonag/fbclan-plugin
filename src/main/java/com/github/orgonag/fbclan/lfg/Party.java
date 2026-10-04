@@ -272,7 +272,7 @@ public class Party
         }
         return Party.builder()
             .id(Supabase.str(row, "id"))
-            .version(Supabase.intOr(row, "version", 1))
+            .version(Supabase.longOr(row, "version", 1))
             .hostRsn(Supabase.str(row, "host_rsn"))
             .activity(activity)
             .hardMode(Supabase.bool(row, "hard_mode"))

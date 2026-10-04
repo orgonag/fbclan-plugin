@@ -56,15 +56,14 @@ public class PartyApi
         {
             for (JsonElement el : body.getAsJsonArray("parties"))
             {
+                // A row this version can't read (a newer activity) is skipped, not fatal.
                 Party p = Party.fromRow(el.getAsJsonObject());
-                if (p == null) return null;
-                parties.add(p);
+                if (p != null) parties.add(p);
             }
             for (JsonElement el : body.getAsJsonArray("formed"))
             {
                 FormedParty f = FormedParty.fromRow(el.getAsJsonObject());
-                if (f == null) return null;
-                formed.add(f);
+                if (f != null) formed.add(f);
             }
         }
         catch (RuntimeException e) { return null; }
@@ -124,6 +123,16 @@ public class PartyApi
 
     public boolean addMember(String id, String rsn, Role role)
     {
+        // Someone who already applied is accepted instead (the server would
+        // refuse a second row for them with a database error).
+        Party p = find(id);
+        Party.Applicant existing = p == null ? null : p.applicantFor(rsn);
+        if (existing != null && existing.isPending()) return setStatus(id, rsn, Party.Status.ACCEPTED);
+        if (existing != null)
+        {
+            refusal.set(existing.isAccepted() ? "They're already in this party." : "You declined them earlier. Ask them to apply again.");
+            return false;
+        }
         JsonObject d = data(id);
         d.addProperty("rsn", rsn);
         Supabase.put(d, "role", role == null ? null : role.key());
@@ -132,7 +141,7 @@ public class PartyApi
 
     public boolean deleteFormed(String id)
     {
-        return command("remove_formed", data(id), null);
+        return command("remove_formed", data(id));
     }
 
     // ------------------------------------------------------------ plumbing
@@ -150,11 +159,13 @@ public class PartyApi
         return d;
     }
 
-    // Commands on an existing party carry its version for optimistic concurrency.
+    // Only an edit carries the party's version (so it can't overwrite a
+    // newer one). Everything else is re-checked by the server under its
+    // lock; a version there would refuse the action whenever anyone else
+    // touched the party since the last poll.
     private boolean command(String action, JsonObject d)
     {
-        Party p = find(Supabase.str(d, "id"));
-        return command(action, d, p == null ? null : p.getVersion());
+        return command(action, d, null);
     }
 
     private boolean command(String action, JsonObject data, Long expected)

@@ -200,8 +200,8 @@ public class Sidebar extends PluginPanel
                 cards.show(root, MAIN);
                 return;
             case NOT_MEMBER:
-                status.setText("You're not a member of Final Boss.\n\nVisit wiseoldman.net/groups/" + Clan.WOM_GROUP_ID + " for more info.");
-                retry.setVisible(false);
+                status.setText("You're not a member of Final Boss.\n\nVisit wiseoldman.net/groups/" + Clan.WOM_GROUP_ID + " for more info.\n\nJust joined? Retry checks again.");
+                retry.setVisible(true);
                 break;
             case ERROR:
                 status.setText("Couldn't verify membership — click to retry.");

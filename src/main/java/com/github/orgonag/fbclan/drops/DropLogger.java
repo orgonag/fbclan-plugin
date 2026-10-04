@@ -14,7 +14,6 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
-import java.awt.Image;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -31,6 +30,7 @@ import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -68,6 +68,7 @@ public class DropLogger
     private static final String BUCKET = "drop-screenshots";
     private static final String COLUMNS = "rsn,npc_name,item_name,item_id,ge_value,quantity,created_at,screenshot_url,rarity";
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+    private static final Pattern SCREENSHOT_FILE = Pattern.compile("(?:[A-Za-z0-9_-]{1,12}/)?[A-Za-z0-9_-]{1,64}\\.png");
 
     private final DropOutbox outbox = new DropOutbox(RuneLite.RUNELITE_DIR.toPath().resolve("finalboss-outbox"));
     private final AtomicBoolean flushing = new AtomicBoolean();
@@ -111,22 +112,19 @@ public class DropLogger
         this.http = http.newBuilder().callTimeout(20, TimeUnit.SECONDS).build();
     }
 
-    // Every legitimate screenshot URL starts with this; the drop-log tab
-    // refuses to open anything else (the drops table is anon-writable).
-    public static String screenshotPrefix()
+    // A file in the plugin's own screenshot bucket: "<uuid>.png", or the
+    // older "<player>/<time>_<item>.png". The drop viewer opens nothing else.
+    public static boolean isScreenshot(String url)
     {
-        return Supabase.publicUrl(BUCKET, "");
+        String prefix = Supabase.publicUrl(BUCKET, "");
+        return url != null && url.startsWith(prefix) && SCREENSHOT_FILE.matcher(url.substring(prefix.length())).matches();
     }
 
     // ------------------------------------------------------------ inputs
 
     // `source` is what the Loot Tracker reported (NPC, raid, chest); it
     // doubles as the key into the rate table. Client thread.
-    public void onLoot(String source, Collection<ItemStack> items)
-    {
-        onLoot(source, items, false);
-    }
-
+    // `tracker`: reported by the Loot Tracker rather than an NPC kill.
     public void onLoot(String source, Collection<ItemStack> items, boolean tracker)
     {
         String rsn = clan.rsn();
@@ -272,7 +270,7 @@ public class DropLogger
         {
             JsonObject row = el.getAsJsonObject();
             String path = Supabase.str(row, "screenshot_url");
-            if (path.matches("[0-9a-f-]{36}\\.png")) row.addProperty("screenshot_url", screenshotPrefix() + path);
+            if (path.matches("[0-9a-f-]{36}\\.png")) row.addProperty("screenshot_url", Supabase.publicUrl(BUCKET, path));
         }
         return rows;
     }
@@ -297,7 +295,7 @@ public class DropLogger
             rows.add(row);
         }
         executor.submit(() -> {
-            if (!clan.current(session) || !config.enableDropLogging()) return;
+            // Saved even if the player has since logged out; flush sends it at their next login.
             for (JsonObject row : rows)
             {
                 try { outbox.add(session, row); }
@@ -317,7 +315,7 @@ public class DropLogger
             try { graphics.drawImage(frame, 0, 0, null); } finally { graphics.dispose(); }
             executor.submit(() -> {
                 if (!clan.current(session) || !config.enableDropLogging() || !config.enableDropScreenshots()) return;
-                String path = uploadScreenshot(copy, rsn, party, 0);
+                String path = uploadScreenshot(copy, party);
                 if (path == null) return;
                 for (JsonObject row : rows)
                 {
@@ -347,7 +345,7 @@ public class DropLogger
                 ApiResult result = db.rpcResult("fb_submit_drop", payload);
                 if (!result.successful())
                 {
-                    if (result.retryable()) break;
+                    if (!result.refused()) break;
                     outbox.reject(Supabase.str(row, "event_id"));
                     log.warn("Drop rejected by database; saved locally for inspection: {}", result.message());
                     continue;
@@ -401,13 +399,12 @@ public class DropLogger
 
     // ------------------------------------------------------------ screenshots
 
-    private String uploadScreenshot(Image frame, String rsn, List<String> party, int itemId)
+    // `image` is this drop's own copy of the frame; the party line is drawn onto it.
+    private String uploadScreenshot(BufferedImage image, List<String> party)
     {
         try
         {
-            BufferedImage image = new BufferedImage(frame.getWidth(null), frame.getHeight(null), BufferedImage.TYPE_INT_RGB);
             Graphics2D g = image.createGraphics();
-            g.drawImage(frame, 0, 0, null);
             if (!party.isEmpty())
             {
                 String line = "Party members: " + String.join(", ", party);

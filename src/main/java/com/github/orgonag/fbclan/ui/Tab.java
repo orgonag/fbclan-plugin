@@ -2,6 +2,7 @@ package com.github.orgonag.fbclan.ui;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.KeyboardFocusManager;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -10,6 +11,7 @@ import javax.swing.BorderFactory;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
+import javax.swing.SwingUtilities;
 
 /**
  * One sidebar tab: a heading with a right-hand note, an optional control
@@ -74,12 +76,16 @@ abstract class Tab extends JPanel
         top.revalidate();
     }
 
-    // EDT. Replace the list's contents.
+    // EDT. Replace the list's contents. A form that is put back (the LFG
+    // tab keeps its input rows across refreshes) keeps the keyboard focus.
     protected void fill(Runnable build)
     {
+        Component focused = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        boolean ours = focused != null && SwingUtilities.isDescendingFrom(focused, list);
         list.removeAll();
         build.run();
         list.revalidate();
         list.repaint();
+        if (ours && SwingUtilities.isDescendingFrom(focused, list)) focused.requestFocusInWindow();
     }
 }

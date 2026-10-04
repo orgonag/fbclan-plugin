@@ -46,9 +46,9 @@ public class DropViewer
 {
     private static final int MAX_BYTES = 8 * 1024 * 1024;
     private static final int MAX_SIDE = 8192;
+    private static final long MAX_PIXELS = 24_000_000; // a 6K frame; ~96 MB decoded
     private static final int FIT_W = 760;
     private static final int FIT_H = 460;
-    private static final String NAME = "[0-9a-f-]{36}\\.png";
 
     private final OkHttpClient http;
     private final ScheduledExecutorService executor;
@@ -138,7 +138,7 @@ public class DropViewer
     // Executor. The URL is checked again here: only the plugin's own bucket.
     private BufferedImage fetch(String url)
     {
-        if (!url.startsWith(DropLogger.screenshotPrefix()) || !url.substring(DropLogger.screenshotPrefix().length()).matches(NAME))
+        if (!DropLogger.isScreenshot(url))
         {
             return null;
         }
@@ -181,7 +181,9 @@ public class DropViewer
             try
             {
                 reader.setInput(in);
-                if (reader.getWidth(0) > MAX_SIDE || reader.getHeight(0) > MAX_SIDE) return null;
+                int w = reader.getWidth(0);
+                int h = reader.getHeight(0);
+                if (w > MAX_SIDE || h > MAX_SIDE || (long) w * h > MAX_PIXELS) return null;
                 return reader.read(0);
             }
             finally

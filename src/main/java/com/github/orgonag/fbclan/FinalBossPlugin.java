@@ -7,7 +7,6 @@ import com.github.orgonag.fbclan.drops.DropRates;
 import com.github.orgonag.fbclan.drops.DropRules;
 import com.github.orgonag.fbclan.lfg.Killcounts;
 import com.github.orgonag.fbclan.lfg.LfgCommand;
-import com.github.orgonag.fbclan.lfg.PartyApi;
 import com.github.orgonag.fbclan.lfg.PartyBoard;
 import com.github.orgonag.fbclan.pbs.PersonalBests;
 import com.github.orgonag.fbclan.stats.CaBadges;
@@ -76,7 +75,6 @@ public class FinalBossPlugin extends Plugin
     @Inject private MemberStats stats;
     @Inject private CaBadges badges;
     @Inject private PartyBoard parties;
-    @Inject private PartyApi partyApi;
     @Inject private Killcounts killcounts;
     @Inject private LfgCommand lfgCommand;
     @Inject private Sidebar sidebar;
@@ -106,11 +104,7 @@ public class FinalBossPlugin extends Plugin
 
         // Startup fetches, all off the client thread.
         executor.submit(dropRates::load);
-        executor.submit(content::refreshNotableItems);
-        executor.submit(() -> {
-            content.refreshWelcome();
-            content.maybeShowWelcome();
-        });
+        executor.submit(this::loadContent);
         // Warms the cache and populates the tab before it's first opened.
         announcementsTab.refresh();
 
@@ -153,7 +147,8 @@ public class FinalBossPlugin extends Plugin
             return;
         }
         startPolling();
-        executor.submit(content::maybeShowWelcome);
+        // Retries whatever the startup fetch missed.
+        executor.submit(this::loadContent);
         // World-type and varp reads belong on the client thread.
         clientThread.invokeLater(() -> {
             pbs.sync();
@@ -162,10 +157,15 @@ public class FinalBossPlugin extends Plugin
         });
     }
 
+    private void loadContent()
+    {
+        content.loadMissing();
+        content.maybeShowWelcome();
+    }
+
     private void startPolling()
     {
         parties.start();
-        // The feed refreshes whether or not this player uploads their own drops.
         // The feed refreshes whether or not this player uploads their own drops.
         if (dropRefresh == null)
         {
@@ -180,7 +180,12 @@ public class FinalBossPlugin extends Plugin
                 }
             }, 60, 60, TimeUnit.SECONDS);
         }
-        // CA icon tiers: once per client session, and only while the icons are on.
+        loadBadges();
+    }
+
+    // CA icon tiers: once per client session, and only while the icons are on.
+    private void loadBadges()
+    {
         if (config.enableChatBadges() && !badgesLoaded)
         {
             executor.submit(() -> {
@@ -237,11 +242,20 @@ public class FinalBossPlugin extends Plugin
     @Subscribe
     public void onConfigChanged(ConfigChanged event)
     {
+        // Only two settings start or stop something; the rest are read when
+        // used. (Restarting on any change would wipe a half-filled LFG form.)
         if (!"finalboss".equals(event.getGroup())) return;
-        clientThread.invokeLater(() -> {
-            stopPolling();
-            if (clan.isVerified()) startPolling();
-        });
+        if ("enableChatBadges".equals(event.getKey()))
+        {
+            if (clan.isVerified()) loadBadges();
+        }
+        else if ("enableLfg".equals(event.getKey()))
+        {
+            clientThread.invokeLater(() -> {
+                stopPolling();
+                if (clan.isVerified()) startPolling();
+            });
+        }
     }
 
     @Subscribe
@@ -273,7 +287,7 @@ public class FinalBossPlugin extends Plugin
     @Subscribe
     public void onNpcLootReceived(NpcLootReceived event)
     {
-        drops.onLoot(event.getNpc().getName(), event.getItems());
+        if (event.getNpc().getName() != null) drops.onLoot(event.getNpc().getName(), event.getItems(), false);
     }
 
     // Loot with no NPC kill behind it: raid chests, Barrows, and the few

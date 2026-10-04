@@ -6,6 +6,7 @@ import com.github.orgonag.fbclan.core.Supabase;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.IOException;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.ArrayList;
@@ -56,7 +57,16 @@ public final class DropOutbox
                         && Supabase.projectUrl().equals(Supabase.str(record, "endpoint"))
                         && Names.same(session.getRsn(), Supabase.str(row, "rsn"))) out.add(row);
                 }
-                catch (RuntimeException e) { Files.move(file, file.resolveSibling(file.getFileName() + ".invalid")); }
+                catch (CharacterCodingException | RuntimeException e)
+                {
+                    // Not a drop record: set it aside so it can't block the rest.
+                    try { Files.move(file, file.resolveSibling(file.getFileName() + ".invalid"), StandardCopyOption.REPLACE_EXISTING); }
+                    catch (IOException ignored) { }
+                }
+                catch (IOException e)
+                {
+                    // Couldn't read it this time (locked?): leave it for the next retry.
+                }
             }
         }
         return out;

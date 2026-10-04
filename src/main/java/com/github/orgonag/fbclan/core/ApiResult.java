@@ -28,6 +28,9 @@ public class ApiResult
             || "ok".equals(Supabase.str(body.getAsJsonObject(), "status"));
     }
     public boolean retryable() { return httpStatus == 0 || httpStatus == 429 || httpStatus >= 500; }
+    // The server read the request and said no (bad input, or a non-ok
+    // status); anything else may work later.
+    public boolean refused() { return httpStatus == 400 || (httpStatus >= 200 && httpStatus < 300 && error == null && !successful()); }
     public String message()
     {
         if (error != null) return error;

@@ -215,6 +215,7 @@ public class PartyBoard
         epoch++;
         online = Collections.emptySet();
         world = 0;
+        refreshError = null;
         api.publish(PartyApi.EMPTY);
         if (poll != null)
         {
@@ -414,8 +415,9 @@ public class PartyBoard
                     out.add(p.getHostRsn() + " declined your " + p.title() + " application.");
                 }
             }
-            else if (mine == null && mineBefore != null && !selfLeft.remove(p.getId())
-                && mineBefore.getStatus() != Party.Status.DECLINED)
+            // Only a seated member is "removed"; a pending application also
+            // disappears quietly when the player joins another ASAP party.
+            else if (mine == null && mineBefore != null && !selfLeft.remove(p.getId()) && mineBefore.isAccepted())
             {
                 out.add("You were removed from " + p.getHostRsn() + "'s " + p.title() + " party.");
             }
@@ -447,12 +449,14 @@ public class PartyBoard
             Party.Applicant mine = p.applicantFor(rsn);
             boolean in = host || (mine != null && mine.isAccepted());
             long minutes = Duration.between(t, p.getScheduledFor()).toMinutes();
-            if (in && minutes >= 0 && minutes <= 15 && startingSoon.add(p.getId()))
+            // Keyed by the start time too, so a moved party reminds again.
+            String key = p.getId() + "@" + p.getScheduledFor();
+            if (in && minutes >= 0 && minutes <= 15 && startingSoon.add(key))
             {
                 out.add((host ? "Your " : p.getHostRsn() + "'s ") + p.title() + " party starts in " + Math.max(1, minutes) + " min"
                     + world(p.getWorld()) + ".");
             }
-            if (host && t.isAfter(p.getScheduledFor()) && !p.isFull() && unfilled.add(p.getId()))
+            if (host && t.isAfter(p.getScheduledFor()) && !p.isFull() && unfilled.add(key))
             {
                 out.add("Your " + p.title() + " party didn't fill by its start time. Edit the time or cancel it.");
             }

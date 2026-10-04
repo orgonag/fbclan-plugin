@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import javax.swing.BorderFactory;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
@@ -20,8 +21,6 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import net.runelite.client.ui.FontManager;
 
 /**
@@ -73,16 +72,15 @@ class BoardWindow
     {
         boards = new Choice<>(Arrays.asList(0, 1, 2, 3, 4, 5), i -> LeaderboardsTab.SHORT[i], 0, i -> render());
         bossBox = new JComboBox<>();
+        // Boss names come from the database: never let one render as HTML.
+        DefaultListCellRenderer plain = new DefaultListCellRenderer();
+        plain.putClientProperty("html.disable", Boolean.TRUE);
+        bossBox.setRenderer(plain);
         bossBox.setFont(FontManager.getRunescapeSmallFont());
         bossBox.addActionListener(e -> renderRows());
         find = Theme.field("", 12);
         find.setToolTipText("Filter by player name");
-        find.getDocument().addDocumentListener(new DocumentListener()
-        {
-            public void insertUpdate(DocumentEvent e) { renderRows(); }
-            public void removeUpdate(DocumentEvent e) { renderRows(); }
-            public void changedUpdate(DocumentEvent e) { renderRows(); }
-        });
+        Theme.onEdit(find, this::renderRows);
         heading = Theme.heading("");
         caption = Theme.text("", Theme.FAINT);
         rows = Theme.stack(0);
@@ -146,7 +144,6 @@ class BoardWindow
 
     private void renderRows()
     {
-        if (boards == null) return;
         int index = boards.value();
         String bossName = index == 4 ? (String) bossBox.getSelectedItem() : null;
         Map<String, String> bosses = tab.bosses();

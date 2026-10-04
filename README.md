@@ -8,25 +8,25 @@ The panel unlocks automatically after your character is verified against **Wise 
 
 1. Enable **Final Boss** in RuneLite's plugin settings once the plugin is installed.
 2. Log into your clan character and open the Final Boss sidebar icon.
-3. Wait for membership verification, then use the **Announcements**, **Drop Log**, **LFG** and **PBs** tabs.
+3. Wait for membership verification, then use the **Announcements** (bell), **Drops**, **LFG** and **PBs** tabs.
 4. Open the plugin's configuration to choose which uploads and notifications you want enabled.
 
 If verification fails temporarily, use **Retry** in the panel. Your character must be listed in the clan's Wise Old Man group.
 
 ## Announcements
 
-Read clan announcements in their own tab and receive the clan welcome message in chat. This content is maintained by clan staff.
+Read clan announcements in their own tab; the bell shows a dot when there is a post you haven't opened. The clan welcome message is printed in chat once per client session. This content is maintained by clan staff.
 
 ## Drop Log
 
 Share qualifying loot with the clan automatically. Drops can qualify through:
 
 - **Value:** GE price multiplied by quantity meets your configured threshold.
-- **Rarity:** a known drop rate meets your rarity threshold and the drop meets the rare-drop minimum value.
+- **Rarity:** a known drop rate is 1 in 250 or rarer (or your stricter setting) and the drop meets the rare-drop minimum value.
 - **Notable items:** the clan's curated list includes the item, including selected untradeables.
-- **Pets:** supported pet and duplicate-pet chat messages are logged regardless of GP value.
+- **Pets:** pet and duplicate-pet messages are logged regardless of GP value, with the pet's name when the client can tell which one it was.
 
-The log shows the player, item, source, GP value, time and known rarity. Clue scrolls, long/curved bones, champion scrolls and keys are excluded by the automatic value/rarity rules; an explicit clan notable-item entry can override that exclusion.
+The log shows the player, item, source, GP value, time and known rarity, with filters for your own drops, rare drops and pets. Click a drop to open its details and screenshot. Clue scrolls, long/curved bones, champion scrolls and keys are excluded by the automatic value/rarity rules; an explicit clan notable-item entry can override that exclusion.
 
 NPC kills and supported raid/reward chests are covered. Keep RuneLite's core **Loot Tracker** enabled for chest/event loot, including raids and Gauntlet-style rewards. Unknown drop rates can still qualify through value or the notable list.
 
@@ -40,7 +40,8 @@ Find clanmates for raids, God Wars bosses, group bosses and minigames, or create
 
 **Hosts can:**
 
-- Choose an activity, party size, world, description and loot rule.
+- Post in two clicks: pick an activity and party size and press **Post now**, or continue to the detail steps for world, description, loot rule and requirements.
+- Start **ASAP** (the default) or schedule a start time up to seven days ahead. Each host can have one ASAP post and up to seven scheduled posts.
 - Set CM/HMT or ToA invocation where applicable, and learner/teacher tags for raids.
 - Choose roles for ToB/HMT, CoX/CM and Barbarian Assault parties.
 - Display a preferred minimum kill count.
@@ -48,9 +49,9 @@ Find clanmates for raids, God Wars bosses, group bosses and minigames, or create
 
 **Applicants can** browse and filter parties, choose an available role, mark themselves as a learner and submit their kill count. Kill counts may come from local RuneLite records, public hiscores or manual entry; the panel labels the source. The host's minimum KC is advisory—the host decides who to accept.
 
-When the final seat is filled, the party moves into **formed-party history**, with its roster and world. History is kept for seven days. Live advertisements expire after 30 minutes without host activity.
+Posts stay on the board through logout. An ASAP party that fills moves into **formed-party history** with its roster and world; a scheduled party that fills stays listed as full until its start time has passed. Posts are removed when the host cancels them or seven days after they were created. History is kept for seven days.
 
-Chat notifications report relevant applications and party changes; desktop notifications are optional. Typing **`!lfg`** lists open parties in your own chatbox. Hosting and applications are handled through the panel.
+Chat notifications report relevant applications and party changes; desktop notifications are optional. Typing **`!lfg`** lists open parties in your own chatbox, and **`!lfg tob 4`** posts an ASAP party with default settings (`!lfg help` lists the activity names). Scheduled posts and applications are handled through the panel.
 
 ## PBs and clan leaderboards
 
@@ -63,7 +64,7 @@ The **PBs** tab includes more than personal-best times:
 - **Weekly XP and EHB:** Wise Old Man gains, with EHB representing efficient bossing hours.
 - **GP This Week:** logged drop value over the last seven days and the leading contributors.
 
-With PB uploads enabled, the plugin reads supported completion messages and backfills personal bests already stored by RuneLite. A slower time does not replace a faster one. Collection-log and CA statistics are submitted as they become available.
+With PB uploads enabled, the plugin syncs the personal bests RuneLite's core **Chat Commands** plugin records for your account (keep it enabled), after login and every 30 minutes. A slower time does not replace a faster one. Collection-log and CA statistics are submitted when they change.
 
 PB and stat uploads are skipped on special worlds such as Leagues and Deadman. Newly recorded special-world drops are excluded from normal GP totals; older records may have unknown world provenance. Weekly WOM results depend on the clan's backend sync.
 
@@ -85,7 +86,7 @@ Badges use uploaded CA tiers and can be disabled independently of stat uploads.
 |---|---|
 | Drop logging | On |
 | Valuable-drop threshold | 1,000,000 GP; cannot be set lower |
-| Rare-drop threshold | 1 in 100 or rarer; set to 0 to disable this rule |
+| Rare-drop threshold | 1 in 250 or rarer; cannot be set more common |
 | Rare-drop minimum value | 100,000 GP |
 | Drop screenshots | Off |
 | LFG and kill-count lookups | On |
@@ -105,7 +106,7 @@ Player names, achievements and kill counts are client-reported. The plugin is a 
 
 ## Building from source
 
-Use **JDK 17**. The build targets Java 11 bytecode.
+Use **JDK 11 or newer**. The build targets Java 11 bytecode.
 
 ```sh
 ./gradlew build

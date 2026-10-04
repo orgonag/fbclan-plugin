@@ -83,8 +83,13 @@ public class PersonalBests
                 Double was = before == null ? null : before.get(key);
                 if (was == null || !was.equals(seconds)) changed.add(new Entry(key, seconds, before == null ? "seed" : "live"));
             });
-            if (changed.isEmpty()) return;
             String snapshot = gson.toJson(now);
+            if (changed.isEmpty())
+            {
+                // Nothing to send, but record the first sync so later PBs count as live.
+                if (before == null) configManager.setRSProfileConfiguration(GROUP, KEY, snapshot);
+                return;
+            }
             queued = true;
             executor.submit(() -> {
                 try

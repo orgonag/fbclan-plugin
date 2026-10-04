@@ -198,7 +198,7 @@ public class DropLogTab extends Tab
             // The drops table is anon-writable, so a screenshot link is only
             // honoured when it points into the plugin's own public bucket.
             String url = Supabase.str(row, "screenshot_url");
-            screenshot = url.startsWith(DropLogger.screenshotPrefix()) ? url : "";
+            screenshot = DropLogger.isScreenshot(url) ? url : "";
         }
 
         // "Item (1,234,567 GP) [1/512]" — the old one-line form.

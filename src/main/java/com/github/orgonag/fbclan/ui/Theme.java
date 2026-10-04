@@ -31,6 +31,8 @@ import javax.swing.JTextField;
 import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import javax.swing.text.AbstractDocument;
 import javax.swing.text.AttributeSet;
@@ -336,6 +338,17 @@ final class Theme
         return f;
     }
 
+    // Runs `action` whenever the field's text changes.
+    static void onEdit(JTextField f, Runnable action)
+    {
+        f.getDocument().addDocumentListener(new DocumentListener()
+        {
+            public void insertUpdate(DocumentEvent e) { action.run(); }
+            public void removeUpdate(DocumentEvent e) { action.run(); }
+            public void changedUpdate(DocumentEvent e) { action.run(); }
+        });
+    }
+
     // Label on the left, control on the right.
     static JPanel labeled(String label, Component control)
     {
@@ -417,9 +430,8 @@ final class Theme
         return g2;
     }
 
-
     // Tracks the viewport width so wrapped rows wrap to the real panel width.
-    private static final class Viewport extends JPanel implements Scrollable
+    static final class Viewport extends JPanel implements Scrollable
     {
         Viewport()
         {

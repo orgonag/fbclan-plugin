@@ -52,6 +52,8 @@ public class ClanContent
     private volatile Set<String> notableItems = Collections.emptySet();
     private volatile String welcome = "";
     private volatile boolean welcomeShown;
+    private volatile boolean notableLoaded;
+    private volatile boolean welcomeLoaded;
 
     @Inject
     public ClanContent(Supabase db, Clan clan, Client client, ClientThread clientThread)
@@ -76,6 +78,8 @@ public class ClanContent
     public void resetSession()
     {
         welcomeShown = false;
+        notableLoaded = false;
+        welcomeLoaded = false;
     }
 
     // ------------------------------------------------------------ fetches
@@ -103,14 +107,22 @@ public class ClanContent
         return true;
     }
 
-    // Once per session: the list changes rarely.
-    public void refreshNotableItems()
+    // Executor. Once per client session (both change rarely); a failed
+    // fetch is tried again at the next call.
+    public void loadMissing()
+    {
+        if (!notableLoaded) refreshNotableItems();
+        if (!welcomeLoaded) refreshWelcome();
+    }
+
+    private void refreshNotableItems()
     {
         JsonArray rows = db.getOrNull("notable_items", "select=name");
         if (rows == null)
         {
             return;
         }
+        notableLoaded = true;
         Set<String> names = new HashSet<>();
         for (JsonElement el : rows)
         {
@@ -123,13 +135,14 @@ public class ClanContent
         notableItems = Collections.unmodifiableSet(names);
     }
 
-    public void refreshWelcome()
+    private void refreshWelcome()
     {
         JsonArray rows = db.getOrNull("welcome_message", "select=message&id=eq.1");
         if (rows == null)
         {
             return;
         }
+        welcomeLoaded = true;
         // Remote text printed into the chatbox: strip anything that could
         // read as chat markup, collapse whitespace, cap the length.
         String raw = rows.size() == 0 ? "" : Supabase.str(rows.get(0).getAsJsonObject(), "message");
@@ -153,7 +166,11 @@ public class ClanContent
         }
         welcomeShown = true;
         clientThread.invokeLater(() -> {
-            if (!clan.current(session)) return true;
+            if (!clan.current(session))
+            {
+                welcomeShown = false; // logged out first; the next login prints it
+                return true;
+            }
             GameState gs = client.getGameState();
             if (gs == GameState.LOADING || gs == GameState.HOPPING || gs == GameState.CONNECTION_LOST)
             {
