@@ -379,7 +379,8 @@ public class PartyBoard
             primed = true;
         }
         messages.forEach(this::deliver);
-        if (config.lfgNewPostAnnouncements()) announcements.forEach(this::chat);
+        // A sub-option of chat notifications: off there means no LFG chat lines at all.
+        if (config.lfgPartyNotifications() && config.lfgNewPostAnnouncements()) announcements.forEach(this::chat);
     }
 
     // Other members' posts that appeared since the last poll: "Dopezt

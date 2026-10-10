@@ -90,7 +90,7 @@ public class Party
 
         static Applicant fromRow(JsonObject row)
         {
-            String rsn = Supabase.str(row, "rsn");
+            String rsn = Names.untagged(Supabase.str(row, "rsn"));
             return rsn.isEmpty() ? null : new Applicant(rsn, Role.fromKey(Supabase.str(row, "role")),
                 Supabase.bool(row, "learner"), Status.fromKey(Supabase.str(row, "status")),
                 Supabase.instant(row, "created_at", Instant.EPOCH), Supabase.intOrNull(row, "kc"),
@@ -261,7 +261,8 @@ public class Party
     public static Party fromRow(JsonObject row)
     {
         Activity activity = Activity.fromKey(Supabase.str(row, "activity"));
-        if (activity == null || Supabase.str(row, "id").isEmpty() || Supabase.str(row, "host_rsn").isEmpty())
+        String host = Names.untagged(Supabase.str(row, "host_rsn"));
+        if (activity == null || Supabase.str(row, "id").isEmpty() || host.isEmpty())
         {
             return null;
         }
@@ -281,7 +282,7 @@ public class Party
         return Party.builder()
             .id(Supabase.str(row, "id"))
             .version(Supabase.longOr(row, "version", 1))
-            .hostRsn(Supabase.str(row, "host_rsn"))
+            .hostRsn(host)
             .activity(activity)
             .hardMode(Supabase.bool(row, "hard_mode"))
             .invocation(Supabase.intOr(row, "invocation", 0))

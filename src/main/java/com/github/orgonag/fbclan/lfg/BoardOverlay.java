@@ -5,7 +5,9 @@ import com.github.orgonag.fbclan.FinalBossPlugin;
 import com.github.orgonag.fbclan.core.Clan;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.FontMetrics;
 import java.awt.Graphics2D;
+import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -17,10 +19,9 @@ import javax.inject.Singleton;
 import net.runelite.api.Client;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayPosition;
-import net.runelite.client.ui.overlay.components.ComponentOrientation;
-import net.runelite.client.ui.overlay.components.ImageComponent;
-import net.runelite.client.ui.overlay.components.PanelComponent;
-import net.runelite.client.ui.overlay.components.TitleComponent;
+import net.runelite.client.ui.overlay.components.BackgroundComponent;
+import net.runelite.client.ui.overlay.components.ComponentConstants;
+import net.runelite.client.ui.overlay.components.TextComponent;
 import net.runelite.client.ui.overlay.tooltip.Tooltip;
 import net.runelite.client.ui.overlay.tooltip.TooltipManager;
 import net.runelite.client.util.ImageUtil;
@@ -44,7 +45,8 @@ public class BoardOverlay extends Overlay
     private final Clan clan;
     private final TooltipManager tooltips;
     private final BufferedImage logo = ImageUtil.loadImageResource(FinalBossPlugin.class, "icon.png");
-    private final PanelComponent panel = new PanelComponent();
+    private final BackgroundComponent background = new BackgroundComponent();
+    private final TextComponent text = new TextComponent();
 
     @Inject
     BoardOverlay(FinalBossPlugin plugin, Client client, FinalBossConfig config, PartyBoard board, Clan clan,
@@ -57,9 +59,19 @@ public class BoardOverlay extends Overlay
         this.clan = clan;
         this.tooltips = tooltips;
         setPosition(OverlayPosition.TOP_LEFT);
-        panel.setOrientation(ComponentOrientation.HORIZONTAL);
+        text.setColor(ACCENT_HI);
     }
 
+    // The saved position is keyed on this; a plain class name could clash
+    // with another plugin's overlay.
+    @Override
+    public String getName()
+    {
+        return "FinalBossBoardOverlay";
+    }
+
+    // Drawn by hand: a horizontal PanelComponent gives its children no
+    // width, so a logo-and-text row can't use it.
     @Override
     public Dimension render(Graphics2D graphics)
     {
@@ -70,18 +82,22 @@ public class BoardOverlay extends Overlay
         {
             if (!p.isScheduled()) asap++;
         }
-        panel.getChildren().clear();
-        panel.getChildren().add(new ImageComponent(logo));
-        panel.getChildren().add(TitleComponent.builder()
-            .text(asap + " ASAP, " + parties.size() + " total")
-            .color(ACCENT_HI)
-            .build());
-        Dimension size = panel.render(graphics);
+        String line = asap + " ASAP, " + parties.size() + " total";
+        FontMetrics fm = graphics.getFontMetrics();
+        int pad = ComponentConstants.STANDARD_BORDER;
+        int width = pad + logo.getWidth() + pad + fm.stringWidth(line) + pad;
+        int height = pad + Math.max(logo.getHeight(), fm.getHeight()) + pad;
+        background.setRectangle(new Rectangle(0, 0, width, height));
+        background.render(graphics);
+        graphics.drawImage(logo, pad, (height - logo.getHeight()) / 2, null);
+        text.setText(line);
+        text.setPosition(pad + logo.getWidth() + pad, (height - fm.getHeight()) / 2 + fm.getAscent());
+        text.render(graphics);
         if (getBounds().contains(client.getMouseCanvasPosition().getX(), client.getMouseCanvasPosition().getY()))
         {
             tooltips.add(new Tooltip(breakdown(parties, clan.rsn())));
         }
-        return size;
+        return new Dimension(width, height);
     }
 
     // Activity names come from the enum and times from the clock: no

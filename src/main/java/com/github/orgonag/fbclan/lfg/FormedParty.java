@@ -70,7 +70,8 @@ public class FormedParty
     public static FormedParty fromRow(JsonObject row)
     {
         Activity activity = Activity.fromKey(Supabase.str(row, "activity"));
-        if (activity == null || Supabase.str(row, "id").isEmpty() || Supabase.str(row, "host_rsn").isEmpty())
+        String host = Names.untagged(Supabase.str(row, "host_rsn"));
+        if (activity == null || Supabase.str(row, "id").isEmpty() || host.isEmpty())
         {
             return null;
         }
@@ -84,7 +85,7 @@ public class FormedParty
                     continue;
                 }
                 JsonObject o = el.getAsJsonObject();
-                String rsn = Supabase.str(o, "rsn");
+                String rsn = Names.untagged(Supabase.str(o, "rsn"));
                 if (!rsn.isEmpty())
                 {
                     members.add(new Member(rsn, Role.fromKey(Supabase.str(o, "role")), Supabase.bool(o, "added_by_host")));
@@ -93,7 +94,7 @@ public class FormedParty
         }
         return new FormedParty(Supabase.str(row, "id"),
             Supabase.has(row, "party_id") ? Supabase.str(row, "party_id") : null,
-            Supabase.str(row, "host_rsn"), activity, Supabase.bool(row, "hard_mode"),
+            host, activity, Supabase.bool(row, "hard_mode"),
             Supabase.intOr(row, "invocation", 0), Supabase.intOr(row, "capacity", Math.max(1, members.size())),
             Supabase.intOrNull(row, "world"), members, Supabase.instant(row, "formed_at", Instant.now()),
             Supabase.instant(row, "scheduled_for", null));
