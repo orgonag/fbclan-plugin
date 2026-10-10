@@ -156,7 +156,7 @@ public class DropLogger
             long value = unitPrice * qty;
             String name = itemManager.getItemComposition(id).getName();
             // The clan's ignore list beats every rule, the notable list included.
-            String key = Names.itemKey(name);
+            String key = Names.normalize(name);
             if (ignored.contains(key)) continue;
             OptionalDouble rarity = rates.rarity(source, id, qty);
             if (!rarity.isPresent() && !display.equals(source))
@@ -267,7 +267,7 @@ public class DropLogger
         for (JsonElement el : rows)
         {
             JsonObject row = el.getAsJsonObject();
-            if (ignored.contains(Names.itemKey(Supabase.str(row, "item_name")))) continue;
+            if (ignored.contains(Names.normalize(Supabase.str(row, "item_name")))) continue;
             String path = Supabase.str(row, "screenshot_url");
             if (path.matches("[0-9a-f-]{36}\\.png")) row.addProperty("screenshot_url", Supabase.publicUrl(BUCKET, path));
             shown.add(row);

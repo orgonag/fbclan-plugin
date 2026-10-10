@@ -251,16 +251,16 @@ public class Party
         d.addProperty("hard_mode", hardMode);
         d.addProperty("invocation", invocation);
         d.addProperty("capacity", capacity);
-        Supabase.put(d, "description", Names.sanitize(description, MAX_DESCRIPTION));
-        Supabase.put(d, "world", world);
+        d.addProperty("description", Names.sanitize(description, MAX_DESCRIPTION));
+        d.addProperty("world", world);
         d.addProperty("min_kc", Math.max(0, minKc));
         d.addProperty("loot_rule", (lootRule == null ? LootRule.UNSPECIFIED : lootRule).name());
-        Supabase.put(d, "required_roles", Role.encode(requiredRoles));
-        Supabase.put(d, "host_role", hostRole == null ? null : hostRole.key());
+        d.addProperty("required_roles", Role.encode(requiredRoles));
+        d.addProperty("host_role", hostRole == null ? null : hostRole.key());
         d.addProperty("learner", learner);
         d.addProperty("teacher", teacher);
         // Always sent (JSON null = ASAP) so an edit can switch back.
-        Supabase.put(d, "scheduled_for", scheduledFor == null ? null : scheduledFor.toString());
+        d.addProperty("scheduled_for", scheduledFor == null ? null : scheduledFor.toString());
         return d;
     }
 

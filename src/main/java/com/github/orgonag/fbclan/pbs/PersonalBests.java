@@ -17,7 +17,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.config.ConfigManager;
 
@@ -41,14 +40,6 @@ public class PersonalBests
     private static final String GROUP = "finalbossui";
     private static final String KEY = "pbSynced";
     private static final Type TIMES = new TypeToken<Map<String, Double>>() {}.getType();
-
-    @Value
-    private static class Entry
-    {
-        String bossKey;
-        double seconds;
-        String source;
-    }
 
     private final FinalBossConfig config;
     private final Clan clan;
@@ -84,10 +75,15 @@ public class PersonalBests
             Map<String, Double> now = stored();
             Map<String, Double> before = lastSynced(session);
             boolean everything = fullSync != session.getGeneration();
-            List<Entry> sending = new ArrayList<>();
+            List<JsonObject> sending = new ArrayList<>();
             now.forEach((key, seconds) -> {
                 boolean fresh = before == null || !seconds.equals(before.get(key));
-                if (fresh || everything) sending.add(new Entry(key, seconds, fresh && before != null ? "live" : "seed"));
+                if (!fresh && !everything) return;
+                JsonObject e = new JsonObject();
+                e.addProperty("boss_key", key);
+                e.addProperty("seconds", seconds);
+                e.addProperty("source", fresh && before != null ? "live" : "seed");
+                sending.add(e);
             });
             String snapshot = gson.toJson(now);
             if (sending.isEmpty())
@@ -157,20 +153,13 @@ public class PersonalBests
     }
 
     // Executor.
-    private boolean submit(Session session, List<Entry> entries)
+    private boolean submit(Session session, List<JsonObject> entries)
     {
         for (int start = 0; start < entries.size(); start += MAX_BATCH)
         {
             if (!clan.current(session) || !config.enablePbUpload()) return false;
             JsonArray batch = new JsonArray();
-            for (Entry s : entries.subList(start, Math.min(start + MAX_BATCH, entries.size())))
-            {
-                JsonObject e = new JsonObject();
-                e.addProperty("boss_key", s.getBossKey());
-                e.addProperty("seconds", s.getSeconds());
-                e.addProperty("source", s.getSource());
-                batch.add(e);
-            }
+            entries.subList(start, Math.min(start + MAX_BATCH, entries.size())).forEach(batch::add);
             JsonObject payload = new JsonObject();
             payload.addProperty("p_rsn", session.getRsn());
             payload.add("p_entries", batch);

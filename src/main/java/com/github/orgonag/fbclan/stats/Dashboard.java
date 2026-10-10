@@ -178,11 +178,11 @@ public class Dashboard
             }
             if ("gains_overall_week".equals(metric))
             {
-                xpWeek = parseWom(row.getAsJsonArray("payload"), "gained");
+                xpWeek = parseWom(row.getAsJsonArray("payload"));
             }
             else if ("gains_ehb_week".equals(metric))
             {
-                ehbWeek = parseWom(row.getAsJsonArray("payload"), "gained");
+                ehbWeek = parseWom(row.getAsJsonArray("payload"));
             }
         }
         if (!newest.isEmpty())
@@ -191,7 +191,8 @@ public class Dashboard
         }
     }
 
-    private static List<Named> parseWom(JsonArray rows, String valueKey)
+    // Reads only player.displayName and data.gained, so a trimmed payload works too.
+    private static List<Named> parseWom(JsonArray rows)
     {
         List<Named> out = new ArrayList<>();
         for (JsonElement el : rows)
@@ -204,9 +205,9 @@ public class Dashboard
             }
             JsonObject player = row.getAsJsonObject("player");
             JsonObject data = row.getAsJsonObject("data");
-            if (Supabase.has(player, "displayName") && Supabase.has(data, valueKey))
+            if (Supabase.has(player, "displayName") && Supabase.has(data, "gained"))
             {
-                out.add(new Named(Supabase.str(player,"displayName"), Supabase.doubleOr(data,valueKey,0)));
+                out.add(new Named(Supabase.str(player, "displayName"), Supabase.doubleOr(data, "gained", 0)));
             }
         }
         return Collections.unmodifiableList(out);

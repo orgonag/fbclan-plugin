@@ -97,10 +97,10 @@ public class PartyApi
     public boolean apply(String id, Role role, boolean learner, Integer kc, Party.KcSource source)
     {
         JsonObject d = data(id);
-        Supabase.put(d, "role", role == null ? null : role.key());
+        d.addProperty("role", role == null ? null : role.key());
         d.addProperty("learner", learner);
-        Supabase.put(d, "kc", kc);
-        Supabase.put(d, "kc_source", source == null ? null : source.name());
+        d.addProperty("kc", kc);
+        d.addProperty("kc_source", source == null ? null : source.name());
         return command("apply", d);
     }
 
@@ -135,7 +135,7 @@ public class PartyApi
         }
         JsonObject d = data(id);
         d.addProperty("rsn", rsn);
-        Supabase.put(d, "role", role == null ? null : role.key());
+        d.addProperty("role", role == null ? null : role.key());
         boolean added = command("add", d);
         // They applied (or were declined) since the last refresh.
         if (!added && refusal.get() != null && refusal.get().startsWith("duplicate key"))

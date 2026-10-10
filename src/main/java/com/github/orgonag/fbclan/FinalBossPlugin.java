@@ -89,8 +89,6 @@ public class FinalBossPlugin extends Plugin
     private NavigationButton navButton;
     private BoardInfoBox boardInfoBox;
     private ScheduledFuture<?> dropRefresh;
-    // CA icon tiers loaded this client session.
-    private volatile boolean badgesLoaded;
 
     @Provides
     FinalBossConfig provideConfig(ConfigManager configManager)
@@ -111,7 +109,7 @@ public class FinalBossPlugin extends Plugin
         clan.setListener(this::onStatus);
         // Once per client session: the welcome line and the CA icon list.
         content.resetSession();
-        badgesLoaded = false;
+        badges.reset();
 
         // Startup fetches, all off the client thread.
         executor.submit(dropRates::load);
@@ -200,12 +198,7 @@ public class FinalBossPlugin extends Plugin
     // CA icon tiers: once per client session, and only while the icons are on.
     private void loadBadges()
     {
-        if (config.enableChatBadges() && !badgesLoaded)
-        {
-            executor.submit(() -> {
-                badgesLoaded = badges.refresh();
-            });
-        }
+        if (config.enableChatBadges()) executor.submit(badges::loadOnce);
     }
 
     private void stopPolling()

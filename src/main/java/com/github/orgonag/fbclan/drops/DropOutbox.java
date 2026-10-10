@@ -28,7 +28,6 @@ public final class DropOutbox
         }
         JsonObject record = new JsonObject();
         record.addProperty("profile", session.getProfile());
-        record.addProperty("endpoint", Supabase.projectUrl());
         record.add("row", row);
         Path target = directory.resolve(Supabase.str(row, "event_id") + ".json");
         Path temporary = Files.createTempFile(directory, "event-", ".tmp");
@@ -54,8 +53,7 @@ public final class DropOutbox
                     JsonObject row = record.getAsJsonObject("row");
                     // Matched on the RuneLite profile (the account), not the name: a
                     // drop saved before a rename still sends, under the name it was earned on.
-                    if (session.getProfile().equals(Supabase.str(record, "profile"))
-                        && Supabase.projectUrl().equals(Supabase.str(record, "endpoint")) && row.has("event_id")) out.add(row);
+                    if (session.getProfile().equals(Supabase.str(record, "profile")) && row.has("event_id")) out.add(row);
                 }
                 catch (CharacterCodingException | RuntimeException e)
                 {

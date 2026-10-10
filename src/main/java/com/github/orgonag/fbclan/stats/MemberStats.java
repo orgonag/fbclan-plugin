@@ -5,8 +5,6 @@ import com.github.orgonag.fbclan.core.Clan;
 import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.google.gson.JsonObject;
-import java.util.Map;
-import java.util.TreeMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Inject;
@@ -25,6 +23,12 @@ import net.runelite.api.gameval.VarbitID;
 @Singleton
 public class MemberStats
 {
+    // CA tier cutoffs, read live from the game (Dink pattern) so new tasks
+    // re-scale without a plugin update.
+    private static final int[] TIER_VARBITS = {VarbitID.CA_THRESHOLD_EASY, VarbitID.CA_THRESHOLD_MEDIUM,
+        VarbitID.CA_THRESHOLD_HARD, VarbitID.CA_THRESHOLD_ELITE, VarbitID.CA_THRESHOLD_MASTER, VarbitID.CA_THRESHOLD_GRANDMASTER};
+    private static final String[] TIERS = {"Easy", "Medium", "Hard", "Elite", "Master", "Grandmaster"};
+
     private final Client client;
     private final FinalBossConfig config;
     private final Clan clan;
@@ -55,11 +59,11 @@ public class MemberStats
         int clObtained = client.getVarpValue(VarPlayerID.COLLECTION_COUNT);
         int clTotal = client.getVarpValue(VarPlayerID.COLLECTION_COUNT_MAX);
         int caPoints = client.getVarbitValue(VarbitID.CA_POINTS);
-        if ((clObtained <= 0 && caPoints <= 0))
+        if (clObtained <= 0 && caPoints <= 0)
         {
             return;
         }
-        String tier = tierFor(caPoints, thresholds());
+        String tier = tier(caPoints);
         String signature = session.getGeneration() + ":" + clObtained + ":" + clTotal + ":" + caPoints + ":" + tier;
         if (signature.equals(acknowledged) || !sending.compareAndSet(false, true)) return;
         executor.submit(() -> {
@@ -96,32 +100,16 @@ public class MemberStats
         return (hasCl || hasCa) && db.rpc("fb_submit_stats", p);
     }
 
-    // Tier cutoffs read live from the game (Dink pattern) so new tasks
-    // re-scale without a plugin update. Null = below Easy.
-    private static String tierFor(int points, TreeMap<Integer, String> thresholds)
+    // The highest tier whose cutoff the points reach; null = below Easy
+    // (or cutoffs not loaded yet).
+    private String tier(int points)
     {
-        Map.Entry<Integer, String> e = thresholds.floorEntry(points);
-        return e == null ? null : e.getValue();
-    }
-
-    private TreeMap<Integer, String> thresholds()
-    {
-        TreeMap<Integer, String> t = new TreeMap<>();
-        put(t, VarbitID.CA_THRESHOLD_EASY, "Easy");
-        put(t, VarbitID.CA_THRESHOLD_MEDIUM, "Medium");
-        put(t, VarbitID.CA_THRESHOLD_HARD, "Hard");
-        put(t, VarbitID.CA_THRESHOLD_ELITE, "Elite");
-        put(t, VarbitID.CA_THRESHOLD_MASTER, "Master");
-        put(t, VarbitID.CA_THRESHOLD_GRANDMASTER, "Grandmaster");
-        return t;
-    }
-
-    private void put(TreeMap<Integer, String> map, int varbit, String tier)
-    {
-        int value = client.getVarbitValue(varbit);
-        if (value > 0)
+        String tier = null;
+        for (int i = 0; i < TIERS.length; i++)
         {
-            map.put(value, tier);
+            int cutoff = client.getVarbitValue(TIER_VARBITS[i]);
+            if (cutoff > 0 && points >= cutoff) tier = TIERS[i];
         }
+        return tier;
     }
 }
