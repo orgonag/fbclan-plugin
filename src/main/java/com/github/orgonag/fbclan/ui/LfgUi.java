@@ -28,8 +28,8 @@ final class LfgUi
     {
     }
 
-    // A scheduled post's time line: "Starts Today 20:00 · in 3h",
-    // "Started 40m ago" during the grace period, then "Was Sat 20:00".
+    // A scheduled post's time line: "Starts Today 20:00 · in 3h", then
+    // "Started 40m ago" until the server clears it (3 h after the start).
     // Null for ASAP posts.
     static JLabel start(Party p)
     {
@@ -40,11 +40,8 @@ final class LfgUi
         {
             return Theme.bold((p.isFull() ? "Full · starts " : "Starts ") + day(at) + " · in " + span(Duration.between(now, at)), Theme.ACCENT_HI);
         }
-        if (now.isBefore(at.plus(Party.GRACE)))
-        {
-            return Theme.bold("Started " + Theme.timeAgo(at), Theme.GREEN);
-        }
-        return Theme.bold("Was " + day(at), Theme.ACCENT);
+        // Green only when it actually has a full team; an unfilled one is stale.
+        return Theme.bold("Started " + Theme.timeAgo(at), p.isFull() ? Theme.GREEN : Theme.ACCENT);
     }
 
     // "Today 20:00", "Tomorrow 09:30", else "Sat 20:00", in the player's zone.

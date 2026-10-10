@@ -94,8 +94,8 @@ public class PartiesTab extends Tab
             render();
         });
         control(filterBox);
-        Btn formedChip = toggle("Formed (7d)", showFormed, on -> showFormed = on);
-        formedChip.setToolTipText("Parties that filled up in the last 7 days");
+        Btn formedChip = toggle("Formed", showFormed, on -> showFormed = on);
+        formedChip.setToolTipText("Parties that filled up: ASAP ones for 3 hours, scheduled ones until 12 hours after their start");
         control(LfgUi.pair(toggle("Hide full", hideFull, on -> hideFull = on), formedChip));
 
         board.setListener(() -> SwingUtilities.invokeLater(this::render));
@@ -259,7 +259,7 @@ public class PartiesTab extends Tab
                     if (passes(f.getActivity())) formed.add(f);
                 }
                 list.add(Theme.caps("Formed parties (" + formed.size() + ")"));
-                if (formed.isEmpty()) list.add(Theme.centered("No parties have formed in the last 7 days."));
+                if (formed.isEmpty()) list.add(Theme.centered("No parties have formed recently."));
                 for (FormedParty f : formed)
                 {
                     list.add(formedCard(f));
@@ -372,7 +372,7 @@ public class PartiesTab extends Tab
         if (f.isHostedBy(rsn))
         {
             Btn remove = Theme.button("Remove", Btn.Kind.GHOST, () -> run(() -> api.deleteFormed(f.getId()), "Couldn't remove — try again."));
-            remove.setToolTipText("Take this off the formed list now instead of in 7 days");
+            remove.setToolTipText("Hide this from the formed list now (the record is kept)");
             card.add(remove);
         }
         return card;

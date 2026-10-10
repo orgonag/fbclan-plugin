@@ -12,7 +12,8 @@ import lombok.Value;
 /**
  * A party that filled up: a self-contained snapshot (one
  * lfg_formed_parties row) with no links to the live tables, which are
- * deleted when it's written. Kept server-side for 7 days as history.
+ * deleted when it's written. The server lists it for 3 h (ASAP) or until
+ * 12 h after its start (scheduled) and keeps the row as history.
  */
 @Value
 public class FormedParty

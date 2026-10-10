@@ -45,7 +45,7 @@ import net.runelite.client.callback.ClientThread;
 public class PartyBoard
 {
     // ASAP first (newest first), then scheduled by start time, then
-    // scheduled posts whose start (plus grace) has passed.
+    // scheduled posts whose start has passed (they linger up to 3 h).
     public static final Comparator<Party> ORDER = (a, b) -> {
         int byGroup = Integer.compare(group(a), group(b));
         if (byGroup != 0) return byGroup;
@@ -188,7 +188,7 @@ public class PartyBoard
     private static int group(Party p)
     {
         if (!p.isScheduled()) return 0;
-        return Instant.now().isAfter(p.getScheduledFor().plus(Party.GRACE)) ? 2 : 1;
+        return Instant.now().isAfter(p.getScheduledFor()) ? 2 : 1;
     }
 
     // ------------------------------------------------------------ lifecycle
@@ -447,10 +447,12 @@ public class PartyBoard
             if (now.containsKey(before.getId())) continue;
             FormedParty formedAs = formedFrom.get(before.getId());
             boolean formed = formedAs != null;
-            boolean expired = !Instant.now().isBefore(before.expiresAt());
+            // Two minutes of slack: the sweep fires at the server's expiry and
+            // this poll can land a few seconds later on a slow PC clock.
+            boolean expired = !Instant.now().plus(Duration.ofMinutes(2)).isBefore(before.expiresAt());
             if (before.isHostedBy(rsn))
             {
-                if (!formed && expired) out.add("Your " + before.title() + " post expired after 7 days without filling.");
+                if (!formed && expired) out.add("Your " + before.title() + " post expired without filling.");
                 continue;
             }
             Party.Applicant mineBefore = before.applicantFor(rsn);

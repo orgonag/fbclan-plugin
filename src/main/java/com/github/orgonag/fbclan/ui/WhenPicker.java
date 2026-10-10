@@ -61,7 +61,7 @@ final class WhenPicker extends JPanel
     {
         super(new Stack(10));
         setOpaque(false);
-        windowEnd = (editing == null ? Instant.now() : editing.getCreatedAt()).plus(Party.LIFETIME);
+        windowEnd = (editing == null ? Instant.now() : editing.getCreatedAt()).plus(Party.SCHEDULE_WINDOW);
         original = editing != null && editing.isScheduled() ? editing.getScheduledFor() : null;
 
         LocalDate end = windowEnd.atZone(zone).toLocalDate();
@@ -93,7 +93,10 @@ final class WhenPicker extends JPanel
         minuteBox.addActionListener(e -> summarize());
 
         choice = new Choice<>(Arrays.asList(ASAP, LATER), s -> s, ASAP, s -> showLater());
-        choice.enable(ASAP, !limits.asapTaken, "You already have an ASAP party");
+        // A post older than the ASAP lifetime would expire on the next sweep; the server refuses it too.
+        boolean tooOld = editing != null && Instant.now().isAfter(editing.getCreatedAt().plus(Party.ASAP_LIFETIME));
+        choice.enable(ASAP, !limits.asapTaken && !tooOld,
+            limits.asapTaken ? "You already have an ASAP party" : "Too old to switch to ASAP; post a new one");
         choice.enable(LATER, !limits.laterFull, "You already have 7 scheduled parties");
         choice.set(editing != null ? (original != null ? LATER : ASAP) : (limits.asapTaken ? LATER : ASAP));
 
