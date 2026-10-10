@@ -9,9 +9,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.Iterator;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.imageio.ImageIO;
@@ -46,7 +44,6 @@ import okhttp3.ResponseBody;
 public class DropViewer
 {
     private static final int MAX_BYTES = 8 * 1024 * 1024;
-    private static final int MAX_SIDE = 8192;
     private static final long MAX_PIXELS = 24_000_000; // a 6K frame; ~96 MB decoded
     private static final int FIT_W = 760;
     private static final int FIT_H = 460;
@@ -147,8 +144,8 @@ public class DropViewer
         {
             ResponseBody body = response.body();
             if (!response.isSuccessful() || body == null || body.contentLength() > MAX_BYTES) return null;
-            byte[] bytes = readCapped(body.byteStream());
-            BufferedImage img = bytes == null ? null : decode(bytes);
+            byte[] bytes = body.byteStream().readNBytes(MAX_BYTES + 1);
+            BufferedImage img = bytes.length > MAX_BYTES ? null : decode(bytes);
             if (img == null) return null;
             double scale = Math.min(1.0, Math.min((double) FIT_W / img.getWidth(), (double) FIT_H / img.getHeight()));
             return scale >= 1.0 ? img : ImageUtil.resizeImage(img, (int) (img.getWidth() * scale), (int) (img.getHeight() * scale), true);
@@ -157,18 +154,6 @@ public class DropViewer
         {
             return null;
         }
-    }
-
-    private static byte[] readCapped(InputStream in) throws IOException
-    {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        byte[] buf = new byte[16384];
-        for (int n; (n = in.read(buf)) != -1; )
-        {
-            out.write(buf, 0, n);
-            if (out.size() > MAX_BYTES) return null;
-        }
-        return out.toByteArray();
     }
 
     // Reads the header first so a small file can't claim a huge canvas.
@@ -185,7 +170,7 @@ public class DropViewer
                 reader.setInput(in);
                 int w = reader.getWidth(0);
                 int h = reader.getHeight(0);
-                if (w > MAX_SIDE || h > MAX_SIDE || (long) w * h > MAX_PIXELS) return null;
+                if ((long) w * h > MAX_PIXELS) return null;
                 return reader.read(0);
             }
             finally

@@ -67,14 +67,16 @@ import okhttp3.Response;
 public class DropLogger
 {
     private static final String BUCKET = "drop-screenshots";
-    private static final String COLUMNS = "rsn,npc_name,item_name,item_id,ge_value,quantity,created_at,occurred_at,screenshot_url,rarity";
+    private static final String COLUMNS = "rsn,npc_name,item_name,item_id,ge_value,quantity,occurred_at,screenshot_url,rarity";
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
-    private static final Pattern SCREENSHOT_FILE = Pattern.compile("(?:[A-Za-z0-9_-]{1,12}/)?[A-Za-z0-9_-]{1,64}\\.png");
+    // The only shape the server accepts (fb_attach_screenshot): "<uuid>.png".
+    private static final Pattern SCREENSHOT_FILE = Pattern.compile("[0-9a-f-]{36}\\.png");
 
     private final DropOutbox outbox = new DropOutbox(RuneLite.RUNELITE_DIR.toPath().resolve("finalboss-outbox"));
     private final AtomicBoolean flushing = new AtomicBoolean();
     private final AtomicBoolean framePending = new AtomicBoolean();
-    private final LootDeduplicator deduplicator = new LootDeduplicator();
+    // Rows waiting for the next rendered frame; one screenshot covers all of them.
+    private final List<JsonObject> awaitingFrame = new ArrayList<>();
     private final Client client;
     private final FinalBossConfig config;
     private final Clan clan;
@@ -116,8 +118,7 @@ public class DropLogger
         this.http = http.newBuilder().callTimeout(20, TimeUnit.SECONDS).build();
     }
 
-    // A file in the plugin's own screenshot bucket: "<uuid>.png", or the
-    // older "<player>/<time>_<item>.png". The drop viewer opens nothing else.
+    // A file in the plugin's own screenshot bucket. The drop viewer opens nothing else.
     public static boolean isScreenshot(String url)
     {
         String prefix = Supabase.publicUrl(BUCKET, "");
@@ -126,17 +127,17 @@ public class DropLogger
 
     // ------------------------------------------------------------ inputs
 
-    // `source` is what the Loot Tracker reported (NPC, raid, chest); it
-    // doubles as the key into the rate table. Client thread.
-    // `tracker`: reported by the Loot Tracker rather than an NPC kill.
-    public void onLoot(String source, Collection<ItemStack> items, boolean tracker)
+    // `source` is what was killed or opened (NPC, raid, chest). Each kind
+    // of loot reaches here from exactly one event (see FinalBossPlugin).
+    // Client thread.
+    public void onLoot(String source, Collection<ItemStack> items)
     {
         String rsn = clan.rsn();
         if (!clan.canUpload() || !config.enableDropLogging())
         {
             return;
         }
-        long threshold = DropRules.threshold(config.dropThresholdGp());
+        long threshold = Math.max(config.dropThresholdGp(), DropRules.MIN_THRESHOLD_GP);
         int rareDenominator = config.rareDropThreshold();
         long rareMin = Math.max(0, config.rareDropMinValueGp());
         Set<String> notable = content.notableItems();
@@ -158,29 +159,22 @@ public class DropLogger
             // The clan's ignore list beats every rule, the notable list included.
             String key = Names.normalize(name);
             if (ignored.contains(key)) continue;
-            OptionalDouble rarity = rates.rarity(source, id, qty);
-            if (!rarity.isPresent() && !display.equals(source))
-            {
-                rarity = rates.rarity(display, id, qty);
-            }
             boolean blocked = DropRules.neverLogged(name);
             // One item must pass on its own: a stack of runes or seeds never
             // becomes "valuable" through quantity.
-            boolean valuable = !blocked && DropRules.valuable(unitPrice, threshold);
-            boolean rare = !blocked && DropRules.rare(rarity, rareDenominator) && value >= rareMin;
+            boolean valuable = !blocked && unitPrice >= threshold;
             boolean isNotable = notable.contains(key);
+            // The rate table is only consulted for items that could be logged
+            // (or labelled): most loot is common and cheap.
+            if (!valuable && !isNotable && (blocked || value < rareMin)) continue;
+            OptionalDouble rarity = rates.rarity(display, id, qty);
+            boolean rare = !blocked && DropRules.rare(rarity, rareDenominator) && value >= rareMin;
             if (valuable || rare || isNotable)
             {
                 drops.add(new Drop(name, id, value, qty, rarity.isPresent() ? rarity.getAsDouble() : null));
             }
         }
-        if (!drops.isEmpty())
-        {
-            // Suppress duplicate delivery of the same loot collection within one game tick.
-            int tick = client.getTickCount();
-            String key = clan.snapshot().getGeneration() + ":" + display + ":" + drops.toString();
-            if (deduplicator.accept(tick, key, tracker)) dispatch(rsn, display, drops);
-        }
+        if (!drops.isEmpty()) dispatch(rsn, display, drops);
     }
 
     // Pets only announce themselves in chat. Untradeable, so they bypass
@@ -255,13 +249,15 @@ public class DropLogger
 
     // ------------------------------------------------------------ reads
 
-    // Explicit column list so a future column can't silently ship to
-    // every viewer. Rows on the clan's ignore list are dropped (older
-    // clients may still log them). Executor.
-    public JsonArray recent(int limit)
+    // The newest 50 drops. Explicit column list so a future column can't
+    // silently ship to every viewer. Rows on the clan's ignore list are
+    // dropped (older clients may still log them), so the list is loaded
+    // first if the startup fetch missed it. Executor.
+    public JsonArray recent()
     {
-        JsonArray rows = db.getOrNull("drops", "select=" + COLUMNS + "&order=created_at.desc,id.desc&limit=" + Math.max(1, Math.min(200, limit)));
-        if (rows == null) throw new IllegalStateException("Could not refresh drops. Showing the last loaded list.");
+        JsonArray rows = db.getOrNull("drops", "select=" + COLUMNS + "&order=created_at.desc,id.desc&limit=50");
+        if (rows == null) throw new IllegalStateException("drop feed unavailable");
+        content.loadMissing();
         Set<String> ignored = content.ignoredItems();
         JsonArray shown = new JsonArray();
         for (JsonElement el : rows)
@@ -269,7 +265,7 @@ public class DropLogger
             JsonObject row = el.getAsJsonObject();
             if (ignored.contains(Names.normalize(Supabase.str(row, "item_name")))) continue;
             String path = Supabase.str(row, "screenshot_url");
-            if (path.matches("[0-9a-f-]{36}\\.png")) row.addProperty("screenshot_url", Supabase.publicUrl(BUCKET, path));
+            if (SCREENSHOT_FILE.matcher(path).matches()) row.addProperty("screenshot_url", Supabase.publicUrl(BUCKET, path));
             shown.add(row);
         }
         return shown;
@@ -303,32 +299,50 @@ public class DropLogger
             }
             flush();
         });
-        // Screenshots are optional enrichment; no rendered frame is needed to save a drop.
-        if (!config.enableDropScreenshots() || !framePending.compareAndSet(false, true)) return;
+        // Screenshots are optional enrichment; no rendered frame is needed to
+        // save a drop. Loot from two kills in the same tick shares one frame.
+        if (!config.enableDropScreenshots()) return;
+        synchronized (awaitingFrame)
+        {
+            awaitingFrame.addAll(rows);
+            if (!framePending.compareAndSet(false, true)) return;
+        }
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         List<String> party = partyNames();
         drawManager.requestNextFrameListener(frame -> {
-            framePending.set(false);
-            if (System.nanoTime() > deadline || !clan.current(session) || !config.enableDropLogging() || !config.enableDropScreenshots()) return;
+            List<JsonObject> batch;
+            synchronized (awaitingFrame)
+            {
+                batch = new ArrayList<>(awaitingFrame);
+                awaitingFrame.clear();
+                framePending.set(false);
+            }
+            if (System.nanoTime() > deadline || !screenshotting(session)) return;
             BufferedImage copy = new BufferedImage(frame.getWidth(null), frame.getHeight(null), BufferedImage.TYPE_INT_RGB);
             Graphics2D graphics = copy.createGraphics();
             try { graphics.drawImage(frame, 0, 0, null); } finally { graphics.dispose(); }
             executor.submit(() -> {
-                if (!clan.current(session) || !config.enableDropLogging() || !config.enableDropScreenshots()) return;
+                if (!screenshotting(session)) return;
                 String path = uploadScreenshot(copy, party);
                 if (path == null) return;
-                for (JsonObject row : rows)
+                for (JsonObject row : batch)
                 {
-                    if (!clan.current(session) || !config.enableDropLogging() || !config.enableDropScreenshots()) return;
-                    JsonObject payload = new JsonObject(); payload.add("p_row", row);
-                    if (!db.rpc("fb_submit_drop", payload)) continue;
+                    if (!screenshotting(session)) return;
                     JsonObject attachment = new JsonObject();
                     attachment.addProperty("p_event", Supabase.str(row, "event_id"));
                     attachment.addProperty("p_path", path);
-                    db.rpc("fb_attach_screenshot", attachment);
+                    if (db.rpc("fb_attach_screenshot", attachment)) continue;
+                    // Not there yet (the outbox hasn't sent it): send it now, then attach.
+                    JsonObject payload = new JsonObject(); payload.add("p_row", row);
+                    if (db.rpc("fb_submit_drop", payload)) db.rpc("fb_attach_screenshot", attachment);
                 }
             });
         });
+    }
+
+    private boolean screenshotting(Session session)
+    {
+        return clan.current(session) && config.enableDropLogging() && config.enableDropScreenshots();
     }
 
     /** Worker only; retry all pending drops for this verified profile. */

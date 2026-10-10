@@ -112,7 +112,6 @@ public class FinalBossPlugin extends Plugin
         badges.reset();
 
         // Startup fetches, all off the client thread.
-        executor.submit(dropRates::load);
         executor.submit(this::loadContent);
         // Warms the cache and populates the tab before it's first opened.
         announcementsTab.refresh();
@@ -159,6 +158,8 @@ public class FinalBossPlugin extends Plugin
             return;
         }
         startPolling();
+        // Members only: the ~700 KB drop-rate table (once per client session).
+        executor.submit(dropRates::load);
         // Retries whatever the startup fetch missed.
         executor.submit(this::loadContent);
         // World-type and varp reads belong on the client thread.
@@ -299,7 +300,9 @@ public class FinalBossPlugin extends Plugin
     @Subscribe
     public void onNpcLootReceived(NpcLootReceived event)
     {
-        if (event.getNpc().getName() != null) drops.onLoot(event.getNpc().getName(), event.getItems(), false);
+        // Chest-loot bosses are taken from the Loot Tracker's event below, never twice.
+        String name = event.getNpc().getName();
+        if (name != null && !DropRules.CHEST_LOOT_NPCS.contains(name)) drops.onLoot(name, event.getItems());
     }
 
     // Loot with no NPC kill behind it: raid chests, Barrows, and the few
@@ -312,7 +315,7 @@ public class FinalBossPlugin extends Plugin
         boolean chestNpc = event.getType() == LootRecordType.NPC && DropRules.CHEST_LOOT_NPCS.contains(event.getName());
         if (event.getType() == LootRecordType.EVENT || chestNpc)
         {
-            drops.onLoot(event.getName(), event.getItems(), true);
+            drops.onLoot(event.getName(), event.getItems());
         }
     }
 
