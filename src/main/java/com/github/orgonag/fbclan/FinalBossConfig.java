@@ -131,12 +131,25 @@ public interface FinalBossConfig extends Config
     }
 
     @ConfigItem(
+        keyName = "lfgNewPostAnnouncements",
+        name = "Announce new parties in chat",
+        description = "Post a chat line whenever a clan member creates a party, e.g. "
+            + "\"Dopezt created a party of 4 for ToB (ASAP)\"",
+        section = lfgSection,
+        position = 3
+    )
+    default boolean lfgNewPostAnnouncements()
+    {
+        return true;
+    }
+
+    @ConfigItem(
         keyName = "lfgKcLookups",
         name = "Kill count lookups",
         description = "Look up kill counts on the public OSRS hiscores when an applicant's client didn't "
             + "send one, and to prefill your own on the apply form",
         section = lfgSection,
-        position = 3
+        position = 4
     )
     default boolean lfgKcLookups()
     {

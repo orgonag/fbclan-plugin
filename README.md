@@ -45,6 +45,7 @@ Post a party or join one from inside RuneLite. Anyone who logs in later sees wha
 - Hosts can accept, decline or kick, and can add a member by name if a friend isn't using the plugin. Applicants, added members and hosts get a chat message for each of these.
 - A host can run 1 ASAP post and up to 7 scheduled posts at once.
 - Scheduled parties remind the host and accepted members in chat 15 minutes before the start.
+- When a clan member posts a new party you get a chat line such as "Dopezt created a party of 4 for ToB (ASAP)". Turn it off with **Announce new parties in chat**.
 - Filled parties are kept in a **Formed** list for 7 days.
 - From chat: `!lfg` lists open parties, `!lfg tob 4` posts an ASAP party with default settings, and `!lfg help` lists the activity names. Only you see the replies.
 
@@ -117,6 +118,7 @@ RuneLite settings, search **Final Boss**, then the cog icon.
 | Enable LFG | On |
 | Party chat notifications | On |
 | Party desktop notifications | Off |
+| Announce new parties in chat | On |
 | Kill count lookups | On |
 | Discord Webhook URL | Blank (disabled) |
 | Upload personal bests | On |

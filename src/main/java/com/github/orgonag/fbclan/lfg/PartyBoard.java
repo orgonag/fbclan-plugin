@@ -351,11 +351,13 @@ public class PartyBoard
             if (f.getPartyId() != null) formedFrom.put(f.getPartyId(), f);
         }
         List<String> messages = new ArrayList<>();
+        List<String> announcements = new ArrayList<>();
         synchronized (this)
         {
             if (primed)
             {
                 diff(previous, nowById, rsn, formedFrom, messages);
+                newPosts(previous, now, rsn, announcements);
                 reminders(now, rsn, messages);
                 for (FormedParty f : formedNow)
                 {
@@ -377,6 +379,20 @@ public class PartyBoard
             primed = true;
         }
         messages.forEach(this::deliver);
+        if (config.lfgNewPostAnnouncements()) announcements.forEach(this::chat);
+    }
+
+    // Other members' posts that appeared since the last poll: "Dopezt
+    // created a party of 4 for ToB (ASAP)." Posts made while this player
+    // was offline are on the board already and aren't replayed.
+    private static void newPosts(Map<String, Party> prev, List<Party> now, String rsn, List<String> out)
+    {
+        for (Party p : now)
+        {
+            if (prev.containsKey(p.getId()) || p.isHostedBy(rsn)) continue;
+            out.add(p.getHostRsn() + " created a party of " + p.getCapacity() + " for " + p.title()
+                + " (" + when(p.getScheduledFor()) + ").");
+        }
     }
 
     private void diff(Map<String, Party> prev, Map<String, Party> now, String rsn, Map<String, FormedParty> formedFrom, List<String> out)
@@ -482,22 +498,24 @@ public class PartyBoard
 
     private void deliver(String message)
     {
-        Session session = clan.snapshot();
-        long capturedEpoch = epoch;
-        if (config.lfgPartyNotifications())
-        {
-            clientThread.invokeLater(() -> {
-                if (!enabled || capturedEpoch != epoch || !clan.current(session)) return true;
-                GameState state = client.getGameState();
-                // Mid-teleport or hop: hold the line until the chatbox is back.
-                if (state == GameState.LOADING || state == GameState.HOPPING || state == GameState.CONNECTION_LOST) return false;
-                if (state == GameState.LOGGED_IN) client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "[LFG] " + message, null);
-                return true;
-            });
-        }
+        if (config.lfgPartyNotifications()) chat(message);
         if (config.lfgDesktopNotifications())
         {
             notifier.notify("Final Boss LFG: " + message);
         }
+    }
+
+    private void chat(String message)
+    {
+        Session session = clan.snapshot();
+        long capturedEpoch = epoch;
+        clientThread.invokeLater(() -> {
+            if (!enabled || capturedEpoch != epoch || !clan.current(session)) return true;
+            GameState state = client.getGameState();
+            // Mid-teleport or hop: hold the line until the chatbox is back.
+            if (state == GameState.LOADING || state == GameState.HOPPING || state == GameState.CONNECTION_LOST) return false;
+            if (state == GameState.LOGGED_IN) client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "[LFG] " + message, null);
+            return true;
+        });
     }
 }
