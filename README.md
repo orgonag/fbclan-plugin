@@ -43,6 +43,7 @@ Post a party or join one from inside RuneLite. Anyone who logs in later sees wha
 
 - Posts survive logout and world hops. An ASAP post comes down when it fills, when the host cancels, or 12 hours after posting. A scheduled post that fills stays listed as full until its start time; one that doesn't fill comes down 3 hours after its start.
 - Hosts can accept, decline or kick, and can add a member by name if a friend isn't using the plugin. Applicants, added members and hosts get a chat message for each of these.
+- The host is told when a member leaves, and when a member of an ASAP party has been offline for a few minutes (they stay in the party). Members are told when they're kicked or the leader disbands the party.
 - A host can run 1 ASAP post and up to 7 scheduled posts at once.
 - Scheduled parties remind the host and accepted members in chat 15 minutes before the start.
 - When anyone posts a new party, you included, everyone gets a chat line such as "Dopezt created a party of 4 for ToB (ASAP)". Turn it off with **Announce new parties in chat** (or with **Party chat notifications**, which silences every LFG chat line).
@@ -68,6 +69,7 @@ Clue scrolls, long and curved bones, champion scrolls and keys are never logged 
 - Filters: All, Mine, Rare+ and Pets. The tile colour shows how special a drop is.
 - **Top drop** pins the biggest drop of the last 24 hours.
 - Click any drop for its details and, when it has one, its screenshot.
+- The feed refreshes every minute while the Drops tab is open.
 
 **Screenshots and Discord**
 
