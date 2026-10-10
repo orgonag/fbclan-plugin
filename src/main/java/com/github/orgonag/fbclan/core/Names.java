@@ -1,6 +1,7 @@
 package com.github.orgonag.fbclan.core;
 
 import java.util.Locale;
+import net.runelite.client.util.Text;
 
 /**
  * Text helpers shared by every feature: RSN comparison (in-game names
@@ -11,6 +12,13 @@ public final class Names
 {
     private Names()
     {
+    }
+
+    // A name from the database, with chat tags removed: the chatbox and
+    // tooltips render <col=> and <img=>, and the server accepts any name.
+    public static String untagged(String name)
+    {
+        return name == null ? "" : Text.removeTags(name).trim();
     }
 
     public static String normalize(String name)

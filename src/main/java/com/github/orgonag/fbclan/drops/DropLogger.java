@@ -55,9 +55,10 @@ import okhttp3.Response;
 
 /**
  * The drop pipeline. An item is logged when it is <b>valuable</b> (GE
- * value at or above the threshold), <b>rare</b> (1 in X or rarer from
+ * price of a single item at or above the threshold), <b>rare</b> (1 in X or rarer from
  * this source AND worth the rare minimum), on the clan's <b>notable</b>
- * list, or a <b>pet</b>. It then optionally grabs an annotated
+ * list, or a <b>pet</b>; never when it is on the clan's <b>ignored</b>
+ * list. It then optionally grabs an annotated
  * screenshot and fans out to the clan drop log and the user's Discord
  * webhook. Also serves the drop-log tab's recent rows.
  */
@@ -139,6 +140,7 @@ public class DropLogger
         int rareDenominator = config.rareDropThreshold();
         long rareMin = Math.max(0, config.rareDropMinValueGp());
         Set<String> notable = content.notableItems();
+        Set<String> ignored = content.ignoredItems();
         String display = DropRules.displaySource(source);
         lastSource = display;
         lastSourceTick = client.getTickCount();
@@ -150,17 +152,23 @@ public class DropLogger
             int id = stack.getId();
             int qty = stack.getQuantity();
             if (qty <= 0) continue;
-            long value = (long) itemManager.getItemPrice(id) * qty;
+            long unitPrice = itemManager.getItemPrice(id);
+            long value = unitPrice * qty;
             String name = itemManager.getItemComposition(id).getName();
+            // The clan's ignore list beats every rule, the notable list included.
+            String key = Names.itemKey(name);
+            if (ignored.contains(key)) continue;
             OptionalDouble rarity = rates.rarity(source, id, qty);
             if (!rarity.isPresent() && !display.equals(source))
             {
                 rarity = rates.rarity(display, id, qty);
             }
             boolean blocked = DropRules.neverLogged(name);
-            boolean valuable = !blocked && DropRules.valuable(value, threshold);
+            // One item must pass on its own: a stack of runes or seeds never
+            // becomes "valuable" through quantity.
+            boolean valuable = !blocked && DropRules.valuable(unitPrice, threshold);
             boolean rare = !blocked && DropRules.rare(rarity, rareDenominator) && value >= rareMin;
-            boolean isNotable = notable.contains(Names.itemKey(name));
+            boolean isNotable = notable.contains(key);
             if (valuable || rare || isNotable)
             {
                 drops.add(new Drop(name, id, value, qty, rarity.isPresent() ? rarity.getAsDouble() : null));
@@ -248,18 +256,23 @@ public class DropLogger
     // ------------------------------------------------------------ reads
 
     // Explicit column list so a future column can't silently ship to
-    // every viewer. Executor.
+    // every viewer. Rows on the clan's ignore list are dropped (older
+    // clients may still log them). Executor.
     public JsonArray recent(int limit)
     {
         JsonArray rows = db.getOrNull("drops", "select=" + COLUMNS + "&order=created_at.desc,id.desc&limit=" + Math.max(1, Math.min(200, limit)));
         if (rows == null) throw new IllegalStateException("Could not refresh drops. Showing the last loaded list.");
+        Set<String> ignored = content.ignoredItems();
+        JsonArray shown = new JsonArray();
         for (JsonElement el : rows)
         {
             JsonObject row = el.getAsJsonObject();
+            if (ignored.contains(Names.itemKey(Supabase.str(row, "item_name")))) continue;
             String path = Supabase.str(row, "screenshot_url");
             if (path.matches("[0-9a-f-]{36}\\.png")) row.addProperty("screenshot_url", Supabase.publicUrl(BUCKET, path));
+            shown.add(row);
         }
-        return rows;
+        return shown;
     }
 
     // ------------------------------------------------------------ pipeline

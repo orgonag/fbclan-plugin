@@ -41,11 +41,13 @@ Post a party or join one from inside RuneLite. Anyone who logs in later sees wha
 
 **Good to know**
 
-- Posts survive logout and world hops. They come down when an ASAP party fills, when the host cancels, or 7 days after posting. A scheduled party that fills stays listed as full until its start time has passed.
+- Posts survive logout and world hops. An ASAP post comes down when it fills, when the host cancels, or 12 hours after posting. A scheduled post that fills stays listed as full until its start time; one that doesn't fill comes down 3 hours after its start.
 - Hosts can accept, decline or kick, and can add a member by name if a friend isn't using the plugin. Applicants, added members and hosts get a chat message for each of these.
 - A host can run 1 ASAP post and up to 7 scheduled posts at once.
 - Scheduled parties remind the host and accepted members in chat 15 minutes before the start.
-- Filled parties are kept in a **Formed** list for 7 days.
+- When anyone posts a new party, you included, everyone gets a chat line such as "Dopezt created a party of 4 for ToB (ASAP)". Turn it off with **Announce new parties in chat** (or with **Party chat notifications**, which silences every LFG chat line).
+- While the board has posts, the clan logo appears in RuneLite's infobox row (where boss timers go) captioned ASAP/total, e.g. "2/6". Hover it for the breakdown by activity. It follows RuneLite's infobox size and position settings; turn it off with **Show party board infobox**.
+- Filled parties show in a **Formed** list: ASAP ones for 3 hours, scheduled ones until 12 hours after their start.
 - From chat: `!lfg` lists open parties, `!lfg tob 4` posts an ASAP party with default settings, and `!lfg help` lists the activity names. Only you see the replies.
 
 ## 2. Drop log
@@ -54,12 +56,12 @@ A shared feed of the clan's notable loot. It is handy as a backup for clan event
 
 **What gets logged**
 
-- **Valuable:** worth 1,000,000 GP or more (GE price times quantity).
+- **Valuable:** a single item worth 1,000,000 GP or more (GE price of one, not the stack, so rune and seed stacks don't count).
 - **Rare:** a known drop rate of 1 in 250 or rarer, and worth at least 100,000 GP.
 - **Pets**, with the pet's name when the client can tell which one it was.
 - **Notable items** picked by clan staff, such as untradeable uniques.
 
-Clue scrolls, long and curved bones, champion scrolls and keys are never logged by the value and rarity rules; the clan's notable list can override that.
+Clue scrolls, long and curved bones, champion scrolls and keys are never logged by the value and rarity rules; the clan's notable list can override that. Items on the clan's **ignored** list (runes, seeds, bolts and the like) are never logged and never shown, whatever they are worth.
 
 **Reading the feed**
 
@@ -117,7 +119,9 @@ RuneLite settings, search **Final Boss**, then the cog icon.
 | Enable LFG | On |
 | Party chat notifications | On |
 | Party desktop notifications | Off |
+| Announce new parties in chat | On |
 | Kill count lookups | On |
+| Show party board infobox | On |
 | Discord Webhook URL | Blank (disabled) |
 | Upload personal bests | On |
 | Upload collection log & CA | On |

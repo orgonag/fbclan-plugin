@@ -41,7 +41,7 @@ public interface FinalBossConfig extends Config
     @ConfigItem(
         keyName = "dropThresholdGp",
         name = "Valuable drop threshold (GP)",
-        description = "Any drop worth at least this much (GE price x quantity) is logged, rare or not — 1m minimum",
+        description = "Any single item worth at least this much (GE price of one, not the stack) is logged, rare or not — 1m minimum",
         section = dropLoggingSection,
         position = 1
     )
@@ -131,14 +131,40 @@ public interface FinalBossConfig extends Config
     }
 
     @ConfigItem(
+        keyName = "lfgNewPostAnnouncements",
+        name = "Announce new parties in chat",
+        description = "Post a chat line whenever anyone (you included) creates a party, e.g. "
+            + "\"Dopezt created a party of 4 for ToB (ASAP)\". Needs Party chat notifications on.",
+        section = lfgSection,
+        position = 3
+    )
+    default boolean lfgNewPostAnnouncements()
+    {
+        return true;
+    }
+
+    @ConfigItem(
         keyName = "lfgKcLookups",
         name = "Kill count lookups",
         description = "Look up kill counts on the public OSRS hiscores when an applicant's client didn't "
             + "send one, and to prefill your own on the apply form",
         section = lfgSection,
-        position = 3
+        position = 4
     )
     default boolean lfgKcLookups()
+    {
+        return true;
+    }
+
+    @ConfigItem(
+        keyName = "lfgInfoBox",
+        name = "Show party board infobox",
+        description = "While the board has posts, show the clan logo in RuneLite's infobox row captioned "
+            + "ASAP/total; hover it for the breakdown. Size and position follow RuneLite's infobox settings.",
+        section = lfgSection,
+        position = 5
+    )
+    default boolean lfgInfoBox()
     {
         return true;
     }

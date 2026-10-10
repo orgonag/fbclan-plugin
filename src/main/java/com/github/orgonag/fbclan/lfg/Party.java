@@ -25,9 +25,14 @@ public class Party
     public static final int MIN_CAPACITY = 2;
     public static final int MAX_CAPACITY = 100;
     public static final int MAX_INVOCATION = 600;
-    // A post lives 7 days from creation; a full scheduled post forms GRACE after its start.
-    public static final Duration LIFETIME = Duration.ofHours(168);
-    public static final Duration GRACE = Duration.ofHours(2);
+    // Scheduled starts may be up to 7 days after the post is created.
+    public static final Duration SCHEDULE_WINDOW = Duration.ofHours(168);
+    // Server clearing rules (migration 7): an unfilled ASAP post leaves 12 h
+    // after creation, an unfilled scheduled post 3 h after its start; a full
+    // scheduled post forms at its start. The server sends each post's
+    // `expires_at`; these only cover a server that doesn't.
+    public static final Duration ASAP_LIFETIME = Duration.ofHours(12);
+    public static final Duration AFTER_START = Duration.ofHours(3);
 
     public enum Status
     {
@@ -90,7 +95,7 @@ public class Party
 
         static Applicant fromRow(JsonObject row)
         {
-            String rsn = Supabase.str(row, "rsn");
+            String rsn = Names.untagged(Supabase.str(row, "rsn"));
             return rsn.isEmpty() ? null : new Applicant(rsn, Role.fromKey(Supabase.str(row, "role")),
                 Supabase.bool(row, "learner"), Status.fromKey(Supabase.str(row, "status")),
                 Supabase.instant(row, "created_at", Instant.EPOCH), Supabase.intOrNull(row, "kc"),
@@ -115,6 +120,7 @@ public class Party
     boolean teacher;
     Instant createdAt;
     Instant scheduledFor;   // null = ASAP
+    Instant expiresAt;      // server's; null for a local draft
     List<Applicant> applicants;
 
     // The template behind `!lfg tob 4`: every optional detail left at its
@@ -150,7 +156,8 @@ public class Party
     // When the server drops an unfilled post.
     public Instant expiresAt()
     {
-        return createdAt.plus(LIFETIME);
+        if (expiresAt != null) return expiresAt;
+        return scheduledFor == null ? createdAt.plus(ASAP_LIFETIME) : scheduledFor.plus(AFTER_START);
     }
 
     // CM / HMT, or a ToA at expert-level invocation.
@@ -261,7 +268,8 @@ public class Party
     public static Party fromRow(JsonObject row)
     {
         Activity activity = Activity.fromKey(Supabase.str(row, "activity"));
-        if (activity == null || Supabase.str(row, "id").isEmpty() || Supabase.str(row, "host_rsn").isEmpty())
+        String host = Names.untagged(Supabase.str(row, "host_rsn"));
+        if (activity == null || Supabase.str(row, "id").isEmpty() || host.isEmpty())
         {
             return null;
         }
@@ -281,7 +289,7 @@ public class Party
         return Party.builder()
             .id(Supabase.str(row, "id"))
             .version(Supabase.longOr(row, "version", 1))
-            .hostRsn(Supabase.str(row, "host_rsn"))
+            .hostRsn(host)
             .activity(activity)
             .hardMode(Supabase.bool(row, "hard_mode"))
             .invocation(Supabase.intOr(row, "invocation", 0))
@@ -291,6 +299,7 @@ public class Party
             .description(row.has("note") ? (Supabase.has(row, "note") ? Supabase.str(row, "note") : null)
                 : Supabase.has(row, "description") ? Supabase.str(row, "description") : null)
             .scheduledFor(Supabase.instant(row, "scheduled_for", null))
+            .expiresAt(Supabase.instant(row, "expires_at", null))
             .world(Supabase.intOrNull(row, "world"))
             .minKc(Supabase.intOr(row, "min_kc", 0))
             .lootRule(LootRule.fromKey(Supabase.str(row, "loot_rule")))

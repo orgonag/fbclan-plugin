@@ -22,7 +22,7 @@ import net.runelite.client.callback.ClientThread;
 
 /**
  * Clan-curated, read-only content: announcements, the once-per-session
- * welcome message, and the notable-items list. All three live in
+ * welcome message, and the notable and ignored item lists. All live in
  * Supabase tables written solely by the clan's sheet-sync script; the
  * plugin only reads them. Fetches run on the executor and fail soft,
  * keeping the previous value.
@@ -50,9 +50,11 @@ public class ClanContent
 
     private volatile List<Announcement> announcements = Collections.emptyList();
     private volatile Set<String> notableItems = Collections.emptySet();
+    private volatile Set<String> ignoredItems = Collections.emptySet();
     private volatile String welcome = "";
     private volatile boolean welcomeShown;
     private volatile boolean notableLoaded;
+    private volatile boolean ignoredLoaded;
     private volatile boolean welcomeLoaded;
 
     @Inject
@@ -75,10 +77,17 @@ public class ClanContent
         return notableItems;
     }
 
+    // Never logged and hidden from the feed, whatever the value. Same keys.
+    public Set<String> ignoredItems()
+    {
+        return ignoredItems;
+    }
+
     public void resetSession()
     {
         welcomeShown = false;
         notableLoaded = false;
+        ignoredLoaded = false;
         welcomeLoaded = false;
     }
 
@@ -111,18 +120,35 @@ public class ClanContent
     // fetch is tried again at the next call.
     public void loadMissing()
     {
-        if (!notableLoaded) refreshNotableItems();
+        if (!notableLoaded)
+        {
+            Set<String> names = loadNames("notable_items");
+            if (names != null)
+            {
+                notableItems = names;
+                notableLoaded = true;
+            }
+        }
+        if (!ignoredLoaded)
+        {
+            Set<String> names = loadNames("ignored_items");
+            if (names != null)
+            {
+                ignoredItems = names;
+                ignoredLoaded = true;
+            }
+        }
         if (!welcomeLoaded) refreshWelcome();
     }
 
-    private void refreshNotableItems()
+    // A one-column name list as item keys; null when the fetch failed.
+    private Set<String> loadNames(String table)
     {
-        JsonArray rows = db.getOrNull("notable_items", "select=name");
+        JsonArray rows = db.getOrNull(table, "select=name");
         if (rows == null)
         {
-            return;
+            return null;
         }
-        notableLoaded = true;
         Set<String> names = new HashSet<>();
         for (JsonElement el : rows)
         {
@@ -132,7 +158,7 @@ public class ClanContent
                 names.add(key);
             }
         }
-        notableItems = Collections.unmodifiableSet(names);
+        return Collections.unmodifiableSet(names);
     }
 
     private void refreshWelcome()
