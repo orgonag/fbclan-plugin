@@ -41,7 +41,7 @@ public interface FinalBossConfig extends Config
     @ConfigItem(
         keyName = "dropThresholdGp",
         name = "Valuable drop threshold (GP)",
-        description = "Any drop worth at least this much (GE price x quantity) is logged, rare or not — 1m minimum",
+        description = "Any single item worth at least this much (GE price of one, not the stack) is logged, rare or not — 1m minimum",
         section = dropLoggingSection,
         position = 1
     )

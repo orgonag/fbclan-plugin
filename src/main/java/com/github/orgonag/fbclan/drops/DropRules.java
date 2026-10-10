@@ -42,9 +42,11 @@ public final class DropRules
         return Math.max(configuredGp, MIN_THRESHOLD_GP);
     }
 
-    public static boolean valuable(long totalValue, long thresholdGp)
+    // Judged per item, never per stack: 5,000 blood runes stay out, one
+    // Zenyte shard gets in.
+    public static boolean valuable(long unitPrice, long thresholdGp)
     {
-        return totalValue >= thresholdGp;
+        return unitPrice >= thresholdGp;
     }
 
     // 1 in `denominator` or rarer (never below the 1/250 floor, even for

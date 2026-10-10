@@ -55,7 +55,7 @@ import okhttp3.Response;
 
 /**
  * The drop pipeline. An item is logged when it is <b>valuable</b> (GE
- * value at or above the threshold), <b>rare</b> (1 in X or rarer from
+ * price of a single item at or above the threshold), <b>rare</b> (1 in X or rarer from
  * this source AND worth the rare minimum), on the clan's <b>notable</b>
  * list, or a <b>pet</b>. It then optionally grabs an annotated
  * screenshot and fans out to the clan drop log and the user's Discord
@@ -150,7 +150,8 @@ public class DropLogger
             int id = stack.getId();
             int qty = stack.getQuantity();
             if (qty <= 0) continue;
-            long value = (long) itemManager.getItemPrice(id) * qty;
+            long unitPrice = itemManager.getItemPrice(id);
+            long value = unitPrice * qty;
             String name = itemManager.getItemComposition(id).getName();
             OptionalDouble rarity = rates.rarity(source, id, qty);
             if (!rarity.isPresent() && !display.equals(source))
@@ -158,7 +159,9 @@ public class DropLogger
                 rarity = rates.rarity(display, id, qty);
             }
             boolean blocked = DropRules.neverLogged(name);
-            boolean valuable = !blocked && DropRules.valuable(value, threshold);
+            // One item must pass on its own: a stack of runes or seeds never
+            // becomes "valuable" through quantity.
+            boolean valuable = !blocked && DropRules.valuable(unitPrice, threshold);
             boolean rare = !blocked && DropRules.rare(rarity, rareDenominator) && value >= rareMin;
             boolean isNotable = notable.contains(Names.itemKey(name));
             if (valuable || rare || isNotable)

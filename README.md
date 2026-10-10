@@ -54,7 +54,7 @@ A shared feed of the clan's notable loot. It is handy as a backup for clan event
 
 **What gets logged**
 
-- **Valuable:** worth 1,000,000 GP or more (GE price times quantity).
+- **Valuable:** a single item worth 1,000,000 GP or more (GE price of one, not the stack, so rune and seed stacks don't count).
 - **Rare:** a known drop rate of 1 in 250 or rarer, and worth at least 100,000 GP.
 - **Pets**, with the pet's name when the client can tell which one it was.
 - **Notable items** picked by clan staff, such as untradeable uniques.
