@@ -20,11 +20,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.swing.BorderFactory;
-import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
@@ -33,7 +31,6 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.plaf.basic.BasicScrollBarUI;
 import javax.swing.text.AbstractDocument;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
@@ -141,50 +138,11 @@ final class Theme
         return list;
     }
 
-    // A thin rounded thumb with no arrows or track, in place of the chunky default.
+    // Vertical only, with RuneLite's own thin scrollbar.
     static void slim(JScrollPane pane)
     {
         pane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        JScrollBar bar = pane.getVerticalScrollBar();
-        bar.setUnitIncrement(16);
-        bar.setOpaque(false);
-        bar.setPreferredSize(new Dimension(8, 0));
-        bar.setUI(new BasicScrollBarUI()
-        {
-            @Override
-            protected void paintTrack(Graphics g, JComponent c, Rectangle r)
-            {
-            }
-
-            @Override
-            protected void paintThumb(Graphics g, JComponent c, Rectangle r)
-            {
-                if (r.isEmpty()) return;
-                Graphics2D g2 = smooth(g);
-                g2.setColor(isThumbRollover() || isDragging ? FAINT : LINE);
-                g2.fillRoundRect(r.x + 2, r.y + 2, r.width - 4, r.height - 4, 4, 4);
-                g2.dispose();
-            }
-
-            @Override
-            protected JButton createDecreaseButton(int orientation)
-            {
-                return none();
-            }
-
-            @Override
-            protected JButton createIncreaseButton(int orientation)
-            {
-                return none();
-            }
-
-            private JButton none()
-            {
-                JButton b = new JButton();
-                b.setPreferredSize(new Dimension(0, 0));
-                return b;
-            }
-        });
+        pane.getVerticalScrollBar().setUnitIncrement(16);
     }
 
     // ------------------------------------------------------------ text

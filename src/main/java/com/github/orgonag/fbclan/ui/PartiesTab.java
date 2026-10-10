@@ -58,6 +58,8 @@ public class PartiesTab extends Tab
     private Object filter;
     private boolean hideFull;
     private boolean showFormed = true;
+    // The list missed a redraw while the tab was hidden.
+    private boolean stale = true;
     private final ApplyForm applyForm;
     private final AddMemberForm addMember;
 
@@ -107,6 +109,7 @@ public class PartiesTab extends Tab
     {
         // Reopening the tab clears the last action's leftover error.
         actionError = null;
+        if (stale) render();
         executor.submit(board::refresh);
     }
 
@@ -115,13 +118,11 @@ public class PartiesTab extends Tab
     // half-filled form); closeWizard() handles logout and shutdown.
     public void reset()
     {
-        SwingUtilities.invokeLater(() -> {
-            applyingId = null;
-            applyForm.reset();
-            addMember.reset();
-            actionError = null;
-            render();
-        });
+        applyingId = null;
+        applyForm.reset();
+        addMember.reset();
+        actionError = null;
+        render();
     }
 
     public void closeWizard()
@@ -222,6 +223,11 @@ public class PartiesTab extends Tab
             wizard.setBusy(board.isBusy());
             wizard.setWorld(board.world());
         }
+        // Hidden (another tab, or the panel closed): the board still polls
+        // for notifications, but the list and its kill-count lookups wait
+        // until the tab is shown again.
+        stale = !isShowing();
+        if (stale) return;
 
         List<Party> others = new ArrayList<>();
         for (Party p : board.parties())

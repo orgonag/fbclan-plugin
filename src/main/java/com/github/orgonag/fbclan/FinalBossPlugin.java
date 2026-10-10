@@ -22,7 +22,6 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
-import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.ChatMessage;
@@ -56,7 +55,6 @@ import net.runelite.http.api.loottracker.LootRecordType;
  * the player leaves the client until the WOM check passes; each upload
  * can be switched off individually. See {@link FinalBossConfig}.
  */
-@Slf4j
 @PluginDescriptor(
     name = "Final Boss",
     description = "Clan tools for Final Boss — announcements, drop log, LFG, and PB leaderboards",
@@ -179,19 +177,14 @@ public class FinalBossPlugin extends Plugin
     private void startPolling()
     {
         parties.start();
-        // The feed refreshes whether or not this player uploads their own drops.
+        // The feed only refreshes while its tab is on screen (opening the tab
+        // or the panel refreshes it at once), whether or not this player
+        // uploads their own drops.
         if (dropRefresh == null)
         {
-            dropRefresh = executor.scheduleAtFixedRate(() -> {
-                try
-                {
-                    dropLogTab.refresh();
-                }
-                catch (Exception e)
-                {
-                    log.warn("Drop refresh error", e);
-                }
-            }, 60, 60, TimeUnit.SECONDS);
+            dropRefresh = executor.scheduleAtFixedRate(() -> SwingUtilities.invokeLater(() -> {
+                if (dropLogTab.isShowing()) dropLogTab.refresh();
+            }), 60, 60, TimeUnit.SECONDS);
         }
         loadBadges();
     }

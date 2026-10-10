@@ -37,6 +37,8 @@ class BoardWindow
     private Choice<Integer> boards;
     private JComboBox<String> bossBox;
     private JTextField find;
+    // Set while the boss list is rebuilt, so its listener stays quiet.
+    private boolean rebuilding;
     private JLabel heading;
     private JLabel caption;
     private JPanel rows;
@@ -77,7 +79,7 @@ class BoardWindow
         plain.putClientProperty("html.disable", Boolean.TRUE);
         bossBox.setRenderer(plain);
         bossBox.setFont(FontManager.getRunescapeSmallFont());
-        bossBox.addActionListener(e -> renderRows());
+        bossBox.addActionListener(e -> { if (!rebuilding) renderRows(); });
         find = Theme.field("", 12);
         find.setToolTipText("Filter by player name");
         Theme.onEdit(find, this::renderRows);
@@ -135,9 +137,11 @@ class BoardWindow
             List<String> names = new ArrayList<>();
             names.add(NEWEST);
             names.addAll(tab.bosses().keySet());
+            rebuilding = true;
             bossBox.removeAllItems();
             names.forEach(bossBox::addItem);
             bossBox.setSelectedItem(picked != null && names.contains(picked) ? picked : NEWEST);
+            rebuilding = false;
         }
         renderRows();
     }
