@@ -50,6 +50,7 @@ Post a party or join one from inside RuneLite. Anyone who logs in later sees wha
 - While the board has posts, the clan logo appears in RuneLite's infobox row (where boss timers go) captioned ASAP/total, e.g. "2/6". Hover it for the breakdown by activity. It follows RuneLite's infobox size and position settings; turn it off with **Show party board infobox**.
 - Filled parties show in a **Formed** list: ASAP ones for 3 hours, scheduled ones until 12 hours after their start.
 - From chat: `!lfg` lists open parties, `!lfg tob 4` posts an ASAP party with default settings, and `!lfg help` lists the activity names. Only you see the replies.
+- Activities include all three raids plus **The Fractured Archive** (`!lfg tfa`), and **Clan Mass** for clan events (`!lfg mass`).
 
 ## 2. Drop log
 
