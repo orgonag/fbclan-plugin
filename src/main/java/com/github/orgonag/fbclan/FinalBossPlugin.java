@@ -5,6 +5,7 @@ import com.github.orgonag.fbclan.core.Clan;
 import com.github.orgonag.fbclan.drops.DropLogger;
 import com.github.orgonag.fbclan.drops.DropRates;
 import com.github.orgonag.fbclan.drops.DropRules;
+import com.github.orgonag.fbclan.lfg.BoardOverlay;
 import com.github.orgonag.fbclan.lfg.Killcounts;
 import com.github.orgonag.fbclan.lfg.LfgCommand;
 import com.github.orgonag.fbclan.lfg.PartyBoard;
@@ -40,6 +41,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.loottracker.LootReceived;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.http.api.loottracker.LootRecordType;
 
@@ -65,6 +67,7 @@ public class FinalBossPlugin extends Plugin
     @Inject private Client client;
     @Inject private ClientThread clientThread;
     @Inject private ClientToolbar toolbar;
+    @Inject private OverlayManager overlays;
     @Inject private ScheduledExecutorService executor;
     @Inject private FinalBossConfig config;
     @Inject private Clan clan;
@@ -75,6 +78,7 @@ public class FinalBossPlugin extends Plugin
     @Inject private MemberStats stats;
     @Inject private CaBadges badges;
     @Inject private PartyBoard parties;
+    @Inject private BoardOverlay boardOverlay;
     @Inject private Killcounts killcounts;
     @Inject private LfgCommand lfgCommand;
     // Swing: built in startUp (on the EDT), not at injection time.
@@ -122,6 +126,7 @@ public class FinalBossPlugin extends Plugin
             .panel(sidebar)
             .build();
         toolbar.addNavigation(navButton);
+        overlays.add(boardOverlay);
 
         // Enabled mid-session: no LOGGED_IN event will fire.
         clientThread.invokeLater(() -> {
@@ -136,6 +141,7 @@ public class FinalBossPlugin extends Plugin
         stopPolling();
         SwingUtilities.invokeLater(sidebar::closeWindows);
         toolbar.removeNavigation(navButton);
+        overlays.remove(boardOverlay);
     }
 
     private void onStatus(Clan.Status status)

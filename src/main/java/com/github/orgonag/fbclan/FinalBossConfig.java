@@ -156,6 +156,19 @@ public interface FinalBossConfig extends Config
         return true;
     }
 
+    @ConfigItem(
+        keyName = "lfgOverlay",
+        name = "Show party board overlay",
+        description = "While the board has posts, show the clan logo with how many are ASAP and in total "
+            + "on the game screen; hover it for the breakdown. Drag it with Alt held.",
+        section = lfgSection,
+        position = 5
+    )
+    default boolean lfgOverlay()
+    {
+        return true;
+    }
+
     // ------------------------------------------------------------ discord
 
     @ConfigItem(
