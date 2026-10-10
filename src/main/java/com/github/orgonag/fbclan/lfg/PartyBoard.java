@@ -222,17 +222,21 @@ public class PartyBoard
         if (!enabled || !config.enableLfg() || !clan.current(session)) return;
         clientThread.invokeLater(() -> { if (enabled && capturedEpoch == epoch && clan.current(session)) readClient(); });
         PartyApi.Snapshot fetched = api.fetch();
-        if (!enabled || capturedEpoch != epoch || !clan.current(session)) return;
-        if (fetched == null)
+        // Under the lock: stop() must not land between the check and the commit.
+        synchronized (this)
         {
-            refreshError = "Board unavailable. Showing the last loaded parties.";
-        }
-        else
-        {
-            refreshError = null;
-            parties = fetched.getParties();
-            formed = fetched.getFormed();
-            notifications.onSnapshot(parties, formed, session.getRsn(), online);
+            if (!enabled || capturedEpoch != epoch || !clan.current(session)) return;
+            if (fetched == null)
+            {
+                refreshError = "Board unavailable. Showing the last loaded parties.";
+            }
+            else
+            {
+                refreshError = null;
+                parties = fetched.getParties();
+                formed = fetched.getFormed();
+                notifications.onSnapshot(parties, formed, session.getRsn(), online);
+            }
         }
         listener.onChanged();
     }
@@ -273,22 +277,19 @@ public class PartyBoard
     }
 
     // Inside run(): the player leaving (or withdrawing). Recorded first so
-    // the next snapshot doesn't announce it back to them as a kick.
+    // the snapshot that follows the write doesn't announce it back to them
+    // as a kick (kept even if the reply is lost: it may still have landed).
     public String leave(Session session, String partyId)
     {
-        notifications.expectSelfLeave(partyId, true);
-        String outcome = api.leave(session, partyId);
-        if (outcome != null) notifications.expectSelfLeave(partyId, false);
-        return outcome;
+        notifications.expectSelfLeave(partyId);
+        return api.leave(session, partyId);
     }
 
     // Inside run(): the host kicking someone, so it isn't reported as them leaving.
     public String kick(Session session, String partyId, String rsn)
     {
-        notifications.expectKick(partyId, rsn, true);
-        String outcome = api.kick(session, partyId, rsn);
-        if (outcome != null) notifications.expectKick(partyId, rsn, false);
-        return outcome;
+        notifications.expectKick(partyId, rsn);
+        return api.kick(session, partyId, rsn);
     }
 
     // Client thread: who is in the clan channel, and the current world.

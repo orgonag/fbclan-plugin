@@ -33,7 +33,7 @@ import okhttp3.Response;
 @Singleton
 public class Supabase
 {
-    private static final String PROJECT_URL = "https://rzhtoqadvbxylwjndnlo.supabase.co";
+    public static final String PROJECT_URL = "https://rzhtoqadvbxylwjndnlo.supabase.co";
     private static final String ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6aHRvcWFkdmJ4eWx3am5kbmxvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTU5MDMsImV4cCI6MjA5MTI3MTkwM30.WzWJXS2cpvwnRVBQEroLTsu_iU0j_kkI1wSQhM8eJY0";
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 

@@ -116,7 +116,8 @@ public class PartyApi
         {
             // Pending, or declined but perhaps re-applied since the last refresh.
             String accepted = setStatus(s, party.getId(), rsn, Party.Status.ACCEPTED);
-            return accepted == null || existing.isPending() ? accepted : "You declined them earlier. Ask them to apply again.";
+            return !existing.isPending() && "Application changed or removed".equals(accepted)
+                ? "You declined them earlier. Ask them to apply again." : accepted;
         }
         JsonObject d = data(party.getId());
         d.addProperty("rsn", rsn);

@@ -53,7 +53,9 @@ public final class DropOutbox
                     JsonObject row = record.getAsJsonObject("row");
                     // Matched on the RuneLite profile (the account), not the name: a
                     // drop saved before a rename still sends, under the name it was earned on.
-                    if (session.getProfile().equals(Supabase.str(record, "profile")) && row.has("event_id")) out.add(row);
+                    // Older records name their endpoint; one from a dev build is left alone.
+                    boolean live = !record.has("endpoint") || Supabase.PROJECT_URL.equals(Supabase.str(record, "endpoint"));
+                    if (live && session.getProfile().equals(Supabase.str(record, "profile")) && row.has("event_id")) out.add(row);
                 }
                 catch (CharacterCodingException | RuntimeException e)
                 {

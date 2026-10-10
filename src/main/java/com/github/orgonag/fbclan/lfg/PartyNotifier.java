@@ -90,16 +90,16 @@ public class PartyNotifier
         reportedOffline.clear();
     }
 
-    synchronized void expectSelfLeave(String partyId, boolean expected)
+    // Recorded on the executor just before the write; the snapshot taken
+    // right after it (same thread, so nothing runs in between) settles it.
+    synchronized void expectSelfLeave(String partyId)
     {
-        if (expected) selfLeft.add(partyId);
-        else selfLeft.remove(partyId);
+        selfLeft.add(partyId);
     }
 
-    synchronized void expectKick(String partyId, String rsn, boolean expected)
+    synchronized void expectKick(String partyId, String rsn)
     {
-        if (expected) kicked.add(member(partyId, rsn));
-        else kicked.remove(member(partyId, rsn));
+        kicked.add(member(partyId, rsn));
     }
 
     private static String member(String partyId, String rsn)
@@ -150,13 +150,9 @@ public class PartyNotifier
                 reminders(now, rsn, new ArrayList<>());
                 offline(now, rsn, online, new ArrayList<>());
             }
-            // An expectation for a party gone from both snapshots can never match.
-            Map<String, Party> before = previous;
-            selfLeft.removeIf(id -> !nowById.containsKey(id) && !before.containsKey(id));
-            kicked.removeIf(k -> {
-                String id = k.substring(0, k.indexOf('|'));
-                return !nowById.containsKey(id) && !before.containsKey(id);
-            });
+            // This snapshot already reflects every recorded leave/kick.
+            selfLeft.clear();
+            kicked.clear();
             previous = nowById;
             previousFormed = formedIds;
             primed = true;

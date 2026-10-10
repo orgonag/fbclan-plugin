@@ -18,6 +18,7 @@ public enum Activity
     COX("Chambers of Xeric", Category.RAIDS, 1, 100, 20997),
     TOB("Theatre of Blood", Category.RAIDS, 1, 5, 22325),
     TOA("Tombs of Amascut", Category.RAIDS, 1, 8, 27275),
+    FRACTURED_ARCHIVE("The Fractured Archive", Category.RAIDS, 1, 8, 20714),
 
     // God Wars Dungeon
     KREEARRA("Kree'arra", Category.GOD_WARS, 1, 8, 11828),
@@ -42,7 +43,8 @@ public enum Activity
     GOTR("Guardians of the Rift", Category.MINIGAMES, 1, 30, 26822),
     WINTERTODT("Wintertodt", Category.MINIGAMES, 1, 30, 20708),
 
-    // Catch-alls for anything without a dedicated entry
+    // Clan events and catch-alls for anything without a dedicated entry
+    CLAN_MASS("Clan Mass", Category.GENERAL, 1, 100, 25725),
     GROUP_BOSS("Group Boss", Category.GENERAL, 1, 100, 13576),
     MINIGAME("Minigame", Category.GENERAL, 1, 100, 3853),
     PVP("PvP", Category.GENERAL, 1, 100, 964),
@@ -114,6 +116,7 @@ public enum Activity
             case COX: case TOA: preferred = 3; break;
             case BA: preferred = 5; break;
             case YAMA: case ROYAL_TITANS: preferred = 2; break;
+            case CLAN_MASS: preferred = 20; break;
             default: preferred = 4; break;
         }
         int min = minSize();
@@ -149,6 +152,7 @@ public enum Activity
             case VOLCANIC_MINE: return "VM";
             case CASTLE_WARS: return "CW";
             case WINTERTODT: return "WT";
+            case FRACTURED_ARCHIVE: return "TFA";
             default: return displayName;
         }
     }
@@ -227,6 +231,8 @@ public enum Activity
             case ZALCANO: return Collections.singletonList("Zalcano");
             case GOTR: return Collections.singletonList("Guardians of the Rift");
             case WINTERTODT: return Collections.singletonList("Wintertodt");
+            // New raid: not on RuneLite's hiscores yet; the chat-command key is a best guess.
+            case FRACTURED_ARCHIVE: return Arrays.asList("The Fractured Archive", "Fractured Archive");
             default: return Collections.emptyList();
         }
     }

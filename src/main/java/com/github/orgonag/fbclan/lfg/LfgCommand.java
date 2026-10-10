@@ -61,6 +61,7 @@ public class LfgCommand
         alias(Activity.COX, true, 0, "cm", "coxcm", "cmcox", "challengemode");
         alias(Activity.TOA, false, 150, "toa", "tombs", "tombsofamascut");
         alias(Activity.TOA, false, 300, "expert", "etoa", "experttoa", "toaexpert");
+        alias(Activity.FRACTURED_ARCHIVE, false, 0, "tfa", "archive", "fractured", "fracturedarchive", "raids4", "r4");
         alias(Activity.NEX, false, 0, "nex");
         alias(Activity.KREEARRA, false, 0, "arma", "kree", "armadyl", "kreearra");
         alias(Activity.GRAARDOR, false, 0, "bandos", "graardor");
@@ -78,6 +79,7 @@ public class LfgCommand
         alias(Activity.CASTLE_WARS, false, 0, "cw", "castlewars");
         alias(Activity.GOTR, false, 0, "gotr", "rift", "guardiansoftherift");
         alias(Activity.WINTERTODT, false, 0, "wt", "todt", "wintertodt");
+        alias(Activity.CLAN_MASS, false, 0, "mass", "clanmass");
         alias(Activity.GROUP_BOSS, false, 0, "boss", "groupboss");
         alias(Activity.MINIGAME, false, 0, "mg", "minigame");
         alias(Activity.PVP, false, 0, "pvp", "pk");
@@ -148,7 +150,7 @@ public class LfgCommand
                 if (!clan.current(session) || !config.enableLfg()) return;
                 // The board polls every 30 s; only fetch when it has nothing current.
                 List<Party> parties = board.parties();
-                if (!board.running() || board.refreshError() != null)
+                if (!board.running() || board.refreshError() != null || parties.isEmpty())
                 {
                     PartyApi.Snapshot snapshot = api.fetch();
                     parties = snapshot == null ? null : snapshot.getParties();
