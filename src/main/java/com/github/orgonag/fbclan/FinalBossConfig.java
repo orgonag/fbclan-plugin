@@ -133,7 +133,7 @@ public interface FinalBossConfig extends Config
     @ConfigItem(
         keyName = "lfgNewPostAnnouncements",
         name = "Announce new parties in chat",
-        description = "Post a chat line whenever a clan member creates a party, e.g. "
+        description = "Post a chat line whenever anyone (you included) creates a party, e.g. "
             + "\"Dopezt created a party of 4 for ToB (ASAP)\". Needs Party chat notifications on.",
         section = lfgSection,
         position = 3

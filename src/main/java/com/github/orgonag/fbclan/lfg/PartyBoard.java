@@ -357,7 +357,7 @@ public class PartyBoard
             if (primed)
             {
                 diff(previous, nowById, rsn, formedFrom, messages);
-                newPosts(previous, now, rsn, announcements);
+                newPosts(previous, now, announcements);
                 reminders(now, rsn, messages);
                 for (FormedParty f : formedNow)
                 {
@@ -383,14 +383,15 @@ public class PartyBoard
         if (config.lfgPartyNotifications() && config.lfgNewPostAnnouncements()) announcements.forEach(this::chat);
     }
 
-    // Other members' posts that appeared since the last poll: "Dopezt
-    // created a party of 4 for ToB (ASAP)." Posts made while this player
-    // was offline are on the board already and aren't replayed.
-    private static void newPosts(Map<String, Party> prev, List<Party> now, String rsn, List<String> out)
+    // Posts that appeared since the last poll, the player's own included
+    // so everyone sees the same line: "Dopezt created a party of 4 for
+    // ToB (ASAP)." Posts made while this player was offline are on the
+    // board already and aren't replayed.
+    private static void newPosts(Map<String, Party> prev, List<Party> now, List<String> out)
     {
         for (Party p : now)
         {
-            if (prev.containsKey(p.getId()) || p.isHostedBy(rsn)) continue;
+            if (prev.containsKey(p.getId())) continue;
             out.add(p.getHostRsn() + " created a party of " + p.getCapacity() + " for " + p.title()
                 + " (" + when(p.getScheduledFor()) + ").");
         }
