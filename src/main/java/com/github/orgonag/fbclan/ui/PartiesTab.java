@@ -56,7 +56,8 @@ public class PartiesTab extends Tab
     private long actionErrorAt;
     private String applyingId;
     private Object filter;
-    private boolean hideFull;
+    // On by default: a full party has nothing to apply to.
+    private boolean hideFull = true;
     private boolean showFormed = true;
     // The list missed a redraw while the tab was hidden.
     private boolean stale = true;
