@@ -61,7 +61,7 @@ A shared feed of the clan's notable loot. It is handy as a backup for clan event
 - **Pets**, with the pet's name when the client can tell which one it was.
 - **Notable items** picked by clan staff, such as untradeable uniques.
 
-Clue scrolls, long and curved bones, champion scrolls and keys are never logged by the value and rarity rules; the clan's notable list can override that.
+Clue scrolls, long and curved bones, champion scrolls and keys are never logged by the value and rarity rules; the clan's notable list can override that. Items on the clan's **ignored** list (runes, seeds, bolts and the like) are never logged and never shown, whatever they are worth.
 
 **Reading the feed**
 
