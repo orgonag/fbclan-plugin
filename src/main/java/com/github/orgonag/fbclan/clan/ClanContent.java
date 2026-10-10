@@ -71,7 +71,7 @@ public class ClanContent
         return announcements;
     }
 
-    // Normalized item-name keys (see Names.itemKey).
+    // Normalized item-name keys (see Names.normalize).
     public Set<String> notableItems()
     {
         return notableItems;
@@ -144,7 +144,7 @@ public class ClanContent
     // A one-column name list as item keys; null when the fetch failed.
     private Set<String> loadNames(String table)
     {
-        JsonArray rows = db.getOrNull(table, "select=name");
+        JsonArray rows = db.getOrNull(table, "select=name&order=name");
         if (rows == null)
         {
             return null;
@@ -152,7 +152,7 @@ public class ClanContent
         Set<String> names = new HashSet<>();
         for (JsonElement el : rows)
         {
-            String key = Names.itemKey(Supabase.str(el.getAsJsonObject(), "name"));
+            String key = Names.normalize(Supabase.str(el.getAsJsonObject(), "name"));
             if (!key.isEmpty())
             {
                 names.add(key);

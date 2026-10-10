@@ -15,39 +15,41 @@ import net.runelite.client.hiscore.HiscoreSkill;
 public enum Activity
 {
     // Raids
-    COX("Chambers of Xeric", Category.RAIDS, 1, 100, "CM", 20997),
-    TOB("Theatre of Blood", Category.RAIDS, 1, 5, "HM", 22325),
-    TOA("Tombs of Amascut", Category.RAIDS, 1, 8, "Expert", 27275),
+    COX("Chambers of Xeric", Category.RAIDS, 1, 100, 20997),
+    TOB("Theatre of Blood", Category.RAIDS, 1, 5, 22325),
+    TOA("Tombs of Amascut", Category.RAIDS, 1, 8, 27275),
+    FRACTURED_ARCHIVE("The Fractured Archive", Category.RAIDS, 1, 8, 20714),
 
     // God Wars Dungeon
-    KREEARRA("Kree'arra", Category.GOD_WARS, 1, 8, null, 11828),
-    GRAARDOR("General Graardor", Category.GOD_WARS, 1, 8, null, 11832),
-    KRIL("K'ril Tsutsaroth", Category.GOD_WARS, 1, 8, null, 11824),
-    ZILYANA("Commander Zilyana", Category.GOD_WARS, 1, 8, null, 11838),
-    NEX("Nex", Category.GOD_WARS, 1, 40, null, 26235),
+    KREEARRA("Kree'arra", Category.GOD_WARS, 1, 8, 11828),
+    GRAARDOR("General Graardor", Category.GOD_WARS, 1, 8, 11832),
+    KRIL("K'ril Tsutsaroth", Category.GOD_WARS, 1, 8, 11824),
+    ZILYANA("Commander Zilyana", Category.GOD_WARS, 1, 8, 11838),
+    NEX("Nex", Category.GOD_WARS, 1, 40, 26235),
 
     // Other group bosses
-    NIGHTMARE("The Nightmare", Category.BOSSES, 1, 80, null, 24417),
-    CORP("Corporeal Beast", Category.BOSSES, 1, 30, null, 12817),
-    DKS("Dagannoth Kings", Category.BOSSES, 1, 100, null, 6737),
-    HUEYCOATL("The Hueycoatl", Category.BOSSES, 1, 10, null, 30064),
-    YAMA("Yama", Category.BOSSES, 1, 2, null, 30750),
-    ROYAL_TITANS("Royal Titans", Category.BOSSES, 1, 2, null, 30634),
+    NIGHTMARE("The Nightmare", Category.BOSSES, 1, 80, 24417),
+    CORP("Corporeal Beast", Category.BOSSES, 1, 30, 12817),
+    DKS("Dagannoth Kings", Category.BOSSES, 1, 100, 6737),
+    HUEYCOATL("The Hueycoatl", Category.BOSSES, 1, 10, 30064),
+    YAMA("Yama", Category.BOSSES, 1, 2, 30750),
+    ROYAL_TITANS("Royal Titans", Category.BOSSES, 1, 2, 30634),
 
     // Minigames
-    BA("Barbarian Assault", Category.MINIGAMES, 5, 5, null, 10551),
-    ZALCANO("Zalcano", Category.MINIGAMES, 1, 30, null, 23953),
-    VOLCANIC_MINE("Volcanic Mine", Category.MINIGAMES, 1, 30, null, 21622),
-    CASTLE_WARS("Castle Wars", Category.MINIGAMES, 1, 50, null, 4067),
-    GOTR("Guardians of the Rift", Category.MINIGAMES, 1, 30, null, 26822),
-    WINTERTODT("Wintertodt", Category.MINIGAMES, 1, 30, null, 20708),
+    BA("Barbarian Assault", Category.MINIGAMES, 5, 5, 10551),
+    ZALCANO("Zalcano", Category.MINIGAMES, 1, 30, 23953),
+    VOLCANIC_MINE("Volcanic Mine", Category.MINIGAMES, 1, 30, 21622),
+    CASTLE_WARS("Castle Wars", Category.MINIGAMES, 1, 50, 4067),
+    GOTR("Guardians of the Rift", Category.MINIGAMES, 1, 30, 26822),
+    WINTERTODT("Wintertodt", Category.MINIGAMES, 1, 30, 20708),
 
-    // Catch-alls for anything without a dedicated entry
-    GROUP_BOSS("Group Boss", Category.GENERAL, 1, 100, null, 13576),
-    MINIGAME("Minigame", Category.GENERAL, 1, 100, null, 3853),
-    PVP("PvP", Category.GENERAL, 1, 100, null, 964),
-    SKILLING("Skilling", Category.GENERAL, 1, 100, null, 11850),
-    CHILLING("Chilling", Category.GENERAL, 1, 100, null, 1978);
+    // Clan events and catch-alls for anything without a dedicated entry
+    CLAN_MASS("Clan Mass", Category.GENERAL, 1, 100, 25725),
+    GROUP_BOSS("Group Boss", Category.GENERAL, 1, 100, 13576),
+    MINIGAME("Minigame", Category.GENERAL, 1, 100, 3853),
+    PVP("PvP", Category.GENERAL, 1, 100, 964),
+    SKILLING("Skilling", Category.GENERAL, 1, 100, 11850),
+    CHILLING("Chilling", Category.GENERAL, 1, 100, 1978);
 
     @Getter
     public enum Category
@@ -66,18 +68,15 @@ public enum Activity
     private final Category category;
     private final int minPartySize;
     private final int maxPartySize;
-    // "CM" / "HM" / "Expert", or null when there's no harder variant.
-    private final String hardModeLabel;
     // A representative item sprite from RuneLite's item cache.
     private final int iconItemId;
 
-    Activity(String displayName, Category category, int minPartySize, int maxPartySize, String hardModeLabel, int iconItemId)
+    Activity(String displayName, Category category, int minPartySize, int maxPartySize, int iconItemId)
     {
         this.displayName = displayName;
         this.category = category;
         this.minPartySize = minPartySize;
         this.maxPartySize = maxPartySize;
-        this.hardModeLabel = hardModeLabel;
         this.iconItemId = iconItemId;
     }
 
@@ -99,7 +98,7 @@ public enum Activity
 
     public boolean hasHardMode()
     {
-        return hardModeLabel != null && !usesInvocation();
+        return this == TOB || this == COX;
     }
 
     public boolean hasRoles()
@@ -117,10 +116,17 @@ public enum Activity
             case COX: case TOA: preferred = 3; break;
             case BA: preferred = 5; break;
             case YAMA: case ROYAL_TITANS: preferred = 2; break;
+            case CLAN_MASS: preferred = 20; break;
             default: preferred = 4; break;
         }
-        int min = Math.max(Party.MIN_CAPACITY, minPartySize);
+        int min = minSize();
         return Math.max(min, Math.min(Math.max(min, maxPartySize), preferred));
+    }
+
+    // The smallest party this can be posted for (never below two).
+    public int minSize()
+    {
+        return Math.max(Party.MIN_CAPACITY, minPartySize);
     }
 
     // True when a kill count exists a host can set a minimum for.
@@ -146,6 +152,7 @@ public enum Activity
             case VOLCANIC_MINE: return "VM";
             case CASTLE_WARS: return "CW";
             case WINTERTODT: return "WT";
+            case FRACTURED_ARCHIVE: return "TFA";
             default: return displayName;
         }
     }
@@ -159,7 +166,7 @@ public enum Activity
         }
         if (hardMode && hasHardMode())
         {
-            return this == TOB ? "HMT" : this == COX ? "CoX CM" : shortName() + " " + hardModeLabel;
+            return this == TOB ? "HMT" : "CoX CM";
         }
         return shortName();
     }
@@ -224,6 +231,8 @@ public enum Activity
             case ZALCANO: return Collections.singletonList("Zalcano");
             case GOTR: return Collections.singletonList("Guardians of the Rift");
             case WINTERTODT: return Collections.singletonList("Wintertodt");
+            // New raid: not on RuneLite's hiscores yet; the chat-command key is a best guess.
+            case FRACTURED_ARCHIVE: return Arrays.asList("The Fractured Archive", "Fractured Archive");
             default: return Collections.emptyList();
         }
     }

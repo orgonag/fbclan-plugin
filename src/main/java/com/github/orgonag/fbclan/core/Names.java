@@ -21,6 +21,7 @@ public final class Names
         return name == null ? "" : Text.removeTags(name).trim();
     }
 
+    // Case/whitespace-insensitive key for player and item names.
     public static String normalize(String name)
     {
         return name == null ? "" : name.replace('\u00A0', ' ').trim().toLowerCase(Locale.ROOT);
@@ -44,11 +45,5 @@ public final class Names
             return null;
         }
         return cleaned.length() > maxLength ? cleaned.substring(0, maxLength).trim() : cleaned;
-    }
-
-    // Case/whitespace-insensitive item-name key (notable list matching).
-    public static String itemKey(String itemName)
-    {
-        return itemName == null ? "" : itemName.trim().toLowerCase(Locale.ROOT);
     }
 }

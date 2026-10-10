@@ -22,7 +22,6 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
-import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.ChatMessage;
@@ -56,7 +55,6 @@ import net.runelite.http.api.loottracker.LootRecordType;
  * the player leaves the client until the WOM check passes; each upload
  * can be switched off individually. See {@link FinalBossConfig}.
  */
-@Slf4j
 @PluginDescriptor(
     name = "Final Boss",
     description = "Clan tools for Final Boss — announcements, drop log, LFG, and PB leaderboards",
@@ -89,8 +87,6 @@ public class FinalBossPlugin extends Plugin
     private NavigationButton navButton;
     private BoardInfoBox boardInfoBox;
     private ScheduledFuture<?> dropRefresh;
-    // CA icon tiers loaded this client session.
-    private volatile boolean badgesLoaded;
 
     @Provides
     FinalBossConfig provideConfig(ConfigManager configManager)
@@ -111,10 +107,9 @@ public class FinalBossPlugin extends Plugin
         clan.setListener(this::onStatus);
         // Once per client session: the welcome line and the CA icon list.
         content.resetSession();
-        badgesLoaded = false;
+        badges.reset();
 
         // Startup fetches, all off the client thread.
-        executor.submit(dropRates::load);
         executor.submit(this::loadContent);
         // Warms the cache and populates the tab before it's first opened.
         announcementsTab.refresh();
@@ -161,6 +156,8 @@ public class FinalBossPlugin extends Plugin
             return;
         }
         startPolling();
+        // Members only: the ~700 KB drop-rate table (once per client session).
+        executor.submit(dropRates::load);
         // Retries whatever the startup fetch missed.
         executor.submit(this::loadContent);
         // World-type and varp reads belong on the client thread.
@@ -180,19 +177,14 @@ public class FinalBossPlugin extends Plugin
     private void startPolling()
     {
         parties.start();
-        // The feed refreshes whether or not this player uploads their own drops.
+        // The feed only refreshes while its tab is on screen (opening the tab
+        // or the panel refreshes it at once), whether or not this player
+        // uploads their own drops.
         if (dropRefresh == null)
         {
-            dropRefresh = executor.scheduleAtFixedRate(() -> {
-                try
-                {
-                    dropLogTab.refresh();
-                }
-                catch (Exception e)
-                {
-                    log.warn("Drop refresh error", e);
-                }
-            }, 60, 60, TimeUnit.SECONDS);
+            dropRefresh = executor.scheduleAtFixedRate(() -> SwingUtilities.invokeLater(() -> {
+                if (dropLogTab.isShowing()) dropLogTab.refresh();
+            }), 60, 60, TimeUnit.SECONDS);
         }
         loadBadges();
     }
@@ -200,12 +192,7 @@ public class FinalBossPlugin extends Plugin
     // CA icon tiers: once per client session, and only while the icons are on.
     private void loadBadges()
     {
-        if (config.enableChatBadges() && !badgesLoaded)
-        {
-            executor.submit(() -> {
-                badgesLoaded = badges.refresh();
-            });
-        }
+        if (config.enableChatBadges()) executor.submit(badges::loadOnce);
     }
 
     private void stopPolling()
@@ -306,7 +293,9 @@ public class FinalBossPlugin extends Plugin
     @Subscribe
     public void onNpcLootReceived(NpcLootReceived event)
     {
-        if (event.getNpc().getName() != null) drops.onLoot(event.getNpc().getName(), event.getItems(), false);
+        // Chest-loot bosses are taken from the Loot Tracker's event below, never twice.
+        String name = event.getNpc().getName();
+        if (name != null && !DropRules.CHEST_LOOT_NPCS.contains(name)) drops.onLoot(name, event.getItems());
     }
 
     // Loot with no NPC kill behind it: raid chests, Barrows, and the few
@@ -319,7 +308,7 @@ public class FinalBossPlugin extends Plugin
         boolean chestNpc = event.getType() == LootRecordType.NPC && DropRules.CHEST_LOOT_NPCS.contains(event.getName());
         if (event.getType() == LootRecordType.EVENT || chestNpc)
         {
-            drops.onLoot(event.getName(), event.getItems(), true);
+            drops.onLoot(event.getName(), event.getItems());
         }
     }
 

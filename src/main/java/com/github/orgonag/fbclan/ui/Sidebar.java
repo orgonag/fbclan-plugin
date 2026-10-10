@@ -51,6 +51,8 @@ public class Sidebar extends PluginPanel
     private final PartiesTab parties;
     private final LeaderboardsTab leaderboards;
     private String activeTab = "Drop Log";
+    // EDT. True while the member panel (not the locked card) is showing.
+    private boolean unlocked;
 
     @Inject
     public Sidebar(Clan clan, AnnouncementsTab announcements, DropLogTab dropLog,
@@ -136,6 +138,13 @@ public class Sidebar extends PluginPanel
         tabPanels.get(activeTab).refresh();
     }
 
+    // The panel was opened: tabs don't refresh while it is closed.
+    @Override
+    public void onActivate()
+    {
+        if (unlocked) refreshActiveTab();
+    }
+
     // EDT. Logout, profile change, shutdown: close the pop-out windows.
     public void closeWindows()
     {
@@ -197,6 +206,7 @@ public class Sidebar extends PluginPanel
         status.setText("Log in on your clan character to open the clan panel.");
         retry.setVisible(false);
         cards.show(root, LOCKED);
+        unlocked = false;
     }
 
     // EDT.
@@ -206,6 +216,7 @@ public class Sidebar extends PluginPanel
         {
             case MEMBER:
                 cards.show(root, MAIN);
+                unlocked = true;
                 return;
             case NOT_MEMBER:
                 status.setText("You're not a member of Final Boss.\n\nVisit wiseoldman.net/groups/" + Clan.WOM_GROUP_ID + " for more info.\n\nJust joined? Retry checks again.");
@@ -221,5 +232,6 @@ public class Sidebar extends PluginPanel
                 break;
         }
         cards.show(root, LOCKED);
+        unlocked = false;
     }
 }

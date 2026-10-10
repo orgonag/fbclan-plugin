@@ -3,6 +3,7 @@ package com.github.orgonag.fbclan.ui;
 import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.core.Clan;
 import com.github.orgonag.fbclan.core.Names;
+import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.lfg.Activity;
 import com.github.orgonag.fbclan.lfg.FormedParty;
 import com.github.orgonag.fbclan.lfg.Killcounts;
@@ -19,7 +20,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import java.util.function.Consumer;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -41,7 +42,6 @@ public class PartiesTab extends Tab
 {
     private static final Color OFFLINE = new Color(0xBF3F3F);
     // Scheduled posts a host may keep at once (the server enforces it too).
-    private static final int MAX_SCHEDULED = 7;
     private static final long ERROR_SHOWN_MS = 30_000;
 
     private final Clan clan;
@@ -56,8 +56,11 @@ public class PartiesTab extends Tab
     private long actionErrorAt;
     private String applyingId;
     private Object filter;
-    private boolean hideFull;
+    // On by default: a full party has nothing to apply to.
+    private boolean hideFull = true;
     private boolean showFormed = true;
+    // The list missed a redraw while the tab was hidden.
+    private boolean stale = true;
     private final ApplyForm applyForm;
     private final AddMemberForm addMember;
 
@@ -107,6 +110,7 @@ public class PartiesTab extends Tab
     {
         // Reopening the tab clears the last action's leftover error.
         actionError = null;
+        if (stale) render();
         executor.submit(board::refresh);
     }
 
@@ -115,13 +119,11 @@ public class PartiesTab extends Tab
     // half-filled form); closeWizard() handles logout and shutdown.
     public void reset()
     {
-        SwingUtilities.invokeLater(() -> {
-            applyingId = null;
-            applyForm.reset();
-            addMember.reset();
-            actionError = null;
-            render();
-        });
+        applyingId = null;
+        applyForm.reset();
+        addMember.reset();
+        actionError = null;
+        render();
     }
 
     public void closeWizard()
@@ -158,7 +160,7 @@ public class PartiesTab extends Tab
         Party asap = board.mineAsap();
         boolean asapTaken = asap != null && (editing == null || !asap.getId().equals(editing.getId()));
         int scheduled = board.mineScheduled() - (editing != null && editing.isScheduled() ? 1 : 0);
-        return new WhenPicker.Limits(asapTaken, scheduled >= MAX_SCHEDULED);
+        return new WhenPicker.Limits(asapTaken, scheduled >= Party.MAX_SCHEDULED);
     }
 
     private Party find(String id)
@@ -189,7 +191,7 @@ public class PartiesTab extends Tab
                 return;
             }
             Party party = existing == null ? draft : draft.toBuilder().id(existing.getId()).version(existing.getVersion()).build();
-            board.run(() -> api.save(party), "Couldn't save your party. Refresh and try again.", message -> SwingUtilities.invokeLater(() -> {
+            board.run(s -> api.save(s, party), "Couldn't save your party. Refresh and try again.", message -> SwingUtilities.invokeLater(() -> {
                 if (message == null) w.close();
                 else w.showError(message);
                 render();
@@ -214,14 +216,19 @@ public class PartiesTab extends Tab
         showError(actionError != null ? actionError : board.refreshError());
         note.setText(board.online().isEmpty() ? "" : board.online().size() + " in clan chat");
         // Host stays available until both the ASAP slot and all scheduled slots are used.
-        boolean full = board.mineAsap() != null && board.mineScheduled() >= MAX_SCHEDULED;
+        boolean full = board.mineAsap() != null && board.mineScheduled() >= Party.MAX_SCHEDULED;
         hostButton.setEnabled(!board.isBusy() && clan.canUpload() && config.enableLfg() && !full);
-        hostButton.setToolTipText(full ? "Post limit reached (1 ASAP + " + MAX_SCHEDULED + " scheduled)" : null);
+        hostButton.setToolTipText(full ? "Post limit reached (1 ASAP + " + Party.MAX_SCHEDULED + " scheduled)" : null);
         if (wizard != null && wizard.isOpen())
         {
             wizard.setBusy(board.isBusy());
             wizard.setWorld(board.world());
         }
+        // Hidden (another tab, or the panel closed): the board still polls
+        // for notifications, but the list and its kill-count lookups wait
+        // until the tab is shown again.
+        stale = !isShowing();
+        if (stale) return;
 
         List<Party> others = new ArrayList<>();
         for (Party p : board.parties())
@@ -307,10 +314,8 @@ public class PartiesTab extends Tab
         if (mine != null)
         {
             String state = mine.isAccepted() ? "Accepted" : mine.isPending() ? "Pending" : "Declined";
-            Btn leave = Theme.button(mine.isAccepted() ? "Leave party" : mine.isPending() ? "Withdraw" : "Dismiss", Btn.Kind.GHOST, () -> {
-                board.expectSelfLeave(p.getId());
-                run(() -> api.withdraw(p.getId(), rsn), "Couldn't withdraw — try again.");
-            });
+            Btn leave = Theme.button(mine.isAccepted() ? "Leave party" : mine.isPending() ? "Withdraw" : "Dismiss", Btn.Kind.GHOST,
+                () -> run(s -> board.leave(s, p.getId()), "Couldn't withdraw — try again."));
             card.add(Theme.row(null, Theme.bold(state, mine.isAccepted() ? Theme.GREEN : Theme.SUB), leave));
         }
         else if (p.getId().equals(applyingId))
@@ -357,7 +362,7 @@ public class PartiesTab extends Tab
         Btn edit = Theme.button("Edit", Btn.Kind.GHOST, () -> openWizard(p));
         edit.setEnabled(!board.isBusy() && clan.canUpload() && config.enableLfg());
         card.add(LfgUi.pair(edit,
-            Theme.button("Cancel post", Btn.Kind.DANGER, () -> run(() -> api.disband(p.getId()), "Couldn't cancel — try again."))));
+            Theme.button("Cancel post", Btn.Kind.DANGER, () -> run(s -> api.disband(s, p.getId()), "Couldn't cancel — try again."))));
         return card;
     }
 
@@ -371,7 +376,7 @@ public class PartiesTab extends Tab
         card.add(Theme.wrap(f.roster(), f.includes(rsn) ? Theme.TEXT : Theme.SUB));
         if (f.isHostedBy(rsn))
         {
-            Btn remove = Theme.button("Remove", Btn.Kind.GHOST, () -> run(() -> api.deleteFormed(f.getId()), "Couldn't remove — try again."));
+            Btn remove = Theme.button("Remove", Btn.Kind.GHOST, () -> run(s -> api.deleteFormed(s, f.getId()), "Couldn't remove — try again."));
             remove.setToolTipText("Hide this from the formed list now (the record is kept)");
             card.add(remove);
         }
@@ -422,7 +427,7 @@ public class PartiesTab extends Tab
         if (pending)
         {
             Btn accept = LfgUi.small(Theme.button("Accept", Btn.Kind.PRIMARY,
-                () -> run(() -> api.setStatus(p.getId(), a.getRsn(), Party.Status.ACCEPTED), "Couldn't accept — try again.")));
+                () -> run(s -> api.setStatus(s, p.getId(), a.getRsn(), Party.Status.ACCEPTED), "Couldn't accept — try again.")));
             if (p.isFull())
             {
                 accept.setEnabled(false);
@@ -430,12 +435,12 @@ public class PartiesTab extends Tab
             }
             buttons.add(accept);
             buttons.add(LfgUi.small(Theme.button("Decline", Btn.Kind.GHOST,
-                () -> run(() -> api.setStatus(p.getId(), a.getRsn(), Party.Status.DECLINED), "Couldn't decline — try again."))));
+                () -> run(s -> api.setStatus(s, p.getId(), a.getRsn(), Party.Status.DECLINED), "Couldn't decline — try again."))));
         }
         else
         {
             buttons.add(LfgUi.small(Theme.button("Kick", Btn.Kind.DANGER,
-                () -> run(() -> api.withdraw(p.getId(), a.getRsn()), "Couldn't kick — try again."))));
+                () -> run(s -> board.kick(s, p.getId(), a.getRsn()), "Couldn't kick — try again."))));
         }
         return Theme.row(null, who, buttons);
     }
@@ -467,7 +472,7 @@ public class PartiesTab extends Tab
 
     // ------------------------------------------------------------ helpers
 
-    private void run(BooleanSupplier action, String failure)
+    private void run(Function<Session, String> action, String failure)
     {
         board.run(action, failure, message -> SwingUtilities.invokeLater(() -> setActionError(message)));
     }

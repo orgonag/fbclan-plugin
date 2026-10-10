@@ -47,7 +47,6 @@ class HostWizard
     private static final String[] STEPS = {"Activity", "Requirements", "Details"};
     private static final List<String> RUN_TYPES = Arrays.asList("Normal", "Learner", "Teacher");
     private final Killcounts killcounts;
-    private final boolean editing;
     private final String editingId;
     private final WhenPicker when;
     private final Function<Party, JComponent> preview;
@@ -84,7 +83,6 @@ class HostWizard
     HostWizard(Window owner, Killcounts killcounts, Party editing, WhenPicker.Limits limits, Function<Party, JComponent> preview, Consumer<HostWizard> onSubmit)
     {
         this.killcounts = killcounts;
-        this.editing = editing != null;
         this.editingId = editing == null ? null : editing.getId();
         this.preview = preview;
         this.onSubmit = onSubmit;
@@ -130,7 +128,7 @@ class HostWizard
         root.add(scroll, BorderLayout.CENTER);
         root.add(footer, BorderLayout.SOUTH);
 
-        dialog = new JDialog(owner, this.editing ? "Final Boss · Edit your party" : "Final Boss · Host a party");
+        dialog = new JDialog(owner, editingId != null ? "Final Boss · Edit your party" : "Final Boss · Host a party");
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.getRootPane().registerKeyboardAction(e -> close(), KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
         dialog.setContentPane(root);
@@ -182,6 +180,7 @@ class HostWizard
     {
         this.world = world;
         worldLabel.setText(world > 0 ? "W" + world + " (your current world)" : "Unknown — log in to a world");
+        when.summarize();
     }
 
     // The party the form describes; id/created_at are server-owned.
@@ -274,9 +273,9 @@ class HostWizard
         back.setVisible(step > 0);
         details.setVisible(step == 0);
         quick.setVisible(step == 0);
-        quick.setText(editing ? "Save now" : "Post now");
+        quick.setText(editingId != null ? "Save now" : "Post now");
         next.setVisible(step > 0);
-        next.setText(step < STEPS.length - 1 ? "Next" : editing ? "Save changes" : "Post party");
+        next.setText(step < STEPS.length - 1 ? "Next" : editingId != null ? "Save changes" : "Post party");
         rebuild();
         dialog.repaint();
     }
@@ -313,8 +312,7 @@ class HostWizard
         stepBody.add(activityBox);
         if (activity.hasHardMode())
         {
-            hardModeBox.setText(activity == Activity.TOB ? "Hard mode (HMT)"
-                : activity == Activity.COX ? "Challenge mode (CM)" : activity.getHardModeLabel());
+            hardModeBox.setText(activity == Activity.TOB ? "Hard mode (HMT)" : "Challenge mode (CM)");
             stepBody.add(hardModeBox);
         }
         else
@@ -472,7 +470,7 @@ class HostWizard
     // Party size limits follow the activity; returns the clamped size.
     private int clampSize(Activity activity)
     {
-        int min = Math.max(Party.MIN_CAPACITY, activity.getMinPartySize());
+        int min = activity.minSize();
         int max = Math.max(min, activity.getMaxPartySize());
         SpinnerNumberModel model = (SpinnerNumberModel) sizeSpinner.getModel();
         int size = Math.max(min, Math.min(max, (Integer) sizeSpinner.getValue()));

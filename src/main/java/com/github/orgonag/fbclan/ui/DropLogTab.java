@@ -68,7 +68,7 @@ public class DropLogTab extends Tab
     @Override
     public void refresh()
     {
-        load(() -> parse(drops.recent(50)), parsed -> {
+        load(() -> parse(drops.recent()), parsed -> {
             rows = parsed;
             render();
         });
@@ -194,15 +194,14 @@ public class DropLogTab extends Tab
             quantity = Supabase.intOr(row, "quantity", 1);
             value = Supabase.longOr(row, "ge_value", 0);
             rarity = Supabase.doubleOr(row, "rarity", 0);
-            // When it dropped; rows from before that was recorded only have the upload time.
-            at = Supabase.instant(row, "occurred_at", Supabase.instant(row, "created_at", Instant.now()));
+            at = Supabase.instant(row, "occurred_at", Instant.now());
             // Drop rows are client-reported, so a screenshot link is only
             // honoured when it points into the plugin's own public bucket.
             String url = Supabase.str(row, "screenshot_url");
             screenshot = DropLogger.isScreenshot(url) ? url : "";
         }
 
-        // "Item (1,234,567 GP) [1/512]" — the old one-line form.
+        // "Item (1,234,567 GP) [1/512]", for the row tooltip.
         String summary()
         {
             return name + (value > 0 ? " (" + DropRules.formatGp(value) + " GP)" : "")

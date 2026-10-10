@@ -75,6 +75,9 @@ public class LeaderboardsTab extends Tab
     private final Dashboard dashboard;
     private final Clan clan;
     private final BoardWindow window;
+    private static final long FRESH_MS = 15 * 60_000L;
+    // When both sources last loaded; EDT.
+    private long loadedAt;
 
     @Inject
     public LeaderboardsTab(Leaderboards pbs, Dashboard dashboard, Clan clan, ScheduledExecutorService executor)
@@ -90,8 +93,15 @@ public class LeaderboardsTab extends Tab
     @Override
     public void refresh()
     {
+        // The boards change slowly: refetch at most every 15 minutes.
+        if (System.currentTimeMillis() - loadedAt < FRESH_MS)
+        {
+            render();
+            return;
+        }
         // Render whatever did update, even when one source failed.
         load(() -> pbs.refresh() & dashboard.refresh(), ok -> {
+            if (ok) loadedAt = System.currentTimeMillis();
             render();
             if (!ok) showError("Refresh failed. Previous data may be out of date.");
         });
@@ -160,7 +170,8 @@ public class LeaderboardsTab extends Tab
         }
         if (index == 4)
         {
-            return pbs.recent().isEmpty() ? null : "Newest " + Theme.timeAgo(pbs.recent().get(0).getAchievedAt());
+            List<Entry> recent = pbs.recent();
+            return recent.isEmpty() ? null : "Newest " + Theme.timeAgo(recent.get(0).getAchievedAt());
         }
         Row mine = mine(b);
         return mine == null ? null : "You: #" + mine.rank + " · " + mine.value;

@@ -23,7 +23,6 @@ public class FormedParty
     {
         String rsn;
         Role role;
-        boolean addedByHost;
     }
 
     String id;
@@ -89,7 +88,7 @@ public class FormedParty
                 String rsn = Names.untagged(Supabase.str(o, "rsn"));
                 if (!rsn.isEmpty())
                 {
-                    members.add(new Member(rsn, Role.fromKey(Supabase.str(o, "role")), Supabase.bool(o, "added_by_host")));
+                    members.add(new Member(rsn, Role.fromKey(Supabase.str(o, "role"))));
                 }
             }
         }

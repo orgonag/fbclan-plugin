@@ -4,41 +4,36 @@ import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.core.Clan;
 import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Session;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
-import net.runelite.api.GameState;
 import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.clan.ClanChannelMember;
-import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 
 /**
  * The live state behind the LFG tab: the 30-second poll, the cached
- * snapshot, every write, and the diff between consecutive polls that
- * becomes chat/desktop notifications. The tab only renders what this holds.
+ * snapshot and every write. Each fetched snapshot goes to the
+ * {@link PartyNotifier}; the tab only renders what this holds. All poll
+ * and write work runs on RuneLite's single executor thread, one job at a
+ * time.
  */
 @Slf4j
 @Singleton
@@ -56,7 +51,7 @@ public class PartyBoard
 
     public interface Listener
     {
-        // Executor thread; the tab hops to the EDT.
+        // Executor or client thread; the tab hops to the EDT.
         void onChanged();
     }
 
@@ -65,7 +60,7 @@ public class PartyBoard
     private final FinalBossConfig config;
     private final Clan clan;
     private final PartyApi api;
-    private final Notifier notifier;
+    private final PartyNotifier notifications;
     private final ScheduledExecutorService executor;
 
     private volatile List<Party> parties = Collections.emptyList();
@@ -77,28 +72,18 @@ public class PartyBoard
     private volatile long epoch;
     private volatile String refreshError;
     private ScheduledFuture<?> poll;
-    private final AtomicBoolean refreshing = new AtomicBoolean();
     private final AtomicBoolean writing = new AtomicBoolean();
-
-    // Diff state; guarded by `this`.
-    private Map<String, Party> previous = Collections.emptyMap();
-    private Set<String> previousFormed = Collections.emptySet();
-    private boolean primed;
-    private final Set<String> selfLeft = new HashSet<>();
-    // Scheduled parties already announced as starting soon / unfilled.
-    private final Set<String> startingSoon = new HashSet<>();
-    private final Set<String> unfilled = new HashSet<>();
 
     @Inject
     public PartyBoard(Client client, ClientThread clientThread, FinalBossConfig config, Clan clan, PartyApi api,
-                      Notifier notifier, ScheduledExecutorService executor)
+                      PartyNotifier notifications, ScheduledExecutorService executor)
     {
         this.client = client;
         this.clientThread = clientThread;
         this.config = config;
         this.clan = clan;
         this.api = api;
-        this.notifier = notifier;
+        this.notifications = notifications;
         this.executor = executor;
     }
 
@@ -216,71 +201,50 @@ public class PartyBoard
         online = Collections.emptySet();
         world = 0;
         refreshError = null;
-        api.publish(PartyApi.EMPTY);
         if (poll != null)
         {
             poll.cancel(true);
             poll = null;
         }
-        previous = Collections.emptyMap();
-        previousFormed = Collections.emptySet();
-        primed = false;
-        selfLeft.clear();
-        startingSoon.clear();
-        unfilled.clear();
+        notifications.reset();
         parties = Collections.emptyList();
         formed = Collections.emptyList();
-    }
-
-    // Called before the local player leaves/cancels, so the next diff
-    // doesn't announce their own action back at them.
-    public synchronized void expectSelfLeave(String partyId)
-    {
-        if (partyId != null) selfLeft.add(partyId);
     }
 
     // ------------------------------------------------------------ poll and writes
 
     // Executor. A failed fetch leaves the snapshot alone: an outage must
-    // never read as "every party was cancelled".
+    // never read as "every party was disbanded".
     public void refresh()
     {
         Session session = clan.snapshot();
         long capturedEpoch = epoch;
-        if (!enabled || !config.enableLfg() || !clan.current(session) || !refreshing.compareAndSet(false, true)) return;
-        try
+        if (!enabled || !config.enableLfg() || !clan.current(session)) return;
+        clientThread.invokeLater(() -> { if (enabled && capturedEpoch == epoch && clan.current(session)) readClient(); });
+        PartyApi.Snapshot fetched = api.fetch();
+        // Under the lock: stop() must not land between the check and the commit.
+        synchronized (this)
         {
-            clientThread.invokeLater(() -> { if (enabled && capturedEpoch == epoch && clan.current(session)) readClient(); });
-            PartyApi.Snapshot fetched = api.fetch();
+            if (!enabled || capturedEpoch != epoch || !clan.current(session)) return;
             if (fetched == null)
             {
-                if (enabled && capturedEpoch == epoch && clan.current(session))
-                {
-                    refreshError = "Board unavailable. Showing the last loaded parties.";
-                    listener.onChanged();
-                }
-                return;
+                refreshError = "Board unavailable. Showing the last loaded parties.";
             }
-            synchronized (this)
+            else
             {
-                if (!enabled || capturedEpoch != epoch || !clan.current(session)) return;
                 refreshError = null;
-                api.publish(fetched);
                 parties = fetched.getParties();
                 formed = fetched.getFormed();
-                notify(parties, formed, session.getRsn());
+                notifications.onSnapshot(parties, formed, session.getRsn(), online);
             }
-            if (enabled && capturedEpoch == epoch && clan.current(session)) listener.onChanged();
         }
-        finally
-        {
-            refreshing.set(false);
-        }
+        listener.onChanged();
     }
 
-    // One write at a time, on the executor. `onError` gets null on success,
-    // else the server's reason ("Party is full") or `failure`.
-    public void run(BooleanSupplier action, String failure, Consumer<String> onError)
+    // One write at a time, on the executor. The action returns null when
+    // done, else the server's reason ("Party is full"), or "" when there
+    // is no readable reason; `onError` then gets the reason or `failure`.
+    public void run(Function<Session, String> action, String failure, Consumer<String> onError)
     {
         Session session = clan.snapshot();
         long capturedEpoch = epoch;
@@ -291,12 +255,10 @@ public class PartyBoard
         }
         listener.onChanged();
         executor.submit(() -> {
-            boolean ok = false;
-            String reason = null;
+            String outcome = "";
             try
             {
-                if (enabled && capturedEpoch == epoch && config.enableLfg()) ok = api.inSession(session, action);
-                reason = api.refusal();
+                if (enabled && capturedEpoch == epoch && config.enableLfg() && clan.current(session)) outcome = action.apply(session);
             }
             catch (RuntimeException e)
             {
@@ -308,11 +270,26 @@ public class PartyBoard
             }
             if (enabled && capturedEpoch == epoch && clan.current(session))
             {
-                onError.accept(ok ? null : reason != null ? reason : failure);
+                onError.accept(outcome == null ? null : outcome.isEmpty() ? failure : outcome);
                 refresh();
-                listener.onChanged();
             }
         });
+    }
+
+    // Inside run(): the player leaving (or withdrawing). Recorded first so
+    // the snapshot that follows the write doesn't announce it back to them
+    // as a kick (kept even if the reply is lost: it may still have landed).
+    public String leave(Session session, String partyId)
+    {
+        notifications.expectSelfLeave(partyId);
+        return api.leave(session, partyId);
+    }
+
+    // Inside run(): the host kicking someone, so it isn't reported as them leaving.
+    public String kick(Session session, String partyId, String rsn)
+    {
+        notifications.expectKick(partyId, rsn);
+        return api.kick(session, partyId, rsn);
     }
 
     // Client thread: who is in the clan channel, and the current world.
@@ -331,195 +308,5 @@ public class PartyBoard
         online = Collections.unmodifiableSet(names);
         world = client.getWorld();
         if (changed) listener.onChanged();
-    }
-
-    // ------------------------------------------------------------ notifications
-
-    private void notify(List<Party> now, List<FormedParty> formedNow, String rsn)
-    {
-        if (rsn == null) return;
-        Map<String, Party> nowById = new HashMap<>();
-        for (Party p : now)
-        {
-            nowById.put(p.getId(), p);
-        }
-        Set<String> formedIds = new HashSet<>();
-        Map<String, FormedParty> formedFrom = new HashMap<>();
-        for (FormedParty f : formedNow)
-        {
-            formedIds.add(f.getId());
-            if (f.getPartyId() != null) formedFrom.put(f.getPartyId(), f);
-        }
-        List<String> messages = new ArrayList<>();
-        List<String> announcements = new ArrayList<>();
-        synchronized (this)
-        {
-            if (primed)
-            {
-                diff(previous, nowById, rsn, formedFrom, messages);
-                newPosts(previous, now, announcements);
-                reminders(now, rsn, messages);
-                for (FormedParty f : formedNow)
-                {
-                    if (!previousFormed.contains(f.getId()) && f.includes(rsn))
-                    {
-                        messages.add((f.isHostedBy(rsn) ? "Your" : f.getHostRsn() + "'s") + " " + f.title()
-                            + " party has formed" + world(f.getWorld()) + ": " + f.roster() + ".");
-                    }
-                }
-            }
-            else
-            {
-                // First poll after login: remember what already qualifies so
-                // reminders aren't replayed on every login.
-                reminders(now, rsn, new ArrayList<>());
-            }
-            previous = nowById;
-            previousFormed = formedIds;
-            primed = true;
-        }
-        messages.forEach(this::deliver);
-        // A sub-option of chat notifications: off there means no LFG chat lines at all.
-        if (config.lfgPartyNotifications() && config.lfgNewPostAnnouncements()) announcements.forEach(this::chat);
-    }
-
-    // Posts that appeared since the last poll, the player's own included
-    // so everyone sees the same line: "Dopezt created a party of 4 for
-    // ToB (ASAP)." Posts made while this player was offline are on the
-    // board already and aren't replayed.
-    private static void newPosts(Map<String, Party> prev, List<Party> now, List<String> out)
-    {
-        for (Party p : now)
-        {
-            if (prev.containsKey(p.getId())) continue;
-            out.add(p.getHostRsn() + " created a party of " + p.getCapacity() + " for " + p.title()
-                + " (" + when(p.getScheduledFor()) + ").");
-        }
-    }
-
-    private void diff(Map<String, Party> prev, Map<String, Party> now, String rsn, Map<String, FormedParty> formedFrom, List<String> out)
-    {
-        for (Party p : now.values())
-        {
-            Party before = prev.get(p.getId());
-            if (p.isHostedBy(rsn))
-            {
-                for (Party.Applicant a : p.pending())
-                {
-                    // New, or back after being declined.
-                    Party.Applicant was = before == null ? null : before.applicantFor(a.getRsn());
-                    if (was == null || was.getStatus() == Party.Status.DECLINED)
-                    {
-                        out.add(a.getRsn() + " applied to your " + p.title() + " party"
-                            + (a.getRole() == null ? "" : " as " + a.getRole().getDisplayName())
-                            + (a.isLearner() ? " (learner)" : "") + ".");
-                    }
-                }
-                continue;
-            }
-            Party.Applicant mine = p.applicantFor(rsn);
-            Party.Applicant mineBefore = before == null ? null : before.applicantFor(rsn);
-            if (mine != null && mine.getStatus() != Party.Status.DECLINED && before != null
-                && !Objects.equals(before.getScheduledFor(), p.getScheduledFor()))
-            {
-                out.add(p.getHostRsn() + " moved their " + p.title() + " party to " + when(p.getScheduledFor()) + ".");
-            }
-            if (mine != null && mine.isAccepted() && (mineBefore == null || !mineBefore.isAccepted()))
-            {
-                out.add((mine.isAddedByHost() ? p.getHostRsn() + " added you to their " : "You've been accepted to " + p.getHostRsn() + "'s ")
-                    + p.title() + " party" + world(p.getWorld()) + ".");
-            }
-            else if (mine != null && mineBefore != null && mine.getStatus() == Party.Status.DECLINED && mineBefore.getStatus() != Party.Status.DECLINED)
-            {
-                out.add(p.getHostRsn() + " declined your " + p.title() + " application.");
-            }
-            // Only a seated member is "removed"; a pending application also
-            // disappears quietly when the player joins another ASAP party.
-            else if (mine == null && mineBefore != null && !selfLeft.remove(p.getId()) && mineBefore.isAccepted())
-            {
-                out.add("You were removed from " + p.getHostRsn() + "'s " + p.title() + " party.");
-            }
-        }
-        // Parties that vanished. Members of one that formed hear it from the
-        // formed list; everyone else involved is told here.
-        for (Party before : prev.values())
-        {
-            if (now.containsKey(before.getId())) continue;
-            FormedParty formedAs = formedFrom.get(before.getId());
-            boolean formed = formedAs != null;
-            // Two minutes of slack: the sweep fires at the server's expiry and
-            // this poll can land a few seconds later on a slow PC clock.
-            boolean expired = !Instant.now().plus(Duration.ofMinutes(2)).isBefore(before.expiresAt());
-            if (before.isHostedBy(rsn))
-            {
-                if (!formed && expired) out.add("Your " + before.title() + " post expired without filling.");
-                continue;
-            }
-            Party.Applicant mineBefore = before.applicantFor(rsn);
-            if (mineBefore == null || mineBefore.getStatus() == Party.Status.DECLINED || selfLeft.remove(before.getId())) continue;
-            if (!formed)
-            {
-                out.add(before.getHostRsn() + "'s " + before.title() + " party " + (expired ? "expired." : "was cancelled."));
-            }
-            else if (!formedAs.includes(rsn))
-            {
-                out.add(before.getHostRsn() + "'s " + before.title() + " party filled without you.");
-            }
-        }
-        selfLeft.clear();
-    }
-
-    // Scheduled parties: "starts in N min" to the host and accepted
-    // members, and one "didn't fill" to the host once the time passes.
-    private void reminders(List<Party> now, String rsn, List<String> out)
-    {
-        Instant t = Instant.now();
-        for (Party p : now)
-        {
-            if (!p.isScheduled()) continue;
-            boolean host = p.isHostedBy(rsn);
-            Party.Applicant mine = p.applicantFor(rsn);
-            boolean in = host || (mine != null && mine.isAccepted());
-            long minutes = Duration.between(t, p.getScheduledFor()).toMinutes();
-            // Keyed by the start time too, so a moved party reminds again.
-            String key = p.getId() + "@" + p.getScheduledFor();
-            if (in && minutes >= 0 && minutes <= 15 && startingSoon.add(key))
-            {
-                out.add((host ? "Your " : p.getHostRsn() + "'s ") + p.title() + " party starts in " + Math.max(1, minutes) + " min"
-                    + world(p.getWorld()) + ".");
-            }
-            if (host && t.isAfter(p.getScheduledFor()) && !p.isFull() && unfilled.add(key))
-            {
-                out.add("Your " + p.title() + " party didn't fill by its start time. Edit the time or cancel it.");
-            }
-        }
-    }
-
-    private static String world(Integer world)
-    {
-        return world == null ? "" : " (World " + world + ")";
-    }
-
-    private void deliver(String message)
-    {
-        if (config.lfgPartyNotifications()) chat(message);
-        if (config.lfgDesktopNotifications())
-        {
-            notifier.notify("Final Boss LFG: " + message);
-        }
-    }
-
-    private void chat(String message)
-    {
-        Session session = clan.snapshot();
-        long capturedEpoch = epoch;
-        clientThread.invokeLater(() -> {
-            if (!enabled || capturedEpoch != epoch || !clan.current(session)) return true;
-            GameState state = client.getGameState();
-            // Mid-teleport or hop: hold the line until the chatbox is back.
-            if (state == GameState.LOADING || state == GameState.HOPPING || state == GameState.CONNECTION_LOST) return false;
-            if (state == GameState.LOGGED_IN) client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "[LFG] " + message, null);
-            return true;
-        });
     }
 }

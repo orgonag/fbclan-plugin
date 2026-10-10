@@ -65,7 +65,7 @@ public class AnnouncementsTab extends Tab
     {
         newest = items.isEmpty() ? "" : Integer.toHexString((items.get(0).getDate() + "|" + items.get(0).getTitle() + "|" + items.get(0).getBody()).hashCode());
         if (isShowing()) markRead();
-        unreadListener.run();
+        else unreadListener.run();
         fill(() -> {
             if (items.isEmpty())
             {

@@ -22,8 +22,8 @@ import net.runelite.client.util.Text;
 /**
  * Prepends a combat-achievement slayer helmet (Tztok = Elite, Vampyric
  * = Master, Tzkal = Grandmaster) to clan members' names in chat. Tiers
- * come from the same read-only ca_leaderboard view the dashboard uses,
- * so only members who upload stats get a badge.
+ * come from the read-only member_badges view (fed by the CA points
+ * members upload), fetched once per client session.
  */
 @Singleton
 public class CaBadges
@@ -37,6 +37,7 @@ public class CaBadges
     private final ChatIconManager icons;
     private final Map<String, Integer> iconByTier = new HashMap<>();
     private volatile Map<String, String> tierByRsn = Collections.emptyMap();
+    private volatile boolean loaded;
 
     @Inject
     public CaBadges(Supabase db, ChatIconManager icons)
@@ -63,13 +64,21 @@ public class CaBadges
         return icons.registerChatIcon(image);
     }
 
-    // Executor. False when the fetch failed (the previous tiers are kept).
-    public boolean refresh()
+    // Plugin start: a re-enabled plugin fetches again.
+    public void reset()
     {
+        loaded = false;
+    }
+
+    // Executor. Fetches the tiers once per client session; a failed fetch
+    // keeps the previous tiers and is tried again next time.
+    public void loadOnce()
+    {
+        if (loaded) return;
         JsonArray rows = db.getOrNull("member_badges", "select=rsn,tier&order=rsn.asc");
         if (rows == null)
         {
-            return false;
+            return;
         }
         Map<String, String> tiers = new HashMap<>();
         for (JsonElement el : rows)
@@ -83,7 +92,7 @@ public class CaBadges
             }
         }
         tierByRsn = Collections.unmodifiableMap(tiers);
-        return true;
+        loaded = true;
     }
 
     // Client thread. Chat names carry img tags and non-breaking spaces;

@@ -1,6 +1,5 @@
 package com.github.orgonag.fbclan.ui;
 
-import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Font;
@@ -76,7 +75,6 @@ final class Btn extends JButton
         if (edge != null)
         {
             g2.setColor(edge);
-            g2.setStroke(new BasicStroke(1f));
             g2.drawRoundRect(0, 0, w, h, arc, arc);
         }
         g2.dispose();

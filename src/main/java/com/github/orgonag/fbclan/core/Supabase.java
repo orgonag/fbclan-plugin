@@ -26,13 +26,14 @@ import okhttp3.Response;
  * README "External services and privacy".
  *
  * Every call is blocking network I/O — run on the executor. Reads
- * return null on failure; writes return an {@link ApiResult}.
+ * return null on failure; RPCs return an {@link ApiResult} (or just
+ * success), uploads the public URL or null.
  */
 @Slf4j
 @Singleton
 public class Supabase
 {
-    private static final String DEFAULT_PROJECT_URL = "https://rzhtoqadvbxylwjndnlo.supabase.co";
+    public static final String PROJECT_URL = "https://rzhtoqadvbxylwjndnlo.supabase.co";
     private static final String ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6aHRvcWFkdmJ4eWx3am5kbmxvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTU5MDMsImV4cCI6MjA5MTI3MTkwM30.WzWJXS2cpvwnRVBQEroLTsu_iU0j_kkI1wSQhM8eJY0";
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
@@ -42,12 +43,6 @@ public class Supabase
     public Supabase(OkHttpClient http)
     {
         this.http = http.newBuilder().callTimeout(20, TimeUnit.SECONDS).build();
-        boolean urlSet = System.getProperty("finalboss.apiUrl") != null;
-        boolean keySet = System.getProperty("finalboss.anonKey") != null;
-        if (urlSet != keySet) throw new IllegalArgumentException("Development endpoint requires both finalboss.apiUrl and finalboss.anonKey");
-        okhttp3.HttpUrl parsed = okhttp3.HttpUrl.parse(projectUrl());
-        if (parsed == null || (!"https".equals(parsed.scheme()) && !"localhost".equals(parsed.host()) && !"127.0.0.1".equals(parsed.host())))
-            throw new IllegalArgumentException("Supabase endpoint must use HTTPS (except localhost)");
     }
 
     // ------------------------------------------------------------ reads
@@ -61,7 +56,7 @@ public class Supabase
         boolean limited = query.contains("limit=");
         for (int offset = 0; offset < 100_000;)
         {
-            Request.Builder builder = base(projectUrl() + "/rest/v1/" + table + "?" + query
+            Request.Builder builder = base(PROJECT_URL + "/rest/v1/" + table + "?" + query
                 + (limited ? "" : "&offset=" + offset + "&limit=500"));
             if (!limited) builder.header("Prefer", "count=exact");
             ApiResult result = execute(builder.get().build());
@@ -76,14 +71,9 @@ public class Supabase
         return null;
     }
 
-    public static String projectUrl()
-    {
-        return System.getProperty("finalboss.apiUrl", DEFAULT_PROJECT_URL).replaceAll("/+$", "");
-    }
-
     public ApiResult rpcResult(String function, JsonObject args)
     {
-        return execute(base(projectUrl() + "/rest/v1/rpc/" + function)
+        return execute(base(PROJECT_URL + "/rest/v1/rpc/" + function)
             .post(RequestBody.create(JSON, args.toString())).build());
     }
 
@@ -119,14 +109,16 @@ public class Supabase
     // Storage upload; returns the public URL or null.
     public String upload(String bucket, String path, byte[] bytes, String contentType)
     {
-        int status = send(base(projectUrl() + "/storage/v1/object/" + bucket + "/" + path)
-            .post(RequestBody.create(MediaType.parse(contentType), bytes)), "UPLOAD " + bucket);
-        return ok(status) ? publicUrl(bucket, path) : null;
+        ApiResult result = execute(base(PROJECT_URL + "/storage/v1/object/" + bucket + "/" + path)
+            .post(RequestBody.create(MediaType.parse(contentType), bytes)).build());
+        if (result.successful()) return publicUrl(bucket, path);
+        log.warn("Screenshot upload failed: {}", result.message());
+        return null;
     }
 
     public static String publicUrl(String bucket, String path)
     {
-        return projectUrl() + "/storage/v1/object/public/" + bucket + "/" + path;
+        return PROJECT_URL + "/storage/v1/object/public/" + bucket + "/" + path;
     }
 
     // ------------------------------------------------------------ helpers
@@ -135,30 +127,8 @@ public class Supabase
     {
         return new Request.Builder()
             .url(url)
-            .header("apikey", System.getProperty("finalboss.anonKey", ANON_KEY))
-            .header("Authorization", "Bearer " + System.getProperty("finalboss.anonKey", ANON_KEY));
-    }
-
-    private int send(Request.Builder request, String what)
-    {
-        try (Response response = http.newCall(request.build()).execute())
-        {
-            if (!response.isSuccessful())
-            {
-                log.warn("Supabase {} failed: {} {}", what, response.code(), response.message());
-            }
-            return response.code();
-        }
-        catch (IOException | RuntimeException e)
-        {
-            log.warn("Supabase {} failed", what, e);
-            return 0;
-        }
-    }
-
-    private static boolean ok(int status)
-    {
-        return status >= 200 && status < 300;
+            .header("apikey", ANON_KEY)
+            .header("Authorization", "Bearer " + ANON_KEY);
     }
 
     // ------------------------------------------------------------ JSON
@@ -213,31 +183,6 @@ public class Supabase
         catch (RuntimeException e)
         {
             return def;
-        }
-    }
-
-    // Adds a nullable string column (JSON null clears it server-side).
-    public static void put(JsonObject row, String key, String value)
-    {
-        if (value == null)
-        {
-            row.add(key, com.google.gson.JsonNull.INSTANCE);
-        }
-        else
-        {
-            row.addProperty(key, value);
-        }
-    }
-
-    public static void put(JsonObject row, String key, Integer value)
-    {
-        if (value == null)
-        {
-            row.add(key, com.google.gson.JsonNull.INSTANCE);
-        }
-        else
-        {
-            row.addProperty(key, value);
         }
     }
 }

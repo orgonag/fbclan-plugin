@@ -1,5 +1,6 @@
 package com.github.orgonag.fbclan.drops;
 
+import com.github.orgonag.fbclan.core.Names;
 import java.text.NumberFormat;
 import java.util.Arrays;
 import java.util.Collections;
@@ -25,8 +26,8 @@ public final class DropRules
     // Loot the core Loot Tracker reports as an NPC record with no NPC-kill
     // event (it comes from a reward chest): picked up from the tracker's
     // own event instead. Same list Dink keeps.
-    public static final String GAUNTLET_BOSS = "Crystalline Hunllef";
-    public static final String CORRUPTED_GAUNTLET_BOSS = "Corrupted Hunllef";
+    private static final String GAUNTLET_BOSS = "Crystalline Hunllef";
+    private static final String CORRUPTED_GAUNTLET_BOSS = "Corrupted Hunllef";
     public static final String GAUNTLET = "The Gauntlet";
     public static final String CORRUPTED_GAUNTLET = "The Corrupted Gauntlet";
     public static final Set<String> CHEST_LOOT_NPCS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
@@ -35,18 +36,6 @@ public final class DropRules
 
     private DropRules()
     {
-    }
-
-    public static long threshold(long configuredGp)
-    {
-        return Math.max(configuredGp, MIN_THRESHOLD_GP);
-    }
-
-    // Judged per item, never per stack: 5,000 blood runes stay out, one
-    // Zenyte shard gets in.
-    public static boolean valuable(long unitPrice, long thresholdGp)
-    {
-        return unitPrice >= thresholdGp;
     }
 
     // 1 in `denominator` or rarer (never below the 1/250 floor, even for
@@ -65,7 +54,7 @@ public final class DropRules
         {
             return false;
         }
-        String n = itemName.toLowerCase(Locale.ROOT).trim();
+        String n = Names.normalize(itemName);
         return n.startsWith("clue scroll")
             || n.equals("long bone")
             || n.equals("curved bone")

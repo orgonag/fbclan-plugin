@@ -36,9 +36,6 @@ tasks.withType(JavaCompile).configureEach {
 tasks.register('run', JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'com.github.orgonag.fbclan.FinalBossPluginTest'
-    ['finalboss.apiUrl', 'finalboss.anonKey'].each { key ->
-        if (System.getProperty(key) != null) systemProperty key, System.getProperty(key)
-    }
     jvmArgs = [
         '-ea',
         '--add-opens', 'java.desktop/com.apple.eawt=ALL-UNNAMED',

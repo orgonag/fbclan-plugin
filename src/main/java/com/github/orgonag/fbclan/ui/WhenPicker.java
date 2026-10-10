@@ -97,7 +97,7 @@ final class WhenPicker extends JPanel
         boolean tooOld = editing != null && Instant.now().isAfter(editing.getCreatedAt().plus(Party.ASAP_LIFETIME));
         choice.enable(ASAP, !limits.asapTaken && !tooOld,
             limits.asapTaken ? "You already have an ASAP party" : "Too old to switch to ASAP; post a new one");
-        choice.enable(LATER, !limits.laterFull, "You already have 7 scheduled parties");
+        choice.enable(LATER, !limits.laterFull, "You already have " + Party.MAX_SCHEDULED + " scheduled parties");
         choice.set(editing != null ? (original != null ? LATER : ASAP) : (limits.asapTaken ? LATER : ASAP));
 
         JPanel time = new JPanel(new GridLayout(1, 2, 6, 0));

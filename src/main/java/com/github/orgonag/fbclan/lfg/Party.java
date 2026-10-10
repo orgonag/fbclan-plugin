@@ -27,12 +27,11 @@ public class Party
     public static final int MAX_INVOCATION = 600;
     // Scheduled starts may be up to 7 days after the post is created.
     public static final Duration SCHEDULE_WINDOW = Duration.ofHours(168);
-    // Server clearing rules (migration 7): an unfilled ASAP post leaves 12 h
-    // after creation, an unfilled scheduled post 3 h after its start; a full
-    // scheduled post forms at its start. The server sends each post's
-    // `expires_at`; these only cover a server that doesn't.
+    // An unfilled ASAP post leaves 12 h after creation (server rule,
+    // migration 7); the server sends each post's `expires_at`.
     public static final Duration ASAP_LIFETIME = Duration.ofHours(12);
-    public static final Duration AFTER_START = Duration.ofHours(3);
+    // Per host: 1 ASAP post and up to this many scheduled ones.
+    public static final int MAX_SCHEDULED = 7;
 
     public enum Status
     {
@@ -78,7 +77,6 @@ public class Party
         Role role;      // null for role-less activities
         boolean learner;
         Status status;
-        Instant createdAt;
         Integer kc;     // null = unknown
         KcSource kcSource;
         boolean addedByHost;
@@ -97,8 +95,7 @@ public class Party
         {
             String rsn = Names.untagged(Supabase.str(row, "rsn"));
             return rsn.isEmpty() ? null : new Applicant(rsn, Role.fromKey(Supabase.str(row, "role")),
-                Supabase.bool(row, "learner"), Status.fromKey(Supabase.str(row, "status")),
-                Supabase.instant(row, "created_at", Instant.EPOCH), Supabase.intOrNull(row, "kc"),
+                Supabase.bool(row, "learner"), Status.fromKey(Supabase.str(row, "status")), Supabase.intOrNull(row, "kc"),
                 KcSource.fromKey(Supabase.str(row, "kc_source")), Supabase.bool(row, "added_by_host"));
         }
     }
@@ -151,13 +148,6 @@ public class Party
     public boolean isScheduled()
     {
         return scheduledFor != null;
-    }
-
-    // When the server drops an unfilled post.
-    public Instant expiresAt()
-    {
-        if (expiresAt != null) return expiresAt;
-        return scheduledFor == null ? createdAt.plus(ASAP_LIFETIME) : scheduledFor.plus(AFTER_START);
     }
 
     // CM / HMT, or a ToA at expert-level invocation.
@@ -251,16 +241,16 @@ public class Party
         d.addProperty("hard_mode", hardMode);
         d.addProperty("invocation", invocation);
         d.addProperty("capacity", capacity);
-        Supabase.put(d, "description", Names.sanitize(description, MAX_DESCRIPTION));
-        Supabase.put(d, "world", world);
+        d.addProperty("description", Names.sanitize(description, MAX_DESCRIPTION));
+        d.addProperty("world", world);
         d.addProperty("min_kc", Math.max(0, minKc));
         d.addProperty("loot_rule", (lootRule == null ? LootRule.UNSPECIFIED : lootRule).name());
-        Supabase.put(d, "required_roles", Role.encode(requiredRoles));
-        Supabase.put(d, "host_role", hostRole == null ? null : hostRole.key());
+        d.addProperty("required_roles", Role.encode(requiredRoles));
+        d.addProperty("host_role", hostRole == null ? null : hostRole.key());
         d.addProperty("learner", learner);
         d.addProperty("teacher", teacher);
         // Always sent (JSON null = ASAP) so an edit can switch back.
-        Supabase.put(d, "scheduled_for", scheduledFor == null ? null : scheduledFor.toString());
+        d.addProperty("scheduled_for", scheduledFor == null ? null : scheduledFor.toString());
         return d;
     }
 
@@ -273,6 +263,7 @@ public class Party
         {
             return null;
         }
+        // In the server's order: oldest application first.
         List<Applicant> applicants = new ArrayList<>();
         if (Supabase.has(row, "lfg_applicants") && row.get("lfg_applicants").isJsonArray())
         {
@@ -284,7 +275,6 @@ public class Party
                     applicants.add(a);
                 }
             }
-            applicants.sort((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()));
         }
         return Party.builder()
             .id(Supabase.str(row, "id"))
@@ -294,10 +284,9 @@ public class Party
             .hardMode(Supabase.bool(row, "hard_mode"))
             .invocation(Supabase.intOr(row, "invocation", 0))
             .capacity(Math.max(1, Supabase.intOr(row, "capacity", activity.getMaxPartySize())))
-            // Scheduling servers tag `description` with the start time for old
-            // clients and send the real text as `note`.
-            .description(row.has("note") ? (Supabase.has(row, "note") ? Supabase.str(row, "note") : null)
-                : Supabase.has(row, "description") ? Supabase.str(row, "description") : null)
+            // The server tags `description` with the start time for old
+            // clients and sends the real text as `note`.
+            .description(Supabase.has(row, "note") ? Supabase.str(row, "note") : null)
             .scheduledFor(Supabase.instant(row, "scheduled_for", null))
             .expiresAt(Supabase.instant(row, "expires_at", null))
             .world(Supabase.intOrNull(row, "world"))
