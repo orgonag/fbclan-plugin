@@ -46,7 +46,7 @@ Post a party or join one from inside RuneLite. Anyone who logs in later sees wha
 - A host can run 1 ASAP post and up to 7 scheduled posts at once.
 - Scheduled parties remind the host and accepted members in chat 15 minutes before the start.
 - When a clan member posts a new party you get a chat line such as "Dopezt created a party of 4 for ToB (ASAP)". Turn it off with **Announce new parties in chat** (or with **Party chat notifications**, which silences every LFG chat line).
-- While the board has posts, a small overlay with the clan logo shows how many are ASAP and in total. Hover it for the breakdown by activity; hold Alt to drag it. Turn it off with **Show party board overlay**.
+- While the board has posts, the clan logo appears in RuneLite's infobox row (where boss timers go) captioned ASAP/total, e.g. "2/6". Hover it for the breakdown by activity. It follows RuneLite's infobox size and position settings; turn it off with **Show party board infobox**.
 - Filled parties are kept in a **Formed** list for 7 days.
 - From chat: `!lfg` lists open parties, `!lfg tob 4` posts an ASAP party with default settings, and `!lfg help` lists the activity names. Only you see the replies.
 
@@ -121,7 +121,7 @@ RuneLite settings, search **Final Boss**, then the cog icon.
 | Party desktop notifications | Off |
 | Announce new parties in chat | On |
 | Kill count lookups | On |
-| Show party board overlay | On |
+| Show party board infobox | On |
 | Discord Webhook URL | Blank (disabled) |
 | Upload personal bests | On |
 | Upload collection log & CA | On |

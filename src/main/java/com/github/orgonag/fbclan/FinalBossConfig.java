@@ -157,14 +157,14 @@ public interface FinalBossConfig extends Config
     }
 
     @ConfigItem(
-        keyName = "lfgOverlay",
-        name = "Show party board overlay",
-        description = "While the board has posts, show the clan logo with how many are ASAP and in total "
-            + "on the game screen; hover it for the breakdown. Drag it with Alt held.",
+        keyName = "lfgInfoBox",
+        name = "Show party board infobox",
+        description = "While the board has posts, show the clan logo in RuneLite's infobox row captioned "
+            + "ASAP/total; hover it for the breakdown. Size and position follow RuneLite's infobox settings.",
         section = lfgSection,
         position = 5
     )
-    default boolean lfgOverlay()
+    default boolean lfgInfoBox()
     {
         return true;
     }
