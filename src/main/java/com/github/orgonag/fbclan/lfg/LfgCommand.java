@@ -146,8 +146,13 @@ public class LfgCommand
             Session session = clan.snapshot();
             executor.submit(() -> {
                 if (!clan.current(session) || !config.enableLfg()) return;
-                PartyApi.Snapshot snapshot = api.fetch();
-                List<Party> parties = snapshot == null ? null : snapshot.getParties();
+                // The board polls every 30 s; only fetch when it has nothing current.
+                List<Party> parties = board.parties();
+                if (!board.running() || board.refreshError() != null)
+                {
+                    PartyApi.Snapshot snapshot = api.fetch();
+                    parties = snapshot == null ? null : snapshot.getParties();
+                }
                 String reply = parties == null ? "Couldn't reach the party board — try again." : summarize(parties);
                 clientThread.invokeLater(() -> {
                     if (clan.current(session) && config.enableLfg() && client.getGameState() == GameState.LOGGED_IN)
@@ -205,7 +210,7 @@ public class LfgCommand
             return;
         }
         Activity activity = alias.activity;
-        int min = Math.max(Party.MIN_CAPACITY, activity.getMinPartySize());
+        int min = activity.minSize();
         int max = Math.max(min, activity.getMaxPartySize());
         int capacity = size == null ? activity.defaultPartySize() : size;
         if (capacity < min || capacity > max)
@@ -230,7 +235,7 @@ public class LfgCommand
         Party party = Party.quick(rsn, activity, alias.hard, alias.invocation, capacity, world > 0 ? world : null);
         Session session = clan.snapshot();
         // run() does the network write on the executor and reports back here.
-        board.run(() -> api.save(party), "Couldn't reach the party board — try again.", failure -> clientThread.invokeLater(() -> {
+        board.run(s -> api.save(s, party), "Couldn't reach the party board — try again.", failure -> clientThread.invokeLater(() -> {
             if (!clan.current(session) || client.getGameState() != GameState.LOGGED_IN) return;
             print(failure == null
                 ? "[LFG] Posted " + party.title() + " 1/" + capacity + " (ASAP" + (world > 0 ? ", W" + world : "") + "). Manage it in the Final Boss panel."

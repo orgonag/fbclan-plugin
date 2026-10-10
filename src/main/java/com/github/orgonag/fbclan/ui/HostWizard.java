@@ -313,8 +313,7 @@ class HostWizard
         stepBody.add(activityBox);
         if (activity.hasHardMode())
         {
-            hardModeBox.setText(activity == Activity.TOB ? "Hard mode (HMT)"
-                : activity == Activity.COX ? "Challenge mode (CM)" : activity.getHardModeLabel());
+            hardModeBox.setText(activity == Activity.TOB ? "Hard mode (HMT)" : "Challenge mode (CM)");
             stepBody.add(hardModeBox);
         }
         else
@@ -472,7 +471,7 @@ class HostWizard
     // Party size limits follow the activity; returns the clamped size.
     private int clampSize(Activity activity)
     {
-        int min = Math.max(Party.MIN_CAPACITY, activity.getMinPartySize());
+        int min = activity.minSize();
         int max = Math.max(min, activity.getMaxPartySize());
         SpinnerNumberModel model = (SpinnerNumberModel) sizeSpinner.getModel();
         int size = Math.max(min, Math.min(max, (Integer) sizeSpinner.getValue()));

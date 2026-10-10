@@ -100,7 +100,14 @@ final class AddMemberForm
                 return;
             }
             Role role = roles == null ? null : (Role) roles.getSelectedItem();
-            board.run(() -> api.addMember(partyId, rsn, role),
+            board.run(s -> {
+                    // The party as last loaded (this row may be older than the board).
+                    for (Party current : board.parties())
+                    {
+                        if (current.getId().equals(partyId)) return api.addMember(s, current, rsn, role);
+                    }
+                    return "This post is no longer listed.";
+                },
                 "Couldn't add member. Refresh and check the name and available role.", message -> SwingUtilities.invokeLater(() -> {
                     if (message == null) name.setText("");
                     onResult.accept(message);

@@ -187,7 +187,7 @@ final class ApplyForm
             }
             Integer kcF = kc;
             Party.KcSource kcSourceF = kcSource;
-            board.run(() -> api.apply(p.getId(), role, isLearner, kcF, kcSourceF), "Couldn't apply. Refresh and try again.",
+            board.run(s -> api.apply(s, p.getId(), role, isLearner, kcF, kcSourceF), "Couldn't apply. Refresh and try again.",
                 message -> SwingUtilities.invokeLater(() -> onResult.accept(message)));
         });
         row.add(LfgUi.pair(confirm, Theme.button("Cancel", Btn.Kind.GHOST, onCancel)));
