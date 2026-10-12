@@ -87,13 +87,14 @@ To stop logging your drops, untick **Enable Drop Logging**. You can still read t
 Clan stats at a glance, with your own rank under every board.
 
 - **XP gained** and **EHB** this week, from Wise Old Man.
-- **Collection log** and **Combat Achievements**.
+- **Collection log**: every member's count from the official OSRS hiscores, via Wise Old Man (nothing to upload).
+- **Combat Achievements**.
 - **Clan bests:** fastest boss and raid times, by team size.
 - **GP this week:** total value of logged drops and the top contributors.
 
 Click any card to open the full board. There you can switch boards, pick a boss for clan bests, or search for a player. Your row is highlighted, and ties share a place.
 
-Personal bests are read from RuneLite's core **Chat Commands** plugin, so keep it enabled. They sync after login and every 30 minutes, and a slower time never replaces a faster one. Collection log and combat achievement totals upload when they change. Uploads are skipped on special worlds such as Leagues and Deadman.
+Personal bests are read from RuneLite's core **Chat Commands** plugin, so keep it enabled. They sync after login and every 30 minutes, and a slower time never replaces a faster one. Combat achievement totals upload when they change. Uploads are skipped on special worlds such as Leagues and Deadman.
 
 **Combat Achievement helmets**
 
@@ -129,7 +130,7 @@ RuneLite settings, search **Final Boss**, then the cog icon.
 | Show party board infobox | On |
 | Discord Webhook URL | Blank (disabled) |
 | Upload personal bests | On |
-| Upload collection log & CA | On |
+| Upload combat achievements | On |
 | CA slayer helm chat icons | On |
 
 ## External services and privacy
@@ -138,7 +139,7 @@ The plugin uses **Wise Old Man** to check clan membership, the clan's **Supabase
 
 - The membership check sends your character name to Wise Old Man.
 - Clan uploads begin only after that check passes, and each can be switched off in the settings.
-- Depending on what is enabled, shared records include your RSN, logged drops, PB times, collection log and combat achievement totals, and your LFG posts and applications.
+- Depending on what is enabled, shared records include your RSN, logged drops, PB times, combat achievement totals, and your LFG posts and applications.
 - Screenshots include whatever is visible in the client and are stored in a public bucket; enable them only if you want to share that image.
 - The Discord webhook URL stays in your local RuneLite configuration.
 

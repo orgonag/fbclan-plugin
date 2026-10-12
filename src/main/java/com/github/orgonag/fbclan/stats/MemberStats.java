@@ -10,15 +10,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.Client;
-import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.gameval.VarbitID;
 
 /**
- * Uploads the member's collection-log count and combat-achievement
- * points through the improve-only fb_submit_stats function. Varps/varbits
- * are read on the client thread (after verification, then every 30 min);
- * the submit runs on the executor. Sent once per login and again only
- * when a value changes; the server keeps the highest.
+ * Uploads the member's combat-achievement points and tier through the
+ * improve-only fb_submit_stats function (the collection-log board comes
+ * from the hiscores via Wise Old Man). Varbits are read on the client
+ * thread (after verification, then every 30 min); the submit runs on the
+ * executor. Sent once per login and again only when a value changes; the
+ * server keeps the highest.
  */
 @Singleton
 public class MemberStats
@@ -48,7 +48,7 @@ public class MemberStats
         this.executor = executor;
     }
 
-    // Client thread (varp reads assert it under -ea).
+    // Client thread (varbit reads assert it under -ea).
     public void maybeSubmit()
     {
         Session session = clan.snapshot();
@@ -56,48 +56,37 @@ public class MemberStats
         {
             return;
         }
-        int clObtained = client.getVarpValue(VarPlayerID.COLLECTION_COUNT);
-        int clTotal = client.getVarpValue(VarPlayerID.COLLECTION_COUNT_MAX);
         int caPoints = client.getVarbitValue(VarbitID.CA_POINTS);
-        if (clObtained <= 0 && caPoints <= 0)
+        if (caPoints <= 0)
         {
             return;
         }
         String tier = tier(caPoints);
-        String signature = session.getGeneration() + ":" + clObtained + ":" + clTotal + ":" + caPoints + ":" + tier;
+        String signature = session.getGeneration() + ":" + caPoints + ":" + tier;
         if (signature.equals(acknowledged) || !sending.compareAndSet(false, true)) return;
         executor.submit(() -> {
             try
             {
-                if (clan.current(session) && config.enableStatsUpload() && submit(session.getRsn(), clObtained, clTotal, caPoints, tier)
+                if (clan.current(session) && config.enableStatsUpload() && submit(session.getRsn(), caPoints, tier)
                     && clan.current(session)) acknowledged = signature;
             }
             finally { sending.set(false); }
         });
     }
 
-    private boolean submit(String rsn, int clObtained, int clTotal, int caPoints, String tier)
+    private boolean submit(String rsn, int caPoints, String tier)
     {
-        // Fields the client can't read yet are omitted; the RPC treats an
-        // absent field as "no update".
+        // The collection-log fields are never sent and a tier the client
+        // can't read yet is omitted; the RPC treats an absent field as
+        // "no update".
         JsonObject p = new JsonObject();
         p.addProperty("p_rsn", rsn);
-        boolean hasCl = clObtained > 0 && clTotal >= clObtained;
-        boolean hasCa = caPoints > 0;
-        if (hasCl)
+        p.addProperty("p_ca_points", caPoints);
+        if (tier != null)
         {
-            p.addProperty("p_cl_obtained", clObtained);
-            p.addProperty("p_cl_total", clTotal);
+            p.addProperty("p_ca_tier", tier);
         }
-        if (hasCa)
-        {
-            p.addProperty("p_ca_points", caPoints);
-            if (tier != null)
-            {
-                p.addProperty("p_ca_tier", tier);
-            }
-        }
-        return (hasCl || hasCa) && db.rpc("fb_submit_stats", p);
+        return db.rpc("fb_submit_stats", p);
     }
 
     // The highest tier whose cutoff the points reach; null = below Easy

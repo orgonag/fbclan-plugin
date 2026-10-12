@@ -1,6 +1,7 @@
 package com.github.orgonag.fbclan.lfg;
 
 import com.github.orgonag.fbclan.FinalBossConfig;
+import com.github.orgonag.fbclan.core.Chat;
 import com.github.orgonag.fbclan.core.Clan;
 import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Session;
@@ -419,7 +420,7 @@ public class PartyNotifier
             GameState state = client.getGameState();
             // Mid-teleport or hop: hold the line until the chatbox is back.
             if (state == GameState.LOADING || state == GameState.HOPPING || state == GameState.CONNECTION_LOST) return false;
-            if (state == GameState.LOGGED_IN) client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "[LFG] " + message, null);
+            if (state == GameState.LOGGED_IN) client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", Chat.purple("[LFG] " + message), null);
             return true;
         });
     }

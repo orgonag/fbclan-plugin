@@ -200,8 +200,8 @@ public interface FinalBossConfig extends Config
 
     @ConfigItem(
         keyName = "enableStatsUpload",
-        name = "Upload collection log & CA",
-        description = "Send your collection log count and combat achievement points (with your RSN) "
+        name = "Upload combat achievements",
+        description = "Send your combat achievement points (with your RSN) "
             + "to the clan's dashboard. On by default — disable to opt out. "
             + "Skipped on Leagues/Deadman/speedrun worlds.",
         section = leaderboardsSection,

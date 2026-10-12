@@ -1,6 +1,7 @@
 package com.github.orgonag.fbclan.lfg;
 
 import com.github.orgonag.fbclan.FinalBossConfig;
+import com.github.orgonag.fbclan.core.Chat;
 import com.github.orgonag.fbclan.core.Clan;
 import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Session;
@@ -33,7 +34,7 @@ import net.runelite.client.util.Text;
 @Singleton
 public class LfgCommand
 {
-    private static final String USAGE = "!lfg lists parties · !lfg <activity> [size] posts an ASAP party, e.g. !lfg tob 4";
+    private static final String USAGE = "!lfg lists parties · !lfg (activity) [size] posts an ASAP party, e.g. !lfg tob 4";
     private static final Pattern TIME = Pattern.compile("\\d{1,2}:\\d{2}|\\d{1,2}(am|pm)|am|pm|tomorrow|today|tonight");
 
     /** What an alias posts: the activity, hard mode, and ToA invocation. */
@@ -241,7 +242,7 @@ public class LfgCommand
             if (!clan.current(session) || client.getGameState() != GameState.LOGGED_IN) return;
             print(failure == null
                 ? "[LFG] Posted " + party.title() + " 1/" + capacity + " (ASAP" + (world > 0 ? ", W" + world : "") + "). Manage it in the Final Boss panel."
-                : "[LFG] " + failure);
+                : "[LFG] " + Text.removeTags(failure));
         }));
     }
 
@@ -283,6 +284,6 @@ public class LfgCommand
 
     private void print(String message)
     {
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, null);
+        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", Chat.purple(message), null);
     }
 }

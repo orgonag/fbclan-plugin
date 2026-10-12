@@ -1,5 +1,6 @@
 package com.github.orgonag.fbclan.clan;
 
+import com.github.orgonag.fbclan.core.Chat;
 import com.github.orgonag.fbclan.core.Clan;
 import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Session;
@@ -41,7 +42,6 @@ public class ClanContent
     private static final int MAX_TITLE = 200;
     private static final int MAX_BODY = 10_000;
     private static final int MAX_WELCOME = 200;
-    private static final String WELCOME_COLOR = "a020f0";
 
     private final Supabase db;
     private final Clan clan;
@@ -210,7 +210,7 @@ public class ClanContent
             // postEvent=false keeps our own line out of the chat-event
             // pipeline (the pet matcher would otherwise see it).
             client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
-                "<col=" + WELCOME_COLOR + ">[Final Boss] " + message + "</col>", null, false);
+                Chat.purple("[Final Boss] " + message), null, false);
             return true;
         });
     }
