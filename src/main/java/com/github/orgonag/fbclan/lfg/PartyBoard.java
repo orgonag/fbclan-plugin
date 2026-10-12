@@ -292,6 +292,20 @@ public class PartyBoard
         return api.kick(session, partyId, rsn);
     }
 
+    // Inside run(): the same two from a formed party, which the server
+    // re-opens under its old id, so they're recorded against that id.
+    public String leaveFormed(Session session, FormedParty f)
+    {
+        notifications.expectSelfLeave(f.getPartyId());
+        return api.leaveFormed(session, f.getId());
+    }
+
+    public String kickFormed(Session session, FormedParty f, String rsn)
+    {
+        notifications.expectKick(f.getPartyId(), rsn);
+        return api.kickFormed(session, f.getId(), rsn);
+    }
+
     // Client thread: who is in the clan channel, and the current world.
     private void readClient()
     {
