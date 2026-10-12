@@ -48,7 +48,7 @@ public class MemberStats
         this.executor = executor;
     }
 
-    // Client thread (varp reads assert it under -ea).
+    // Client thread (varbit reads assert it under -ea).
     public void maybeSubmit()
     {
         Session session = clan.snapshot();
