@@ -17,6 +17,7 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.FontManager;
 
 /** Small LFG display pieces shared by the tab, the host window and the apply form. */
@@ -83,6 +84,16 @@ final class LfgUi
     {
         b.setText(reason);
         b.setEnabled(false);
+    }
+
+    // Sprite tile, title (+ world), an optional second line, and the head count.
+    static JPanel head(ItemManager items, Activity activity, String title, Integer world, JLabel second, String count)
+    {
+        JPanel text = Theme.stack(1);
+        JLabel name = Theme.bold(title, Theme.TEXT);
+        text.add(Theme.row(name, world == null ? null : Theme.text("W" + world, Theme.SUB), null));
+        if (second != null) text.add(second);
+        return Theme.row(Theme.tile(items, activity.getIconItemId(), 1, tier(activity), 30), text, Theme.bold(count, Theme.GOLD));
     }
 
     static Btn small(Btn b)

@@ -132,6 +132,19 @@ public class PartyApi
         return command(s, "remove_formed", data(id), null);
     }
 
+    // A formed party losing a member goes back on the board (server re-opens it).
+    public String leaveFormed(Session s, String formedId)
+    {
+        return command(s, "leave_formed", data(formedId), null);
+    }
+
+    public String kickFormed(Session s, String formedId, String rsn)
+    {
+        JsonObject d = data(formedId);
+        d.addProperty("rsn", rsn);
+        return command(s, "kick_formed", d, null);
+    }
+
     // ------------------------------------------------------------ plumbing
 
     private static JsonObject data(String id)

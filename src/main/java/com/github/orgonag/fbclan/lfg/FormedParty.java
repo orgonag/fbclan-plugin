@@ -4,6 +4,7 @@ import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +19,8 @@ import lombok.Value;
 @Value
 public class FormedParty
 {
+    private static final Duration REOPEN_WINDOW = Duration.ofHours(3);
+
     @Value
     public static class Member
     {
@@ -45,6 +48,13 @@ public class FormedParty
     public boolean isHostedBy(String rsn)
     {
         return rsn != null && Names.same(hostRsn, rsn);
+    }
+
+    // The server re-opens it after a kick or a leave only this long:
+    // 3 h after forming (ASAP) or after its start (scheduled).
+    public boolean canReopen(Instant now)
+    {
+        return now.isBefore((scheduledFor == null ? formedAt : scheduledFor).plus(REOPEN_WINDOW));
     }
 
     public boolean includes(String rsn)
