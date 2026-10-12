@@ -1,6 +1,7 @@
 package com.github.orgonag.fbclan.lfg;
 
 import com.github.orgonag.fbclan.FinalBossConfig;
+import com.github.orgonag.fbclan.core.Chat;
 import com.github.orgonag.fbclan.core.Clan;
 import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Session;
@@ -283,6 +284,6 @@ public class LfgCommand
 
     private void print(String message)
     {
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, null);
+        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", Chat.purple(message), null);
     }
 }
