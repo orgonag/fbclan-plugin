@@ -36,6 +36,7 @@ public class LeaderboardsTab extends Tab
     };
     static final String[] SHORT = {"XP week", "EHB week", "Col log", "Combat ach.", "PBs", "GP week"};
     static final Color[] PLACE = {new Color(0xFFD700), new Color(0xC8C8C8), new Color(0xCD7F32)};
+    private static final String NO_WEEK = "No data this week.";
 
     /** One ranked line. `tier` is the CA tier, else null. */
     static final class Row
@@ -196,19 +197,12 @@ public class LeaderboardsTab extends Tab
         switch (index)
         {
             case 0:
-                return named(dashboard.xpWeek(), v -> Dashboard.shortNumber((long) v), "via Wise Old Man" + synced);
+                return named(dashboard.xpWeek(), v -> Dashboard.shortNumber((long) v), "via Wise Old Man" + synced, NO_WEEK);
             case 1:
-                return named(dashboard.ehbWeek(), Dashboard::oneDecimal, "efficient hours bossed" + synced);
+                return named(dashboard.ehbWeek(), Dashboard::oneDecimal, "efficient hours bossed" + synced, NO_WEEK);
             case 2:
-            {
-                List<Row> rows = new ArrayList<>();
-                Ranker rank = new Ranker();
-                for (Dashboard.ClEntry e : dashboard.clBoard())
-                {
-                    rows.add(new Row(rank.of(e.getObtained()), e.getRsn(), e.getRsn(), String.format("%,d/%,d", e.getObtained(), e.getTotal()), null));
-                }
-                return new Board(rows, "No collection logs uploaded yet.", "uploaded by members' clients");
-            }
+                return named(dashboard.clBoard(), v -> String.format("%,d", (long) v), "from the OSRS hiscores via Wise Old Man" + synced,
+                    "Waiting for the Wise Old Man sync.");
             case 3:
             {
                 List<Row> rows = new ArrayList<>();
@@ -244,7 +238,7 @@ public class LeaderboardsTab extends Tab
             default:
             {
                 Dashboard.GpWeek gp = dashboard.gpWeek();
-                Board b = named(gp.getTop(), v -> Dashboard.shortNumber((long) v), "logged drops (1M+/notables) · last 7 days");
+                Board b = named(gp.getTop(), v -> Dashboard.shortNumber((long) v), "logged drops (1M+/notables) · last 7 days", NO_WEEK);
                 return new Board(b.rows, "No logged drops in the last 7 days.", b.caption);
             }
         }
@@ -261,7 +255,7 @@ public class LeaderboardsTab extends Tab
         return out;
     }
 
-    private static Board named(List<Named> entries, DoubleFunction<String> fmt, String caption)
+    private static Board named(List<Named> entries, DoubleFunction<String> fmt, String caption, String empty)
     {
         if (entries == null) return new Board(Collections.emptyList(), "waiting for WOM sync", caption);
         List<Row> rows = new ArrayList<>();
@@ -270,7 +264,7 @@ public class LeaderboardsTab extends Tab
         {
             rows.add(new Row(rank.of(e.getValue()), e.getRsn(), e.getRsn(), fmt.apply(e.getValue()), null));
         }
-        return new Board(rows, "No data this week.", caption);
+        return new Board(rows, empty, caption);
     }
 
     // Gold, silver, bronze for places 1-3; grey after.

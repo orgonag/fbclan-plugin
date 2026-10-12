@@ -1,5 +1,6 @@
 package com.github.orgonag.fbclan.stats;
 
+import com.github.orgonag.fbclan.core.Names;
 import com.github.orgonag.fbclan.core.Supabase;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -13,10 +14,11 @@ import javax.inject.Singleton;
 import lombok.Value;
 
 /**
- * Read side of the clan dashboard: collection-log and combat-achievement
- * top-20s (member uploads), GP this week (logged drops), and the weekly
- * Wise Old Man podiums served from the wom_cache table (a sync script
- * fills it; the plugin never calls WOM for this). Every source
+ * Read side of the clan dashboard: the combat-achievement top 20 (member
+ * uploads), GP this week (logged drops), and the Wise Old Man boards
+ * served from the wom_cache table: weekly XP/EHB podiums and the
+ * collection-log top 20 from the hiscores (a sync script fills it; the
+ * plugin never calls WOM for this). Every source
  * fails soft independently, keeping last-known data.
  */
 @Singleton
@@ -27,14 +29,6 @@ public class Dashboard
     {
         String rsn;
         double value;
-    }
-
-    @Value
-    public static class ClEntry
-    {
-        String rsn;
-        int obtained;
-        int total;
     }
 
     @Value
@@ -55,11 +49,11 @@ public class Dashboard
 
     private final Supabase db;
 
-    private volatile List<ClEntry> clBoard = Collections.emptyList();
     private volatile List<CaEntry> caBoard = Collections.emptyList();
     private volatile GpWeek gpWeek = new GpWeek(0, 0, Collections.emptyList());
     private volatile List<Named> xpWeek;   // null until the WOM cache is read
     private volatile List<Named> ehbWeek;
+    private volatile List<Named> clBoard;
     private volatile String womSyncedAt = "";
 
     @Inject
@@ -68,7 +62,7 @@ public class Dashboard
         this.db = db;
     }
 
-    public List<ClEntry> clBoard()
+    public List<Named> clBoard()
     {
         return clBoard;
     }
@@ -102,20 +96,6 @@ public class Dashboard
     // previous value; an empty result is real and clears it.
     public boolean refresh()
     {
-        JsonArray cl = db.getOrNull("cl_leaderboard", "select=rsn,cl_obtained,cl_total&order=cl_obtained.desc,rsn.asc");
-        if (cl != null)
-        {
-            List<ClEntry> out = new ArrayList<>();
-            for (JsonElement el : cl)
-            {
-                JsonObject r = el.getAsJsonObject();
-                if (!Supabase.str(r, "rsn").isEmpty() && Supabase.has(r, "cl_obtained") && Supabase.has(r, "cl_total"))
-                {
-                    out.add(new ClEntry(Supabase.str(r, "rsn"), Supabase.intOr(r,"cl_obtained",0), Supabase.intOr(r,"cl_total",0)));
-                }
-            }
-            clBoard = Collections.unmodifiableList(out);
-        }
         JsonArray ca = db.getOrNull("ca_leaderboard", "select=rsn,ca_points,tier&order=ca_points.desc,rsn.asc");
         if (ca != null)
         {
@@ -152,14 +132,15 @@ public class Dashboard
         {
             applyWomCache(wom);
         }
-        return cl != null && ca != null && total != null && top != null && wom != null;
+        return ca != null && total != null && top != null && wom != null;
     }
 
-    // Each row's payload is the raw WOM response array for one metric.
+    // Each row's payload is the (trimmed) WOM response array for one metric.
     private void applyWomCache(JsonArray rows)
     {
         xpWeek = Collections.emptyList();
         ehbWeek = Collections.emptyList();
+        clBoard = Collections.emptyList();
         womSyncedAt = "";
         String newest = "";
         for (JsonElement el : rows)
@@ -178,11 +159,16 @@ public class Dashboard
             }
             if ("gains_overall_week".equals(metric))
             {
-                xpWeek = parseWom(row.getAsJsonArray("payload"));
+                xpWeek = parseWom(row.getAsJsonArray("payload"), "gained", Integer.MAX_VALUE);
             }
             else if ("gains_ehb_week".equals(metric))
             {
-                ehbWeek = parseWom(row.getAsJsonArray("payload"));
+                ehbWeek = parseWom(row.getAsJsonArray("payload"), "gained", Integer.MAX_VALUE);
+            }
+            else if ("collections_logged".equals(metric))
+            {
+                // Hiscore counts, already sorted by WOM; the board is a top 20.
+                clBoard = parseWom(row.getAsJsonArray("payload"), "score", 20);
             }
         }
         if (!newest.isEmpty())
@@ -191,12 +177,14 @@ public class Dashboard
         }
     }
 
-    // Reads only player.displayName and data.gained, so a trimmed payload works too.
-    private static List<Named> parseWom(JsonArray rows)
+    // Reads only player.displayName and data.<field> ("gained" for the weekly
+    // gains, "score" for hiscores), so a trimmed payload works too.
+    private static List<Named> parseWom(JsonArray rows, String field, int max)
     {
         List<Named> out = new ArrayList<>();
         for (JsonElement el : rows)
         {
+            if (out.size() >= max) break;
             if (!el.isJsonObject()) continue;
             JsonObject row = el.getAsJsonObject();
             if (!Supabase.has(row, "player") || !Supabase.has(row, "data") || !row.get("player").isJsonObject() || !row.get("data").isJsonObject())
@@ -205,9 +193,10 @@ public class Dashboard
             }
             JsonObject player = row.getAsJsonObject("player");
             JsonObject data = row.getAsJsonObject("data");
-            if (Supabase.has(player, "displayName") && Supabase.has(data, "gained"))
+            String name = Names.untagged(Supabase.str(player, "displayName"));
+            if (!name.isEmpty() && Supabase.has(data, field))
             {
-                out.add(new Named(Supabase.str(player, "displayName"), Supabase.doubleOr(data, "gained", 0)));
+                out.add(new Named(name, Supabase.doubleOr(data, field, 0)));
             }
         }
         return Collections.unmodifiableList(out);
