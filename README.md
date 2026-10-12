@@ -49,6 +49,8 @@ Post a party or join one from inside RuneLite. Anyone who logs in later sees wha
 - When anyone posts a new party, you included, everyone gets a chat line such as "Dopezt created a party of 4 for ToB (ASAP)". Turn it off with **Announce new parties in chat** (or with **Party chat notifications**, which silences every LFG chat line).
 - While the board has posts, the clan logo appears in RuneLite's infobox row (where boss timers go) captioned ASAP/total, e.g. "2/6". Hover it for the breakdown by activity. It follows RuneLite's infobox size and position settings; turn it off with **Show party board infobox**.
 - Filled parties show in a **Formed** list: ASAP ones for 3 hours, scheduled ones until 12 hours after their start.
+- If someone drops out of a formed party, the host can **Kick** them from the Formed card, or they can **Leave party** themselves. The party goes back on the board with everyone else still in it, so the seat can be filled again. This works for 3 hours after an ASAP party fills, or until 3 hours after a scheduled party's start.
+- Full parties stay on the board by default; switch on **Hide full** to see only parties with a free seat.
 - From chat: `!lfg` lists open parties, `!lfg tob 4` posts an ASAP party with default settings, and `!lfg help` lists the activity names. Only you see the replies.
 - Activities include all three raids plus **The Fractured Archive** (`!lfg tfa`), and **Clan Mass** for clan events (`!lfg mass`).
 
