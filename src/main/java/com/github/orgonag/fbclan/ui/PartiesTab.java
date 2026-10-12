@@ -56,13 +56,14 @@ public class PartiesTab extends Tab
     private long actionErrorAt;
     private String applyingId;
     private Object filter;
-    // On by default: a full party has nothing to apply to.
-    private boolean hideFull = true;
+    // Off by default: full parties stay visible (a full scheduled one until it starts).
+    private boolean hideFull = false;
     private boolean showFormed = true;
     // The list missed a redraw while the tab was hidden.
     private boolean stale = true;
     private final ApplyForm applyForm;
     private final AddMemberForm addMember;
+    private final FormedCard formedCard;
 
     @Inject
     public PartiesTab(Clan clan, FinalBossConfig config, PartyBoard board, PartyApi api, Killcounts killcounts,
@@ -83,6 +84,7 @@ public class PartiesTab extends Tab
             setActionError(null);
         });
         addMember = new AddMemberForm(board, api, this::setActionError);
+        formedCard = new FormedCard(items, board, api, this::run);
 
         hostButton = Theme.button("Host a party", Btn.Kind.PRIMARY, () -> openWizard(null));
         control(hostButton);
@@ -269,7 +271,7 @@ public class PartiesTab extends Tab
                 if (formed.isEmpty()) list.add(Theme.centered("No parties have formed recently."));
                 for (FormedParty f : formed)
                 {
-                    list.add(formedCard(f));
+                    list.add(formedCard.view(f, clan.rsn()));
                 }
             }
         });
@@ -290,7 +292,7 @@ public class PartiesTab extends Tab
         boolean hostOnline = !interactive || board.online().contains(Names.normalize(p.getHostRsn()));
         String asap = p.isScheduled() ? "" : " · ASAP";
         JLabel host = Theme.text(p.getHostRsn() + asap + " · " + Theme.timeAgo(p.getCreatedAt()), hostOnline ? Theme.GREEN : OFFLINE);
-        card.add(head(p.getActivity(), p.title(), p.getWorld(), host, p.memberCount() + "/" + p.getCapacity()));
+        card.add(LfgUi.head(items, p.getActivity(), p.title(), p.getWorld(), host, p.memberCount() + "/" + p.getCapacity()));
         JLabel start = LfgUi.start(p);
         if (start != null) card.add(start);
         card.add(Theme.seats(p.memberCount(), p.getCapacity()));
@@ -340,7 +342,7 @@ public class PartiesTab extends Tab
     {
         Card card = Theme.card(Theme.ACCENT);
         JLabel asap = p.isScheduled() ? null : Theme.text("ASAP · " + Theme.timeAgo(p.getCreatedAt()), Theme.SUB);
-        card.add(head(p.getActivity(), p.title(), p.getWorld(), asap, p.memberCount() + "/" + p.getCapacity()));
+        card.add(LfgUi.head(items, p.getActivity(), p.title(), p.getWorld(), asap, p.memberCount() + "/" + p.getCapacity()));
         JLabel start = LfgUi.start(p);
         if (start != null) card.add(start);
         card.add(Theme.seats(p.memberCount(), p.getCapacity()));
@@ -364,33 +366,6 @@ public class PartiesTab extends Tab
         card.add(LfgUi.pair(edit,
             Theme.button("Cancel post", Btn.Kind.DANGER, () -> run(s -> api.disband(s, p.getId()), "Couldn't cancel — try again."))));
         return card;
-    }
-
-    private JPanel formedCard(FormedParty f)
-    {
-        String rsn = clan.rsn();
-        Card card = Theme.card(null);
-        JLabel when = Theme.text("Formed " + Theme.timeAgo(f.getFormedAt()) + " · hosted by " + f.getHostRsn()
-            + (f.getScheduledFor() == null ? "" : " · for " + LfgUi.day(f.getScheduledFor())), Theme.SUB);
-        card.add(head(f.getActivity(), f.title(), f.getWorld(), when, f.getMembers().size() + "/" + f.getCapacity()));
-        card.add(Theme.wrap(f.roster(), f.includes(rsn) ? Theme.TEXT : Theme.SUB));
-        if (f.isHostedBy(rsn))
-        {
-            Btn remove = Theme.button("Remove", Btn.Kind.GHOST, () -> run(s -> api.deleteFormed(s, f.getId()), "Couldn't remove — try again."));
-            remove.setToolTipText("Hide this from the formed list now (the record is kept)");
-            card.add(remove);
-        }
-        return card;
-    }
-
-    // Sprite tile, title (+ world), an optional second line, and the head count.
-    private JPanel head(Activity activity, String title, Integer world, JLabel second, String count)
-    {
-        JPanel text = Theme.stack(1);
-        JLabel name = Theme.bold(title, Theme.TEXT);
-        text.add(Theme.row(name, world == null ? null : Theme.text("W" + world, Theme.SUB), null));
-        if (second != null) text.add(second);
-        return Theme.row(Theme.tile(items, activity.getIconItemId(), 1, LfgUi.tier(activity), 30), text, Theme.bold(count, Theme.GOLD));
     }
 
     // Needs line and quoted description.
