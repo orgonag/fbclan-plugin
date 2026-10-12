@@ -51,6 +51,8 @@ public class PartyNotifier
     // Guarded by `this`.
     private Map<String, Party> previous = Collections.emptyMap();
     private Set<String> previousFormed = Collections.emptySet();
+    // The live party each listed formed row came from (party id -> row).
+    private Map<String, FormedParty> previousFormedFrom = Collections.emptyMap();
     private boolean primed;
     // The player's own leaves (party id) and kicks (party id + name).
     private final Set<String> selfLeft = new HashSet<>();
@@ -80,6 +82,7 @@ public class PartyNotifier
         generation++;
         previous = Collections.emptyMap();
         previousFormed = Collections.emptySet();
+        previousFormedFrom = Collections.emptyMap();
         primed = false;
         selfLeft.clear();
         kicked.clear();
@@ -130,8 +133,10 @@ public class PartyNotifier
         {
             if (primed)
             {
-                diff(previous, nowById, rsn, formedFrom, messages);
-                newPosts(previous, now, announcements);
+                Set<String> reopened = reopened(nowById);
+                diff(previous, nowById, rsn, formedFrom, reopened, messages);
+                newPosts(previous, now, reopened, announcements);
+                reopenLines(reopened, nowById, rsn, messages);
                 reminders(now, rsn, messages);
                 offline(now, rsn, online, messages);
                 for (FormedParty f : formedNow)
@@ -155,6 +160,7 @@ public class PartyNotifier
             kicked.clear();
             previous = nowById;
             previousFormed = formedIds;
+            previousFormedFrom = formedFrom;
             primed = true;
         }
         messages.forEach(this::deliver);
@@ -166,20 +172,71 @@ public class PartyNotifier
     // so everyone sees the same line: "Dopezt created a party of 4 for
     // ToB (ASAP)." Posts made while this player was offline are on the
     // board already and aren't replayed.
-    private static void newPosts(Map<String, Party> prev, List<Party> now, List<String> out)
+    private static void newPosts(Map<String, Party> prev, List<Party> now, Set<String> reopened, List<String> out)
     {
         for (Party p : now)
         {
-            if (prev.containsKey(p.getId())) continue;
+            if (prev.containsKey(p.getId()) || reopened.contains(p.getId())) continue;
             out.add(p.getHostRsn() + " created a party of " + p.getCapacity() + " for " + p.title()
                 + " (" + PartyBoard.when(p.getScheduledFor()) + ").");
         }
     }
 
-    private void diff(Map<String, Party> prev, Map<String, Party> now, String rsn, Map<String, FormedParty> formedFrom, List<String> out)
+    // Guarded by `this`. Live again under the id of a formed row from the
+    // last poll: the server re-opened it after a kick or a leave.
+    private Set<String> reopened(Map<String, Party> now)
+    {
+        Set<String> out = new HashSet<>();
+        for (String id : now.keySet())
+        {
+            if (!previous.containsKey(id) && previousFormedFrom.containsKey(id)) out.add(id);
+        }
+        return out;
+    }
+
+    // Guarded by `this`. Only the people who were in the formed party hear
+    // about it; the player's own kick or leave was recorded before the write.
+    private void reopenLines(Set<String> reopened, Map<String, Party> now, String rsn, List<String> out)
+    {
+        for (String id : reopened)
+        {
+            Party p = now.get(id);
+            FormedParty f = previousFormedFrom.get(id);
+            if (!f.includes(rsn)) continue;
+            List<String> gone = new ArrayList<>();
+            for (FormedParty.Member m : f.getMembers())
+            {
+                Party.Applicant seated = p.applicantFor(m.getRsn());
+                if (!f.isHostedBy(m.getRsn()) && (seated == null || !seated.isAccepted())) gone.add(m.getRsn());
+            }
+            if (p.isHostedBy(rsn))
+            {
+                for (String name : gone)
+                {
+                    if (!kicked.remove(member(id, name))) out.add(name + " left your " + p.title() + " party; it's back on the board.");
+                }
+                continue;
+            }
+            Party.Applicant mine = p.applicantFor(rsn);
+            if (mine == null || !mine.isAccepted())
+            {
+                if (!selfLeft.remove(id)) out.add("You were removed from " + p.getHostRsn() + "'s " + p.title() + " party.");
+            }
+            else if (!gone.isEmpty())
+            {
+                out.add(p.getHostRsn() + "'s " + p.title() + " party is back on the board without " + String.join(", ", gone)
+                    + ", looking for " + (p.getCapacity() - p.memberCount()) + " more.");
+            }
+        }
+    }
+
+    private void diff(Map<String, Party> prev, Map<String, Party> now, String rsn, Map<String, FormedParty> formedFrom,
+        Set<String> reopened, List<String> out)
     {
         for (Party p : now.values())
         {
+            // Told by reopenLines instead (nobody was just accepted or added).
+            if (reopened.contains(p.getId())) continue;
             Party before = prev.get(p.getId());
             if (p.isHostedBy(rsn))
             {
