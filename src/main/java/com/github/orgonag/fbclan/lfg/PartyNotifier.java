@@ -202,6 +202,8 @@ public class PartyNotifier
         {
             Party p = now.get(id);
             FormedParty f = previousFormedFrom.get(id);
+            // It was full at its start, so "didn't fill" doesn't apply.
+            if (p.isScheduled()) unfilled.add(id + "@" + p.getScheduledFor());
             if (!f.includes(rsn)) continue;
             List<String> gone = new ArrayList<>();
             for (FormedParty.Member m : f.getMembers())
@@ -220,6 +222,8 @@ public class PartyNotifier
             Party.Applicant mine = p.applicantFor(rsn);
             if (mine == null || !mine.isAccepted())
             {
+                // Not re-seated because they're in another ASAP party now: nothing to tell.
+                if (!p.isScheduled() && inAsapParty(now, rsn)) continue;
                 if (!selfLeft.remove(id)) out.add("You were removed from " + p.getHostRsn() + "'s " + p.title() + " party.");
             }
             else if (!gone.isEmpty())
@@ -228,6 +232,16 @@ public class PartyNotifier
                     + ", looking for " + (p.getCapacity() - p.memberCount()) + " more.");
             }
         }
+    }
+
+    private static boolean inAsapParty(Map<String, Party> now, String rsn)
+    {
+        for (Party q : now.values())
+        {
+            Party.Applicant a = q.applicantFor(rsn);
+            if (!q.isScheduled() && a != null && a.isAccepted()) return true;
+        }
+        return false;
     }
 
     private void diff(Map<String, Party> prev, Map<String, Party> now, String rsn, Map<String, FormedParty> formedFrom,
