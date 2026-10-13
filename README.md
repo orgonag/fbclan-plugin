@@ -31,7 +31,7 @@ Post a party or join one from inside RuneLite. Anyone who logs in later sees wha
 1. Open the **LFG** tab and press **Host a party**.
 2. Pick the activity and party size.
 3. Leave it on **ASAP**, or choose **Later** and set a start time up to 7 days ahead.
-4. Press **Post now**. For roles, a minimum KC, a loot rule or a description, press **Next (details)** first. Your own role starts as **Any**: you take whichever seat is left, so applicants can pick freely.
+4. Press **Post now**. For roles, a minimum KC, the loot rule (Split by default, or FFA) or a description, press **Next (details)** first. Your own role starts as **Any**: you take whichever seat is left, so applicants can pick freely.
 
 **Join a party**
 
@@ -42,7 +42,7 @@ Post a party or join one from inside RuneLite. Anyone who logs in later sees wha
 **Good to know**
 
 - Posts survive logout and world hops. An ASAP post comes down when it fills, when the host cancels, or 12 hours after posting. A scheduled post that fills stays listed as full until its start time; one that doesn't fill comes down 3 hours after its start.
-- Hosts can accept, decline or kick, and can add a member by name if a friend isn't using the plugin. Applicants, added members and hosts get a chat message for each of these.
+- Hosts can accept, decline or kick, and can add a member by name if a friend isn't using the plugin. A typed-in name only holds a seat, shows as "Name - M" and never affects the real player of that name; only the host can remove it. Applicants and hosts get a chat message for each of these.
 - The host is told when a member leaves, and when a member of an ASAP party has been offline for a few minutes (they stay in the party). Members are told when they're kicked or the leader disbands the party.
 - A host can run 1 ASAP post and up to 7 scheduled posts at once.
 - Scheduled parties remind the host and accepted members in chat 15 minutes before the start.
