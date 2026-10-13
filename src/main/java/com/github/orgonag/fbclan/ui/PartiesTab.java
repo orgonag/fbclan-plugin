@@ -295,12 +295,7 @@ public class PartiesTab extends Tab
         JLabel start = LfgUi.start(p);
         if (start != null) card.add(start);
         card.add(Theme.seats(p.memberCount(), p.getCapacity()));
-        List<String> meta = new ArrayList<>();
-        meta.add("Loot: " + p.getLootRule().getDisplayName());
-        if (p.getMinKc() > 0) meta.add(p.getMinKc() + "+ KC");
-        if (p.isLearner()) meta.add("Learner");
-        if (p.isTeacher()) meta.add("Teacher");
-        if (!meta.isEmpty()) card.add(Theme.text(String.join(" · ", meta), Theme.SOFT));
+        meta(card, p);
         body(card, p);
         List<Applicant> accepted = p.accepted();
         if (!accepted.isEmpty())
@@ -345,6 +340,7 @@ public class PartiesTab extends Tab
         JLabel start = LfgUi.start(p);
         if (start != null) card.add(start);
         card.add(Theme.seats(p.memberCount(), p.getCapacity()));
+        meta(card, p);
         body(card, p);
         List<Applicant> pending = p.pending();
         List<Applicant> accepted = p.accepted();
@@ -365,6 +361,17 @@ public class PartiesTab extends Tab
         card.add(LfgUi.pair(edit,
             Theme.button("Cancel post", Btn.Kind.DANGER, () -> run(s -> api.disband(s, p.getId()), "Couldn't cancel — try again."))));
         return card;
+    }
+
+    // Loot rule, min KC, learner/teacher.
+    private static void meta(JPanel card, Party p)
+    {
+        List<String> meta = new ArrayList<>();
+        meta.add("Loot: " + p.getLootRule().getDisplayName());
+        if (p.getMinKc() > 0) meta.add(p.getMinKc() + "+ KC");
+        if (p.isLearner()) meta.add("Learner");
+        if (p.isTeacher()) meta.add("Teacher");
+        card.add(Theme.text(String.join(" · ", meta), Theme.SOFT));
     }
 
     // Needs line and quoted description.
