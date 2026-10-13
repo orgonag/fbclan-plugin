@@ -325,6 +325,7 @@ public class PartiesTab extends Tab
                 render();
             });
             if (rsn == null) apply.setEnabled(false);
+            else if (p.seatFor(rsn) != null) LfgUi.disable(apply, "Host added your name");
             else if (p.isFull()) LfgUi.disable(apply, "Full");
             else if (p.getActivity().hasRoles() && p.openRoles().isEmpty()) LfgUi.disable(apply, "No open roles");
             card.add(apply);
