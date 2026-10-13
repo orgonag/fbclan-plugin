@@ -291,7 +291,7 @@ public class PartiesTab extends Tab
         boolean hostOnline = !interactive || board.online().contains(Names.normalize(p.getHostRsn()));
         String asap = p.isScheduled() ? "" : " · ASAP";
         JLabel host = Theme.text(p.getHostRsn() + asap + " · " + Theme.timeAgo(p.getCreatedAt()), hostOnline ? Theme.GREEN : OFFLINE);
-        card.add(LfgUi.head(items, p.getActivity(), p.title(), p.getWorld(), host, p.memberCount() + "/" + p.getCapacity()));
+        card.add(LfgUi.head(items, p.getActivity(), p.title(), host, p.memberCount() + "/" + p.getCapacity()));
         JLabel start = LfgUi.start(p);
         if (start != null) card.add(start);
         card.add(Theme.seats(p.memberCount(), p.getCapacity()));
@@ -336,7 +336,7 @@ public class PartiesTab extends Tab
     {
         Card card = Theme.card(Theme.ACCENT);
         JLabel asap = p.isScheduled() ? null : Theme.text("ASAP · " + Theme.timeAgo(p.getCreatedAt()), Theme.SUB);
-        card.add(LfgUi.head(items, p.getActivity(), p.title(), p.getWorld(), asap, p.memberCount() + "/" + p.getCapacity()));
+        card.add(LfgUi.head(items, p.getActivity(), p.title(), asap, p.memberCount() + "/" + p.getCapacity()));
         JLabel start = LfgUi.start(p);
         if (start != null) card.add(start);
         card.add(Theme.seats(p.memberCount(), p.getCapacity()));

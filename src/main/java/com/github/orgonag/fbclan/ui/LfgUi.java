@@ -86,12 +86,11 @@ final class LfgUi
         b.setEnabled(false);
     }
 
-    // Sprite tile, title (+ world), an optional second line, and the head count.
-    static JPanel head(ItemManager items, Activity activity, String title, Integer world, JLabel second, String count)
+    // Sprite tile, title, an optional second line, and the head count.
+    static JPanel head(ItemManager items, Activity activity, String title, JLabel second, String count)
     {
         JPanel text = Theme.stack(1);
-        JLabel name = Theme.bold(title, Theme.TEXT);
-        text.add(Theme.row(name, world == null ? null : Theme.text("W" + world, Theme.SUB), null));
+        text.add(Theme.bold(title, Theme.TEXT));
         if (second != null) text.add(second);
         return Theme.row(Theme.tile(items, activity.getIconItemId(), 1, tier(activity), 30), text, Theme.bold(count, Theme.GOLD));
     }

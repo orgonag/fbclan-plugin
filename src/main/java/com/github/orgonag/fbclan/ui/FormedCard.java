@@ -40,7 +40,7 @@ final class FormedCard
         Card card = Theme.card(null);
         JLabel when = Theme.text("Formed " + Theme.timeAgo(f.getFormedAt()) + " · hosted by " + f.getHostRsn()
             + (f.getScheduledFor() == null ? "" : " · for " + LfgUi.day(f.getScheduledFor())), Theme.SUB);
-        card.add(LfgUi.head(items, f.getActivity(), f.title(), f.getWorld(), when, f.getMembers().size() + "/" + f.getCapacity()));
+        card.add(LfgUi.head(items, f.getActivity(), f.title(), when, f.getMembers().size() + "/" + f.getCapacity()));
         for (FormedParty.Member m : f.getMembers())
         {
             boolean me = Names.same(m.getRsn(), rsn);
