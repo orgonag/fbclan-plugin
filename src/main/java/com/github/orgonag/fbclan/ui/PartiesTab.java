@@ -7,7 +7,6 @@ import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.lfg.Activity;
 import com.github.orgonag.fbclan.lfg.FormedParty;
 import com.github.orgonag.fbclan.lfg.Killcounts;
-import com.github.orgonag.fbclan.lfg.LootRule;
 import com.github.orgonag.fbclan.lfg.Party.Applicant;
 import com.github.orgonag.fbclan.lfg.Party;
 import com.github.orgonag.fbclan.lfg.PartyApi;
@@ -292,22 +291,17 @@ public class PartiesTab extends Tab
         boolean hostOnline = !interactive || board.online().contains(Names.normalize(p.getHostRsn()));
         String asap = p.isScheduled() ? "" : " · ASAP";
         JLabel host = Theme.text(p.getHostRsn() + asap + " · " + Theme.timeAgo(p.getCreatedAt()), hostOnline ? Theme.GREEN : OFFLINE);
-        card.add(LfgUi.head(items, p.getActivity(), p.title(), p.getWorld(), host, p.memberCount() + "/" + p.getCapacity()));
+        card.add(LfgUi.head(items, p.getActivity(), p.title(), host, p.memberCount() + "/" + p.getCapacity()));
         JLabel start = LfgUi.start(p);
         if (start != null) card.add(start);
         card.add(Theme.seats(p.memberCount(), p.getCapacity()));
-        List<String> meta = new ArrayList<>();
-        if (p.getLootRule() != LootRule.UNSPECIFIED) meta.add(p.getLootRule().getDisplayName());
-        if (p.getMinKc() > 0) meta.add(p.getMinKc() + "+ KC");
-        if (p.isLearner()) meta.add("Learner");
-        if (p.isTeacher()) meta.add("Teacher");
-        if (!meta.isEmpty()) card.add(Theme.text(String.join(" · ", meta), Theme.SOFT));
+        meta(card, p);
         body(card, p);
         List<Applicant> accepted = p.accepted();
         if (!accepted.isEmpty())
         {
             List<String> names = new ArrayList<>();
-            accepted.forEach(a -> names.add(a.getRsn()));
+            accepted.forEach(a -> names.add(a.label()));
             card.add(Theme.wrap("With: " + String.join(", ", names), Theme.SUB));
         }
         if (!interactive) return card;
@@ -331,6 +325,7 @@ public class PartiesTab extends Tab
                 render();
             });
             if (rsn == null) apply.setEnabled(false);
+            else if (p.seatFor(rsn) != null) LfgUi.disable(apply, "Host added your name");
             else if (p.isFull()) LfgUi.disable(apply, "Full");
             else if (p.getActivity().hasRoles() && p.openRoles().isEmpty()) LfgUi.disable(apply, "No open roles");
             card.add(apply);
@@ -342,10 +337,11 @@ public class PartiesTab extends Tab
     {
         Card card = Theme.card(Theme.ACCENT);
         JLabel asap = p.isScheduled() ? null : Theme.text("ASAP · " + Theme.timeAgo(p.getCreatedAt()), Theme.SUB);
-        card.add(LfgUi.head(items, p.getActivity(), p.title(), p.getWorld(), asap, p.memberCount() + "/" + p.getCapacity()));
+        card.add(LfgUi.head(items, p.getActivity(), p.title(), asap, p.memberCount() + "/" + p.getCapacity()));
         JLabel start = LfgUi.start(p);
         if (start != null) card.add(start);
         card.add(Theme.seats(p.memberCount(), p.getCapacity()));
+        meta(card, p);
         body(card, p);
         List<Applicant> pending = p.pending();
         List<Applicant> accepted = p.accepted();
@@ -366,6 +362,17 @@ public class PartiesTab extends Tab
         card.add(LfgUi.pair(edit,
             Theme.button("Cancel post", Btn.Kind.DANGER, () -> run(s -> api.disband(s, p.getId()), "Couldn't cancel — try again."))));
         return card;
+    }
+
+    // Loot rule, min KC, learner/teacher.
+    private static void meta(JPanel card, Party p)
+    {
+        List<String> meta = new ArrayList<>();
+        meta.add("Loot: " + p.getLootRule().getDisplayName());
+        if (p.getMinKc() > 0) meta.add(p.getMinKc() + "+ KC");
+        if (p.isLearner()) meta.add("Learner");
+        if (p.isTeacher()) meta.add("Teacher");
+        card.add(Theme.text(String.join(" · ", meta), Theme.SOFT));
     }
 
     // Needs line and quoted description.
@@ -389,14 +396,13 @@ public class PartiesTab extends Tab
         List<String> detail = new ArrayList<>();
         if (a.getRole() != null) detail.add(a.getRole().getDisplayName());
         if (a.isLearner()) detail.add("learner");
-        if (a.isAddedByHost()) detail.add("added by you");
-        else
+        if (!a.isAddedByHost())
         {
             String kc = applicantKc(p, a);
             if (kc != null) detail.add(kc);
         }
         JPanel who = Theme.stack(0);
-        who.add(Theme.text(a.getRsn(), online ? Theme.GREEN : OFFLINE));
+        who.add(Theme.text(a.label(), online ? Theme.GREEN : OFFLINE));
         if (!detail.isEmpty()) who.add(Theme.text(String.join(" · ", detail), Theme.SUB));
         JPanel buttons = Theme.stack(2);
         if (pending)

@@ -58,7 +58,7 @@ class HostWizard
     private final JSpinner invocationSpinner = spinner(150, 0, Party.MAX_INVOCATION, 5);
     private final JSpinner sizeSpinner = spinner(5, Party.MIN_CAPACITY, Party.MAX_CAPACITY, 1);
     private final Choice<LootRule> loot = new Choice<>(Arrays.asList(LootRule.values()),
-        r -> r == LootRule.UNSPECIFIED ? "Any" : r.getDisplayName(), LootRule.UNSPECIFIED, r -> {});
+        LootRule::getDisplayName, LootRule.SPLIT, r -> {});
     private final JSpinner minKcSpinner = spinner(0, 0, 100_000, 10);
     private final Choice<String> runType = new Choice<>(RUN_TYPES, s -> s, "Normal", s -> {});
     private final JComboBox<Object> hostRoleBox = new JComboBox<>();

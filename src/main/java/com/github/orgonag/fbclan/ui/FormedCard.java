@@ -40,11 +40,11 @@ final class FormedCard
         Card card = Theme.card(null);
         JLabel when = Theme.text("Formed " + Theme.timeAgo(f.getFormedAt()) + " · hosted by " + f.getHostRsn()
             + (f.getScheduledFor() == null ? "" : " · for " + LfgUi.day(f.getScheduledFor())), Theme.SUB);
-        card.add(LfgUi.head(items, f.getActivity(), f.title(), f.getWorld(), when, f.getMembers().size() + "/" + f.getCapacity()));
+        card.add(LfgUi.head(items, f.getActivity(), f.title(), when, f.getMembers().size() + "/" + f.getCapacity()));
         for (FormedParty.Member m : f.getMembers())
         {
-            boolean me = Names.same(m.getRsn(), rsn);
-            JLabel who = Theme.text(m.getRsn() + (m.getRole() == null ? "" : " (" + m.getRole().getDisplayName() + ")"), me ? Theme.TEXT : Theme.SUB);
+            boolean me = !m.isAddedByHost() && Names.same(m.getRsn(), rsn);
+            JLabel who = Theme.text(m.label() + (m.getRole() == null ? "" : " (" + m.getRole().getDisplayName() + ")"), me ? Theme.TEXT : Theme.SUB);
             Btn action = null;
             // No buttons once the server would refuse (3 h after forming / the start).
             if (reopen && host && !f.isHostedBy(m.getRsn()))
