@@ -26,6 +26,13 @@ public class FormedParty
     {
         String rsn;
         Role role;
+        boolean addedByHost;  // a name the host typed in: only a seat, never that player's
+
+        // "Shok", or "Shok - M" for a name the host typed in.
+        public String label()
+        {
+            return addedByHost ? rsn + " - M" : rsn;
+        }
     }
 
     String id;
@@ -57,18 +64,19 @@ public class FormedParty
         return now.isBefore((scheduledFor == null ? formedAt : scheduledFor).plus(REOPEN_WINDOW));
     }
 
+    // That player is in it (a typed-in seat with their name doesn't count).
     public boolean includes(String rsn)
     {
-        return rsn != null && members.stream().anyMatch(m -> Names.same(m.getRsn(), rsn));
+        return rsn != null && members.stream().anyMatch(m -> !m.isAddedByHost() && Names.same(m.getRsn(), rsn));
     }
 
-    // "Shok (Melee), Bud (Ranged), Pal"
+    // "Shok (Melee), Bud - M (Ranged), Pal"
     public String roster()
     {
         StringBuilder sb = new StringBuilder();
         for (Member m : members)
         {
-            sb.append(sb.length() > 0 ? ", " : "").append(m.getRsn());
+            sb.append(sb.length() > 0 ? ", " : "").append(m.label());
             if (m.getRole() != null)
             {
                 sb.append(" (").append(m.getRole().getDisplayName()).append(')');
@@ -98,7 +106,7 @@ public class FormedParty
                 String rsn = Names.untagged(Supabase.str(o, "rsn"));
                 if (!rsn.isEmpty())
                 {
-                    members.add(new Member(rsn, Role.fromKey(Supabase.str(o, "role"))));
+                    members.add(new Member(rsn, Role.fromKey(Supabase.str(o, "role")), Supabase.bool(o, "added_by_host")));
                 }
             }
         }

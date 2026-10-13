@@ -301,7 +301,7 @@ public class PartiesTab extends Tab
         if (!accepted.isEmpty())
         {
             List<String> names = new ArrayList<>();
-            accepted.forEach(a -> names.add(a.getRsn()));
+            accepted.forEach(a -> names.add(a.label()));
             card.add(Theme.wrap("With: " + String.join(", ", names), Theme.SUB));
         }
         if (!interactive) return card;
@@ -395,14 +395,13 @@ public class PartiesTab extends Tab
         List<String> detail = new ArrayList<>();
         if (a.getRole() != null) detail.add(a.getRole().getDisplayName());
         if (a.isLearner()) detail.add("learner");
-        if (a.isAddedByHost()) detail.add("added by you");
-        else
+        if (!a.isAddedByHost())
         {
             String kc = applicantKc(p, a);
             if (kc != null) detail.add(kc);
         }
         JPanel who = Theme.stack(0);
-        who.add(Theme.text(a.getRsn(), online ? Theme.GREEN : OFFLINE));
+        who.add(Theme.text(a.label(), online ? Theme.GREEN : OFFLINE));
         if (!detail.isEmpty()) who.add(Theme.text(String.join(" · ", detail), Theme.SUB));
         JPanel buttons = Theme.stack(2);
         if (pending)

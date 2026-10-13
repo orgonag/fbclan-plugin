@@ -91,6 +91,12 @@ public class Party
             return status == Status.PENDING;
         }
 
+        // "Shok", or "Shok - M" for a name the host typed in.
+        public String label()
+        {
+            return addedByHost ? rsn + " - M" : rsn;
+        }
+
         static Applicant fromRow(JsonObject row)
         {
             String rsn = Names.untagged(Supabase.str(row, "rsn"));
@@ -197,7 +203,16 @@ public class Party
         return rsn != null && Names.same(hostRsn, rsn);
     }
 
+    // That player's own row. A name the host typed in is only a seat on the
+    // post and never the player's (server migration 12), so it is skipped.
     public Applicant applicantFor(String rsn)
+    {
+        Applicant a = seatFor(rsn);
+        return a == null || a.isAddedByHost() ? null : a;
+    }
+
+    // Any row under that name, typed-in seats included.
+    public Applicant seatFor(String rsn)
     {
         for (Applicant a : applicants)
         {

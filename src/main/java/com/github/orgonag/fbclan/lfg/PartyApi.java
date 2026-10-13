@@ -110,7 +110,7 @@ public class PartyApi
     // (the server would refuse a second row for them with a database error).
     public String addMember(Session s, Party party, String rsn, Role role)
     {
-        Party.Applicant existing = party.applicantFor(rsn);
+        Party.Applicant existing = party.seatFor(rsn);
         if (existing != null && existing.isAccepted()) return "They're already in this party.";
         if (existing != null)
         {

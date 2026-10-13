@@ -209,7 +209,7 @@ public class PartyNotifier
             List<String> gone = new ArrayList<>();
             for (FormedParty.Member m : f.getMembers())
             {
-                Party.Applicant seated = p.applicantFor(m.getRsn());
+                Party.Applicant seated = p.seatFor(m.getRsn());
                 if (!f.isHostedBy(m.getRsn()) && (seated == null || !seated.isAccepted())) gone.add(m.getRsn());
             }
             if (p.isHostedBy(rsn))
@@ -267,7 +267,7 @@ public class PartyNotifier
             }
             if (mine != null && mine.isAccepted() && (mineBefore == null || !mineBefore.isAccepted()))
             {
-                out.add((mine.isAddedByHost() ? p.getHostRsn() + " added you to their " : "You've been accepted to " + p.getHostRsn() + "'s ")
+                out.add("You've been accepted to " + p.getHostRsn() + "'s "
                     + p.title() + " party" + world(p.getWorld()) + ".");
             }
             else if (mine != null && mineBefore != null && mine.getStatus() == Party.Status.DECLINED && mineBefore.getStatus() != Party.Status.DECLINED)
@@ -327,7 +327,7 @@ public class PartyNotifier
         if (before == null) return;
         for (Party.Applicant a : before.accepted())
         {
-            if (p.applicantFor(a.getRsn()) == null && !kicked.remove(member(p.getId(), a.getRsn())))
+            if (p.seatFor(a.getRsn()) == null && !kicked.remove(member(p.getId(), a.getRsn())))
             {
                 out.add(a.getRsn() + " left your " + p.title() + " party.");
             }
