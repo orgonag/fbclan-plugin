@@ -10,6 +10,8 @@ import java.awt.Graphics2D;
 import java.awt.Graphics;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.Duration;
@@ -26,6 +28,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.border.Border;
 import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
@@ -276,6 +279,19 @@ final class Theme
     {
         JTextField f = new JTextField(value);
         f.setFont(FontManager.getRunescapeSmallFont());
+        // RuneLite's default field is nearly the card colour: lift it and outline it (accent while typing).
+        f.setBackground(RAISED);
+        f.setForeground(Color.WHITE);
+        f.setCaretColor(Color.WHITE);
+        f.setBorder(fieldBorder(LINE));
+        f.addFocusListener(new FocusAdapter()
+        {
+            @Override
+            public void focusGained(FocusEvent e) { f.setBorder(fieldBorder(ACCENT)); }
+
+            @Override
+            public void focusLost(FocusEvent e) { f.setBorder(fieldBorder(LINE)); }
+        });
         ((AbstractDocument) f.getDocument()).setDocumentFilter(new DocumentFilter()
         {
             @Override
@@ -294,6 +310,11 @@ final class Theme
             }
         });
         return f;
+    }
+
+    private static Border fieldBorder(Color edge)
+    {
+        return BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(edge), BorderFactory.createEmptyBorder(3, 5, 3, 5));
     }
 
     // Runs `action` whenever the field's text changes.
