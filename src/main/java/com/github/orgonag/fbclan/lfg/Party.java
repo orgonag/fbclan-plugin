@@ -132,7 +132,7 @@ public class Party
             .invocation(activity.usesInvocation() ? invocation : 0)
             .capacity(capacity)
             .world(world)
-            .lootRule(LootRule.UNSPECIFIED)
+            .lootRule(LootRule.SPLIT)
             .requiredRoles(Role.required(activity, h, capacity, Collections.emptyMap()))
             .hostRole(Role.any(activity, h))
             .createdAt(Instant.now())
@@ -244,7 +244,7 @@ public class Party
         d.addProperty("description", Names.sanitize(description, MAX_DESCRIPTION));
         d.addProperty("world", world);
         d.addProperty("min_kc", Math.max(0, minKc));
-        d.addProperty("loot_rule", (lootRule == null ? LootRule.UNSPECIFIED : lootRule).name());
+        d.addProperty("loot_rule", (lootRule == null ? LootRule.SPLIT : lootRule).name());
         d.addProperty("required_roles", Role.encode(requiredRoles));
         d.addProperty("host_role", hostRole == null ? null : hostRole.key());
         d.addProperty("learner", learner);

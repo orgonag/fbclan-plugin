@@ -2,11 +2,11 @@ package com.github.orgonag.fbclan.lfg;
 
 import lombok.Getter;
 
-/** How a party splits drops. Stored by enum name; unknown reads as UNSPECIFIED. */
+/** How a party shares drops. Stored by enum name; anything else (older posts' UNSPECIFIED) reads as SPLIT. */
 @Getter
 public enum LootRule
 {
-    UNSPECIFIED("Loot: any"), FFA("FFA"), SPLIT("Split");
+    SPLIT("Split"), FFA("FFA");
 
     private final String displayName;
 
@@ -24,7 +24,7 @@ public enum LootRule
                 return rule;
             }
         }
-        return UNSPECIFIED;
+        return SPLIT;
     }
 
     @Override

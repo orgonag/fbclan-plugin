@@ -7,7 +7,6 @@ import com.github.orgonag.fbclan.core.Session;
 import com.github.orgonag.fbclan.lfg.Activity;
 import com.github.orgonag.fbclan.lfg.FormedParty;
 import com.github.orgonag.fbclan.lfg.Killcounts;
-import com.github.orgonag.fbclan.lfg.LootRule;
 import com.github.orgonag.fbclan.lfg.Party.Applicant;
 import com.github.orgonag.fbclan.lfg.Party;
 import com.github.orgonag.fbclan.lfg.PartyApi;
@@ -297,7 +296,7 @@ public class PartiesTab extends Tab
         if (start != null) card.add(start);
         card.add(Theme.seats(p.memberCount(), p.getCapacity()));
         List<String> meta = new ArrayList<>();
-        if (p.getLootRule() != LootRule.UNSPECIFIED) meta.add(p.getLootRule().getDisplayName());
+        meta.add("Loot: " + p.getLootRule().getDisplayName());
         if (p.getMinKc() > 0) meta.add(p.getMinKc() + "+ KC");
         if (p.isLearner()) meta.add("Learner");
         if (p.isTeacher()) meta.add("Teacher");
