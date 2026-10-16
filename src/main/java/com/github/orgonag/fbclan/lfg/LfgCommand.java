@@ -284,6 +284,6 @@ public class LfgCommand
 
     private void print(String message)
     {
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", Chat.purple(message), null);
+        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", Chat.colored(config.chatColor(), message), null);
     }
 }

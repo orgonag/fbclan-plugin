@@ -420,7 +420,7 @@ public class PartyNotifier
             GameState state = client.getGameState();
             // Mid-teleport or hop: hold the line until the chatbox is back.
             if (state == GameState.LOADING || state == GameState.HOPPING || state == GameState.CONNECTION_LOST) return false;
-            if (state == GameState.LOGGED_IN) client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", Chat.purple("[LFG] " + message), null);
+            if (state == GameState.LOGGED_IN) client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", Chat.colored(config.chatColor(), "[LFG] " + message), null);
             return true;
         });
     }

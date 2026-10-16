@@ -117,6 +117,7 @@ RuneLite settings, search **Final Boss**, then the cog icon.
 
 | Setting | Default |
 |---|---|
+| Chat message color (the plugin's own chat lines) | Purple |
 | Enable Drop Logging | On |
 | Valuable drop threshold | 1,000,000 GP; cannot be set lower |
 | Rare drop threshold | 1 in 250; cannot be set more common |
