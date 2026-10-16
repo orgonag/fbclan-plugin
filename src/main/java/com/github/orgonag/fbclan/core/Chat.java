@@ -1,20 +1,24 @@
 package com.github.orgonag.fbclan.core;
 
+import java.awt.Color;
+import net.runelite.client.util.ColorUtil;
+
 /**
  * The plugin's one chat colour: every line it prints (welcome, LFG
- * notifications, !lfg replies) is purple so players can tell it apart from
- * game messages. Remote text inside must already be tag-free.
+ * notifications, !lfg replies) uses the "Chat message color" setting
+ * (purple by default) so players can tell it apart from game messages.
+ * Remote text inside must already be tag-free.
  */
 public final class Chat
 {
-    private static final String PURPLE = "a020f0";
+    public static final Color DEFAULT = new Color(0xA020F0);
 
     private Chat()
     {
     }
 
-    public static String purple(String line)
+    public static String colored(Color color, String line)
     {
-        return "<col=" + PURPLE + ">" + line + "</col>";
+        return ColorUtil.wrapWithColorTag(line, color == null ? DEFAULT : color);
     }
 }

@@ -18,8 +18,8 @@ import lombok.Getter;
  * application for ToB and BA.
  *
  * <ul>
- * <li>ToB / HMT: composition is fixed by size (3 = Melee/Ranged/Freeze;
- *     4 splits North/South; 5 runs two Melee).</li>
+ * <li>ToB / HMT: composition is fixed by size (2 = Ranged/Mage;
+ *     3 = Melee/Ranged/Freeze; 4 splits North/South; 5 runs two Melee).</li>
  * <li>CoX / CM: the host sets a count per role, Fill takes the rest.</li>
  * <li>BA: one of each base role, and a spare seat that may double one.</li>
  * </ul>
@@ -28,8 +28,8 @@ import lombok.Getter;
 @Getter
 public enum Role
 {
-    TOB_MELEE("Melee"), TOB_RANGED("Ranged"), TOB_FRZ("Freeze"), TOB_NFRZ("North freeze"), TOB_SFRZ("South freeze"), TOB_FILL("Any"),
-    TOB_HM_MELEE("Melee"), TOB_HM_RANGED("Ranged"), TOB_HM_FRZ("Freeze"), TOB_HM_NFRZ("North freeze"), TOB_HM_SFRZ("South freeze"), TOB_HM_FILL("Any"),
+    TOB_MELEE("Melee"), TOB_RANGED("Ranged"), TOB_MAGE("Mage"), TOB_FRZ("Freeze"), TOB_NFRZ("North freeze"), TOB_SFRZ("South freeze"), TOB_FILL("Any"),
+    TOB_HM_MELEE("Melee"), TOB_HM_RANGED("Ranged"), TOB_HM_MAGE("Mage"), TOB_HM_FRZ("Freeze"), TOB_HM_NFRZ("North freeze"), TOB_HM_SFRZ("South freeze"), TOB_HM_FILL("Any"),
     COX_MELEE("Melee"), COX_MAGE("Mage"), COX_RUNNER("Runner"), COX_FILL("Fill"),
     COX_CM_VENG("Veng"), COX_CM_ANCIENT("Ancient"), COX_CM_NORMAL("Normal spells"), COX_CM_FILL("Fill"),
     BA_ATTACKER("Attacker"), BA_DEFENDER("Defender"), BA_COLLECTOR("Collector"), BA_HEALER("Healer"), BA_FILL("Any");
@@ -108,8 +108,8 @@ public enum Role
         {
             case TOB:
                 return hardMode
-                    ? Arrays.asList(TOB_HM_MELEE, TOB_HM_RANGED, TOB_HM_FRZ, TOB_HM_NFRZ, TOB_HM_SFRZ)
-                    : Arrays.asList(TOB_MELEE, TOB_RANGED, TOB_FRZ, TOB_NFRZ, TOB_SFRZ);
+                    ? Arrays.asList(TOB_HM_MELEE, TOB_HM_RANGED, TOB_HM_MAGE, TOB_HM_FRZ, TOB_HM_NFRZ, TOB_HM_SFRZ)
+                    : Arrays.asList(TOB_MELEE, TOB_RANGED, TOB_MAGE, TOB_FRZ, TOB_NFRZ, TOB_SFRZ);
             case COX:
                 return hardMode
                     ? Arrays.asList(COX_CM_VENG, COX_CM_ANCIENT, COX_CM_NORMAL, COX_CM_FILL)
@@ -135,6 +135,12 @@ public enum Role
     public static List<Role> tobComposition(int size, boolean hard)
     {
         List<Role> comp = new ArrayList<>();
+        if (size == 2)
+        {
+            comp.add(hard ? TOB_HM_RANGED : TOB_RANGED);
+            comp.add(hard ? TOB_HM_MAGE : TOB_MAGE);
+            return comp;
+        }
         int melee = size >= 5 ? 2 : size >= 2 ? 1 : 0;
         int ranged = size >= 3 ? 1 : 0;
         int freezers = Math.max(0, size - melee - ranged);

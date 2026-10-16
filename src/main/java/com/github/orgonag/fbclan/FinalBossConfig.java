@@ -1,6 +1,8 @@
 package com.github.orgonag.fbclan;
 
+import com.github.orgonag.fbclan.core.Chat;
 import com.github.orgonag.fbclan.drops.DropRules;
+import java.awt.Color;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
@@ -22,6 +24,17 @@ public interface FinalBossConfig extends Config
 
     @ConfigSection(name = "Leaderboards", description = "Clan leaderboards settings", position = 3)
     String leaderboardsSection = "leaderboards";
+
+    @ConfigItem(
+        keyName = "chatColor",
+        name = "Chat message color",
+        description = "Color of the plugin's chat lines: the welcome message, LFG notifications and !lfg replies",
+        position = 0
+    )
+    default Color chatColor()
+    {
+        return Chat.DEFAULT;
+    }
 
     // ------------------------------------------------------------ drops
 

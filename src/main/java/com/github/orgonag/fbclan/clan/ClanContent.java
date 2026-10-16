@@ -1,5 +1,6 @@
 package com.github.orgonag.fbclan.clan;
 
+import com.github.orgonag.fbclan.FinalBossConfig;
 import com.github.orgonag.fbclan.core.Chat;
 import com.github.orgonag.fbclan.core.Clan;
 import com.github.orgonag.fbclan.core.Names;
@@ -47,6 +48,7 @@ public class ClanContent
     private final Clan clan;
     private final Client client;
     private final ClientThread clientThread;
+    private final FinalBossConfig config;
 
     private volatile List<Announcement> announcements = Collections.emptyList();
     private volatile Set<String> notableItems = Collections.emptySet();
@@ -58,12 +60,13 @@ public class ClanContent
     private volatile boolean welcomeLoaded;
 
     @Inject
-    public ClanContent(Supabase db, Clan clan, Client client, ClientThread clientThread)
+    public ClanContent(Supabase db, Clan clan, Client client, ClientThread clientThread, FinalBossConfig config)
     {
         this.db = db;
         this.clan = clan;
         this.client = client;
         this.clientThread = clientThread;
+        this.config = config;
     }
 
     public List<Announcement> announcements()
@@ -210,7 +213,7 @@ public class ClanContent
             // postEvent=false keeps our own line out of the chat-event
             // pipeline (the pet matcher would otherwise see it).
             client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
-                Chat.purple("[Final Boss] " + message), null, false);
+                Chat.colored(config.chatColor(), "[Final Boss] " + message), null, false);
             return true;
         });
     }
