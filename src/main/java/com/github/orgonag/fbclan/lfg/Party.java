@@ -278,6 +278,7 @@ public class Party
         {
             return null;
         }
+        int capacity = Math.max(1, Supabase.intOr(row, "capacity", activity.getMaxPartySize()));
         // In the server's order: oldest application first.
         List<Applicant> applicants = new ArrayList<>();
         if (Supabase.has(row, "lfg_applicants") && row.get("lfg_applicants").isJsonArray())
@@ -298,7 +299,7 @@ public class Party
             .activity(activity)
             .hardMode(Supabase.bool(row, "hard_mode"))
             .invocation(Supabase.intOr(row, "invocation", 0))
-            .capacity(Math.max(1, Supabase.intOr(row, "capacity", activity.getMaxPartySize())))
+            .capacity(capacity)
             // The server tags `description` with the start time for old
             // clients and sends the real text as `note`.
             .description(Supabase.has(row, "note") ? Supabase.str(row, "note") : null)
@@ -307,7 +308,11 @@ public class Party
             .world(Supabase.intOrNull(row, "world"))
             .minKc(Supabase.intOr(row, "min_kc", 0))
             .lootRule(LootRule.fromKey(Supabase.str(row, "loot_rule")))
-            .requiredRoles(Role.decode(Supabase.str(row, "required_roles")))
+            // ToB seats follow the size, as on the server; the stored string may
+            // be an older plugin's layout.
+            .requiredRoles(activity == Activity.TOB
+                ? Role.tobComposition(capacity, Supabase.bool(row, "hard_mode"))
+                : Role.decode(Supabase.str(row, "required_roles")))
             .hostRole(Role.fromKey(Supabase.str(row, "host_role")))
             .learner(Supabase.bool(row, "learner"))
             .teacher(Supabase.bool(row, "teacher"))
