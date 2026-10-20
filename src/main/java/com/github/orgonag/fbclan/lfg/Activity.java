@@ -193,6 +193,7 @@ public enum Activity
             case ZALCANO: return Collections.singletonList(HiscoreSkill.ZALCANO);
             case GOTR: return Collections.singletonList(HiscoreSkill.RIFTS_CLOSED);
             case WINTERTODT: return Collections.singletonList(HiscoreSkill.WINTERTODT);
+            case FRACTURED_ARCHIVE: return Collections.singletonList(HiscoreSkill.FRACTURED_ARCHIVE);
             default: return Collections.emptyList();
         }
     }
@@ -231,8 +232,7 @@ public enum Activity
             case ZALCANO: return Collections.singletonList("Zalcano");
             case GOTR: return Collections.singletonList("Guardians of the Rift");
             case WINTERTODT: return Collections.singletonList("Wintertodt");
-            // New raid: not on RuneLite's hiscores yet; the chat-command key is a best guess.
-            case FRACTURED_ARCHIVE: return Arrays.asList("The Fractured Archive", "Fractured Archive");
+            case FRACTURED_ARCHIVE: return Collections.singletonList("Fractured Archive");
             default: return Collections.emptyList();
         }
     }
